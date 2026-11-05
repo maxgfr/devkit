@@ -1,0 +1,68 @@
+# devkit
+
+A Chrome extension for web developers. Everything in one side panel and a command palette:
+clear a site's cache and data, inspect what a page ships (tech stack, SEO, **JSON-LD**, headers,
+Web Vitals, errors, links…), rewrite requests, a dozen utilities, and **AI analysis of the page
+with your own model** through [llm-connect](https://www.npmjs.com/package/llm-connect) and
+[llm-models](https://www.npmjs.com/package/llm-models).
+
+## Install (unpacked)
+
+```bash
+pnpm install
+pnpm build          # → .output/chrome-mv3
+```
+
+Open `chrome://extensions`, turn on Developer mode, **Load unpacked**, pick `.output/chrome-mv3`.
+`pnpm dev` starts Chrome with the extension and hot reload.
+
+- **Alt+Shift+D** opens the command palette (type `json-ld`, `jwt`, `fresh`…)
+- **Alt+Shift+S** opens the side panel, **Alt+Shift+X** clears the site's data and hard reloads
+- Right-click a page or a selection: summarize, explain code, inspect structured data or headers
+- **Pop out** (side panel header) opens devkit in its own window, attached to one tab
+
+## Tools
+
+| Tab | Tools |
+|---|---|
+| Cache | Hard reload · clear this site's cache · fresh start (all site data + reload) · clear cookies · clear local/session storage · unregister service workers · no-cache mode per tab · site data checklist · cookie editor (edit, import/export JSON) · Web Storage editor |
+| Inspect | Tech stack (frameworks, CMS, analytics, CDN, server) and DOM stats · SEO & meta (checks, social card preview, headings, meta, head links) · **Structured data**: every JSON-LD block parsed and checked against schema.org and Google rich results (required / recommended properties, ISO dates, absolute URLs, prices, currencies, `@id` references, breadcrumb positions, JSON syntax errors with line and column), tree and source views, snippet validator, Rich Results Test / Schema validator links · Headers & security (grade, CSP/HSTS/framing/…, caching, raw headers) · Performance (LCP, CLS, INP, FCP, TTFB, long tasks, heaviest resources) · Console errors (captured from the first script on every page, count on the toolbar badge) · Link checker · Fonts & colors (eyedropper, palette, contrast) · Accessibility hints · robots.txt tester, sitemap browser, PWA manifest checks · Open in PageSpeed, W3C validator, SSL Labs, securityheaders, Wayback… |
+| Page | Design mode · element outlines · disable CSS · block JavaScript per site · emulation (color scheme, reduced motion, contrast, print, CPU and network throttling, vision deficiencies) · responsive sizes · visible / full-page screenshots · form filler |
+| Network | Request rules (set/append/remove request or response headers, redirects with regex, block, CORS unblock) with import/export · environments (local / staging / prod: same path on another env, red ribbon and badge on prod) |
+| AI | Summarize · explain the stack · SEO audit · review/write JSON-LD · security headers review · performance advice · accessibility review · explain console errors · explain selected code · write a Playwright test · extract data as JSON · generate meta tags · UI critique from a screenshot (vision models) · free chat with chosen page data · model browser with prices and context windows |
+| Utils | JSON (format, tree, TypeScript types, paths) · JWT · Base64/URL/HTML/hex/unicode · SHA hashes, HMAC, SRI · UUID v4/v7, nanoid · timestamps · regex tester · text diff · colors · cron explainer · URL & query params (strip tracking) · QR code |
+
+A **DevTools panel** ("devkit") lists the page's requests with copy as cURL / fetch / HTTPie /
+Python, response bodies as JSON trees and HAR export.
+
+## AI
+
+Settings (AI tab or the options page) use llm-connect's settings store: any provider of the
+llm-models catalog (OpenAI, Anthropic, Google, Mistral and every OpenAI-compatible one), or a
+local server (Ollama, LM Studio, Jan). The key is encrypted at rest with `secureStorage`
+(AES-GCM under a non-extractable key) and sent only to the provider. Calls stream from the side
+panel with `callOptions` / `callProblem` / `resolveCapabilities` (effort levels, web search when
+the model has it); limits and prices come from llm-models. Page data is trimmed to the model's
+context window and treated as untrusted in the system prompt.
+
+Ollama refuses unknown origins: start it with `OLLAMA_ORIGINS=chrome-extension://*`.
+
+`public/models.json` is the offline fallback catalog; refresh it with `pnpm catalog`.
+
+## Permissions
+
+Asked at install: `activeTab`, `scripting`, `storage`, `sidePanel`, `contextMenus`, and
+`declarativeNetRequest` and `debugger` (Chrome does not allow these two to be optional).
+`browsingData`, `cookies`, `contentSettings` and host access ("this site" or "all sites") are
+optional: devkit asks the first time a tool needs them. The options page lists and revokes them.
+
+## Development
+
+```bash
+pnpm check   # biome + tsc + vitest + build
+```
+
+`src/lib` holds framework-free logic (analyzers, rules, utilities, AI context), tested in `tests/`.
+`src/lib/page` holds functions injected into pages: they must not use their enclosing scope.
+`src/ui` is the React UI; `src/lib/actions.ts` and `src/lib/panels.ts` register every tool for the
+palette, the side panel and the shortcuts.

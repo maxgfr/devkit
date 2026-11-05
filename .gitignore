@@ -1,0 +1,7 @@
+node_modules
+.output
+.wxt
+.impeccable
+coverage
+*.log
+.DS_Store
