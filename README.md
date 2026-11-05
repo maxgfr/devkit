@@ -6,17 +6,27 @@ Web Vitals, errors, links…), rewrite requests, a dozen utilities, and **AI ana
 with your own model** through [llm-connect](https://www.npmjs.com/package/llm-connect) and
 [llm-models](https://www.npmjs.com/package/llm-models).
 
-Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`).
+Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`) · [Privacy policy](https://maxgfr.github.io/devkit/privacy.html).
 
-## Install (unpacked)
+## Install
+
+**From a release** (no build needed):
+
+1. Download `devkit-<version>-chrome.zip` from the [latest release](https://github.com/maxgfr/devkit/releases/latest) and unzip it.
+2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder.
+3. To update, unzip the new release over the same folder and click the reload icon on devkit's card.
+
+**From the Chrome Web Store**: the listing is not live yet. Once it is, Chrome updates devkit on its own.
+
+**From source**:
 
 ```bash
 pnpm install
-pnpm build          # → .output/chrome-mv3
+pnpm build          # → .output/chrome-mv3, then Load unpacked as above
+pnpm dev            # Chrome with the extension and hot reload
 ```
 
-Open `chrome://extensions`, turn on Developer mode, **Load unpacked**, pick `.output/chrome-mv3`.
-`pnpm dev` starts Chrome with the extension and hot reload.
+Chrome 116 or later.
 
 - **Alt+Shift+D** opens the command palette (type `json-ld`, `jwt`, `fresh`…)
 - **Alt+Shift+S** opens the side panel, **Alt+Shift+X** clears the site's data and hard reloads
@@ -62,9 +72,28 @@ optional: devkit asks the first time a tool needs them. The options page lists a
 
 ```bash
 pnpm check   # biome + tsc + vitest + build
+pnpm e2e     # after a build: loads the extension in Chromium and runs every tool against a local test site
 ```
 
 `src/lib` holds framework-free logic (analyzers, rules, utilities, AI context), tested in `tests/`.
 `src/lib/page` holds functions injected into pages: they must not use their enclosing scope.
 `src/ui` is the React UI; `src/lib/actions.ts` and `src/lib/panels.ts` register every tool for the
 palette, the side panel and the shortcuts.
+
+## Releases
+
+Releases are automatic. On every push to `main`, CI runs lint, types, unit tests, the build and the
+end-to-end test, then `scripts/next-version.ts` reads the [Conventional Commits](https://www.conventionalcommits.org/)
+since the last `v*` tag:
+
+| Commits since the last release | Release |
+|---|---|
+| `fix:` or `perf:` | patch (0.1.0 → 0.1.1) |
+| `feat:` | minor (0.1.1 → 0.2.0) |
+| `feat!:`, `fix!:` or a `BREAKING CHANGE:` footer | major (minor before 1.0) |
+| only `docs:`, `ci:`, `chore:`, `test:`, `refactor:`, `style:` | none |
+
+A release builds the zip with that version, publishes it as a GitHub release with generated notes,
+and, once the Chrome Web Store secrets are set, uploads it to the store and submits it for review.
+The version lives in the git tags; `package.json` is not bumped. Store listing texts, images and
+the API setup are in [`store/`](store/README.md).

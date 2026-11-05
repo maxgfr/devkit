@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy policy · devkit</title>
+    <meta name="description" content="devkit collects no data. What the extension stores on your device and what it sends, and to whom, when you use it." />
+    <link rel="icon" href="img/favicon.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .policy { max-width: 70ch; margin: 0 auto; padding: 72px 24px 96px; }
+      .policy h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); line-height: 1.05; margin: 0 0 12px; }
+      .policy h2 { font-size: 1.35rem; margin: 44px 0 10px; }
+      .policy p, .policy li { color: var(--muted, #9fb0c3); line-height: 1.65; }
+      .policy ul { padding-left: 1.2em; }
+      .policy li + li { margin-top: 8px; }
+      .policy strong { color: var(--text, #e6edf5); }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="./" aria-label="devkit home"><img src="img/icon.png" alt="" width="28" height="28" />devkit</a>
+      <nav aria-label="Main">
+        <a href="./#install">Install</a>
+        <a href="https://github.com/maxgfr/devkit">GitHub</a>
+      </nav>
+    </header>
+    <main id="main" class="policy">
+      <h1>Privacy policy</h1>
+      <p>Last updated: November 5, 2026. Applies to the devkit Chrome extension.</p>
+
+      <h2>The short version</h2>
+      <p>
+        <strong>devkit collects nothing.</strong> There is no devkit server, no account, no analytics and no telemetry. Everything devkit stores stays
+        in your browser, and it only sends data off your device when you use a feature that needs to, to the destination that feature names.
+      </p>
+
+      <h2>What stays on your device</h2>
+      <ul>
+        <li>Your settings, request rules, environment groups and the last tool you opened, in Chrome's extension storage.</li>
+        <li>Your AI provider key, encrypted with a key kept in the extension's IndexedDB. It is never written to sync storage and never sent anywhere except to the provider it belongs to.</li>
+        <li>Console errors captured from a page, kept in that page's memory and gone when it reloads or closes.</li>
+      </ul>
+
+      <h2>What leaves your device, and when</h2>
+      <ul>
+        <li>
+          <strong>AI features.</strong> When you run an analysis or send a chat message, devkit sends the page data you chose (text, metadata, headers,
+          structured data, errors, selection or screenshot) and your message to the AI provider you configured, with your own key, or to the local
+          server you set (Ollama, LM Studio, Jan). That provider's privacy policy applies to what it receives. Nothing is sent until you ask.
+        </li>
+        <li>
+          <strong>Model catalog.</strong> To list models and prices, devkit downloads public catalogs from models.dev and openrouter.ai. These requests
+          carry no personal data.
+        </li>
+        <li>
+          <strong>Page checks.</strong> The headers, link checker, robots.txt, sitemap and manifest tools request the current site's own URLs, from your
+          browser, as any visit would.
+        </li>
+        <li>
+          <strong>External tools.</strong> "Open in external tools" opens a third-party site (PageSpeed Insights, Rich Results Test and others) with the
+          current page's URL, only when you click it.
+        </li>
+      </ul>
+
+      <h2>What devkit does not do</h2>
+      <ul>
+        <li>It does not sell or share data, and does not use it for advertising, credit or any purpose other than the feature you are using.</li>
+        <li>It does not track your browsing. Site access is asked for when a tool needs it, and you can revoke it from the options page.</li>
+        <li>It does not load or run remote code.</li>
+      </ul>
+
+      <h2>Permissions</h2>
+      <p>The <a href="./#permissions">permissions table</a> on the home page explains why devkit asks for each permission, and when.</p>
+
+      <h2>Contact</h2>
+      <p>Questions or concerns: open an issue on <a href="https://github.com/maxgfr/devkit/issues">GitHub</a>.</p>
+    </main>
+    <footer class="foot">
+      <span><img src="img/favicon.png" alt="" width="16" height="16" /> devkit</span>
+      <a href="./">Home</a>
+      <a href="https://github.com/maxgfr/devkit">Source on GitHub</a>
+    </footer>
+  </body>
+</html>
