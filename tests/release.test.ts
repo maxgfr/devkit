@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bumpOf, nextVersion } from "../scripts/next-version.ts";
+import { bumpOf, nextVersion, releaseNotes } from "../scripts/next-version.ts";
 
 describe("next release version", () => {
   it("does not release docs, ci, chore or test commits", () => {
@@ -20,5 +20,10 @@ describe("next release version", () => {
   });
   it("ignores messages that are not Conventional Commits", () => {
     expect(nextVersion("0.1.0", ["Merge branch main", "update stuff"])).toBeNull();
+  });
+  it("writes notes with features first, fixes next, and skips the rest", () => {
+    expect(releaseNotes(["fix(utils): cron crash\n\nbody", "docs: x", "feat: palette history", "perf: faster"])).toBe(
+      "### Features\n\n- palette history\n\n### Fixes\n\n- **utils**: cron crash\n- faster",
+    );
   });
 });

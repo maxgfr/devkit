@@ -72,7 +72,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           gh release create "v$VERSION" ".output/devkit-$VERSION-chrome.zip" \
-            --target "$GITHUB_SHA" --title "devkit $VERSION" --generate-notes
+            --target "$GITHUB_SHA" --title "devkit $VERSION" --notes-file release-notes.md
       - name: Chrome Web Store
         if: steps.version.outputs.version != '' && vars.CWS_EXTENSION_ID != ''
         env:
