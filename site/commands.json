@@ -1,0 +1,394 @@
+[
+  {
+    "id": "hard-reload",
+    "kind": "action",
+    "category": "cache",
+    "title": "Hard reload",
+    "description": "Reload the page, bypassing the HTTP cache",
+    "keywords": "refresh bypass cache f5"
+  },
+  {
+    "id": "clear-cache",
+    "kind": "action",
+    "category": "cache",
+    "title": "Clear this site's cache",
+    "description": "HTTP cache and Cache Storage of this origin, then reload",
+    "keywords": "empty cache purge"
+  },
+  {
+    "id": "fresh-start",
+    "kind": "action",
+    "category": "cache",
+    "title": "Fresh start",
+    "description": "Clear every kind of site data for this origin, then hard reload",
+    "keywords": "nuke reset clear all site data cookies storage"
+  },
+  {
+    "id": "clear-cookies",
+    "kind": "action",
+    "category": "cache",
+    "title": "Clear cookies",
+    "description": "Cookies of this site (Chrome removes them for the whole registrable domain)",
+    "keywords": "delete cookies session logout"
+  },
+  {
+    "id": "clear-storage",
+    "kind": "action",
+    "category": "cache",
+    "title": "Clear local & session storage",
+    "description": "localStorage and sessionStorage of this page",
+    "keywords": "localstorage sessionstorage web storage"
+  },
+  {
+    "id": "unregister-sw",
+    "kind": "action",
+    "category": "cache",
+    "title": "Unregister service workers",
+    "description": "Every service worker of this origin",
+    "keywords": "sw pwa worker offline"
+  },
+  {
+    "id": "toggle-no-cache",
+    "kind": "action",
+    "category": "cache",
+    "title": "Toggle no-cache for this tab",
+    "description": "Send Cache-Control: no-cache on every request of this tab",
+    "keywords": "disable cache headers"
+  },
+  {
+    "id": "toggle-design-mode",
+    "kind": "action",
+    "category": "page",
+    "title": "Toggle design mode",
+    "description": "Make every text on the page editable",
+    "keywords": "edit contenteditable designmode"
+  },
+  {
+    "id": "toggle-outline",
+    "kind": "action",
+    "category": "page",
+    "title": "Toggle element outlines",
+    "description": "Outline every element to debug layout",
+    "keywords": "border debug layout css"
+  },
+  {
+    "id": "toggle-css",
+    "kind": "action",
+    "category": "page",
+    "title": "Toggle CSS",
+    "description": "Disable or restore every stylesheet and inline style",
+    "keywords": "styles disable unstyled"
+  },
+  {
+    "id": "toggle-js",
+    "kind": "action",
+    "category": "page",
+    "title": "Toggle JavaScript for this site",
+    "description": "Block or allow JavaScript on this origin, then reload",
+    "keywords": "disable javascript noscript"
+  },
+  {
+    "id": "copy-markdown-link",
+    "kind": "action",
+    "category": "utils",
+    "title": "Copy as Markdown link",
+    "description": "[Page title](url) on the clipboard",
+    "keywords": "markdown link url title"
+  },
+  {
+    "id": "cache-actions",
+    "kind": "panel",
+    "category": "cache",
+    "title": "Cache actions",
+    "description": "Hard reload, clear cache, fresh start, service workers",
+    "keywords": "reload clear"
+  },
+  {
+    "id": "site-data",
+    "kind": "panel",
+    "category": "cache",
+    "title": "Clear site data",
+    "description": "Pick what to remove for this origin",
+    "keywords": "browsing data indexeddb cache storage"
+  },
+  {
+    "id": "cookies",
+    "kind": "panel",
+    "category": "cache",
+    "title": "Cookies",
+    "description": "View, edit, delete, export and import cookies",
+    "keywords": "cookie editor session"
+  },
+  {
+    "id": "storage",
+    "kind": "panel",
+    "category": "cache",
+    "title": "Local & session storage",
+    "description": "View and edit Web Storage keys",
+    "keywords": "localstorage sessionstorage"
+  },
+  {
+    "id": "overview",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Overview & tech stack",
+    "description": "Frameworks, hosting, analytics, DOM stats",
+    "keywords": "wappalyzer technology framework detect"
+  },
+  {
+    "id": "seo",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "SEO & meta",
+    "description": "Title, description, canonical, Open Graph, headings",
+    "keywords": "meta tags og twitter card headings"
+  },
+  {
+    "id": "jsonld",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Structured data (JSON-LD)",
+    "description": "Validate JSON-LD against schema.org and rich results",
+    "keywords": "schema.org json-ld microdata rich results structured data"
+  },
+  {
+    "id": "headers",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Headers & security",
+    "description": "Security grade, caching, raw response headers",
+    "keywords": "csp hsts security headers cache-control"
+  },
+  {
+    "id": "perf",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Performance",
+    "description": "Web Vitals, timings, heaviest resources",
+    "keywords": "lcp cls inp ttfb web vitals speed"
+  },
+  {
+    "id": "errors",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Console errors",
+    "description": "JavaScript errors and failed resources",
+    "keywords": "console error exception rejection"
+  },
+  {
+    "id": "links",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Link checker",
+    "description": "Find broken links on the page",
+    "keywords": "404 broken links dead"
+  },
+  {
+    "id": "fonts",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Fonts & colors",
+    "description": "Fonts in use, palette, color picker, contrast",
+    "keywords": "typography palette eyedropper contrast"
+  },
+  {
+    "id": "a11y",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Accessibility hints",
+    "description": "Quick checks: alt, labels, names, headings",
+    "keywords": "a11y wcag rgaa alt label"
+  },
+  {
+    "id": "site-files",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "robots.txt, sitemap, manifest",
+    "description": "Crawl rules, sitemap URLs, PWA manifest",
+    "keywords": "robots sitemap pwa manifest crawl"
+  },
+  {
+    "id": "external",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Open in external tools",
+    "description": "PageSpeed, validators, SSL Labs, Wayback…",
+    "keywords": "pagespeed lighthouse validator w3c ssl"
+  },
+  {
+    "id": "page-tools",
+    "kind": "panel",
+    "category": "page",
+    "title": "Page tools",
+    "description": "Design mode, outlines, disable CSS or JavaScript",
+    "keywords": "design mode outline css javascript"
+  },
+  {
+    "id": "emulation",
+    "kind": "panel",
+    "category": "page",
+    "title": "Emulation",
+    "description": "Color scheme, reduced motion, print, CPU and network throttling",
+    "keywords": "dark mode prefers-color-scheme throttle offline 3g print"
+  },
+  {
+    "id": "viewport",
+    "kind": "panel",
+    "category": "page",
+    "title": "Responsive sizes",
+    "description": "Resize the window to common viewports",
+    "keywords": "responsive mobile tablet resize viewport"
+  },
+  {
+    "id": "screenshot",
+    "kind": "panel",
+    "category": "page",
+    "title": "Screenshot",
+    "description": "Visible area or full page",
+    "keywords": "capture screenshot full page png"
+  },
+  {
+    "id": "forms",
+    "kind": "panel",
+    "category": "page",
+    "title": "Form filler",
+    "description": "Fill every field with plausible test data",
+    "keywords": "fake data form fill test"
+  },
+  {
+    "id": "rules",
+    "kind": "panel",
+    "category": "network",
+    "title": "Request rules",
+    "description": "Modify headers, redirect, block, unblock CORS",
+    "keywords": "modheader redirect block cors declarativenetrequest"
+  },
+  {
+    "id": "envs",
+    "kind": "panel",
+    "category": "network",
+    "title": "Environments",
+    "description": "Jump between local, staging and prod; ribbon on prod",
+    "keywords": "environment staging production localhost switch"
+  },
+  {
+    "id": "ask",
+    "kind": "panel",
+    "category": "ai",
+    "title": "Ask AI about the page",
+    "description": "Analyses and chat with your own model",
+    "keywords": "llm gpt claude gemini summarize chat"
+  },
+  {
+    "id": "models",
+    "kind": "panel",
+    "category": "ai",
+    "title": "Model browser",
+    "description": "Search models, prices and context windows",
+    "keywords": "llm models price context openrouter models.dev"
+  },
+  {
+    "id": "ai-settings",
+    "kind": "panel",
+    "category": "ai",
+    "title": "AI settings",
+    "description": "Provider, model, API key, local servers",
+    "keywords": "api key ollama lm studio provider"
+  },
+  {
+    "id": "json",
+    "kind": "panel",
+    "category": "utils",
+    "title": "JSON",
+    "description": "Format, validate, tree, TypeScript types, paths",
+    "keywords": "json formatter prettify validate typescript"
+  },
+  {
+    "id": "jwt",
+    "kind": "panel",
+    "category": "utils",
+    "title": "JWT decoder",
+    "description": "Header, payload and expiry of a token",
+    "keywords": "jwt token bearer decode"
+  },
+  {
+    "id": "encode",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Encode / decode",
+    "description": "Base64, URL, HTML entities, hex, unicode",
+    "keywords": "base64 urlencode html entities hex"
+  },
+  {
+    "id": "hash",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Hash & SRI",
+    "description": "SHA-1/256/384/512, HMAC, subresource integrity",
+    "keywords": "sha256 hash hmac sri integrity"
+  },
+  {
+    "id": "ids",
+    "kind": "panel",
+    "category": "utils",
+    "title": "UUID & IDs",
+    "description": "UUID v4 / v7, nanoid, inspect a UUID",
+    "keywords": "uuid guid nanoid v7"
+  },
+  {
+    "id": "time",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Timestamps",
+    "description": "Unix ↔ ISO date, relative time",
+    "keywords": "epoch unix timestamp date"
+  },
+  {
+    "id": "regex",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Regex tester",
+    "description": "Matches and groups, live",
+    "keywords": "regexp regular expression"
+  },
+  {
+    "id": "diff",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Text diff",
+    "description": "Compare two texts line by line",
+    "keywords": "compare diff"
+  },
+  {
+    "id": "color",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Color converter",
+    "description": "HEX, RGB, HSL and WCAG contrast",
+    "keywords": "color hex rgb hsl contrast"
+  },
+  {
+    "id": "cron",
+    "kind": "panel",
+    "category": "utils",
+    "title": "Cron explainer",
+    "description": "Plain English and next runs",
+    "keywords": "cron crontab schedule"
+  },
+  {
+    "id": "url",
+    "kind": "panel",
+    "category": "utils",
+    "title": "URL & query params",
+    "description": "Edit the current URL's parts and parameters",
+    "keywords": "query string params utm"
+  },
+  {
+    "id": "qr",
+    "kind": "panel",
+    "category": "utils",
+    "title": "QR code",
+    "description": "QR code of the current URL or any text",
+    "keywords": "qr code mobile"
+  }
+]

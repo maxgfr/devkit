@@ -6,6 +6,8 @@ Web Vitals, errors, links…), rewrite requests, a dozen utilities, and **AI ana
 with your own model** through [llm-connect](https://www.npmjs.com/package/llm-connect) and
 [llm-models](https://www.npmjs.com/package/llm-models).
 
+Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`).
+
 ## Install (unpacked)
 
 ```bash

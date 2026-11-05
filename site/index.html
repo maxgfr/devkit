@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>devkit · every dev tool you keep installing, in one Chrome side panel</title>
+    <meta
+      name="description"
+      content="devkit is a Chrome extension for web developers: clear a site's cache and data, check its JSON-LD, grade its headers, rewrite requests, a dozen utilities, and AI analysis of the page with your own model."
+    />
+    <meta property="og:title" content="devkit" />
+    <meta property="og:description" content="Every dev tool you keep installing, in one Chrome side panel. JSON-LD, headers, cache, request rules, utilities, and AI with your own model." />
+    <meta property="og:image" content="img/demo-page.webp" />
+    <link rel="icon" href="img/favicon.png" />
+    <link rel="preload" href="fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <a class="brand" href="./" aria-label="devkit home"><img src="img/icon.png" alt="" width="28" height="28" />devkit</a>
+      <nav aria-label="Main">
+        <a href="#palette">Palette</a>
+        <a href="#tour">Tools</a>
+        <a href="#ai">AI</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/maxgfr/devkit">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <h1 id="hero-title">Every dev tool you keep installing, in one side&nbsp;panel.</h1>
+          <p class="lede">
+            devkit clears a site's cache, checks its JSON-LD, grades its headers, rewrites its requests and asks <em>your own</em> model about the page. One
+            Chrome extension instead of a toolbar full of them.
+          </p>
+          <div class="actions">
+            <a class="btn primary" href="https://github.com/maxgfr/devkit/releases/latest">Download the latest build</a>
+            <a class="btn" href="#install">How to install</a>
+          </div>
+          <div class="cmd" data-copy="git clone https://github.com/maxgfr/devkit && cd devkit && pnpm install && pnpm build">
+            <code><span class="prompt">$</span> git clone https://github.com/maxgfr/devkit &amp;&amp; cd devkit &amp;&amp; pnpm install &amp;&amp; pnpm build</code>
+            <button type="button" class="copy">Copy</button>
+          </div>
+        </div>
+
+        <figure class="fig1">
+          <div class="frame">
+            <div class="chrome" aria-hidden="true">
+              <span class="dots"><i></i><i></i><i></i></span>
+              <span class="address">localhost:3000/mugs/stoneware</span>
+              <span class="ext"><img src="img/favicon.png" alt="" width="16" height="16" /></span>
+            </div>
+            <div class="stage">
+              <img class="shot-page" src="img/demo-page.webp" width="980" height="720" alt="Demo product page: Stoneware Mug, 350 ml, priced €24,90, with a description and an Add to cart button." />
+              <img
+                class="shot-panel"
+                src="img/panel-jsonld.webp"
+                width="420"
+                height="720"
+                alt="devkit side panel, Inspect › Structured data: Product block with findings, including the price €24,90 that must be a plain number and a missing description."
+              />
+              <svg class="leaders" viewBox="0 0 1400 720" aria-hidden="true" preserveAspectRatio="none">
+                <g class="boxes">
+                  <rect x="40" y="186" width="106" height="45" />
+                  <rect x="40" y="237" width="430" height="82" />
+                  <rect x="40" y="78" width="216" height="27" />
+                </g>
+                <path class="lead l1" d="M146 208.5 H940 V396 H998" />
+                <path class="lead l2" d="M470 278 H934 a6 6 0 0 1 12 0 H962 V223 H998" />
+                <g class="num">
+                  <circle cx="160" cy="208.5" r="11" /><text x="160" y="213">1</text>
+                  <circle cx="484" cy="278" r="11" /><text x="484" y="282.5">2</text>
+                  <circle cx="270" cy="91.5" r="11" /><text x="270" y="96">3</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <figcaption>
+            <span class="figno">Fig. 1</span> Structured data analyzer on a demo product page (synthetic, made for this figure).
+            <ol>
+              <li><b>1</b> <code>offers.price "€24,90"</code> must be a plain number: Google drops the price snippet.</li>
+              <li><b>2</b> The page has a description, its Product JSON-LD has none.</li>
+              <li><b>3</b> The BreadcrumbList block is invalid JSON (a trailing comma, line 1, column 217), so Google sees no breadcrumb. It is listed further down the panel.</li>
+            </ol>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section id="palette" class="palette-sec" aria-labelledby="palette-title">
+        <div class="sec-head">
+          <h2 id="palette-title">Type what you need.</h2>
+          <p>
+            <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>D</kbd> opens the palette on any tab. Every tool is one search away: actions run on the spot, panels open in the side panel.
+            This is the extension's real command list. Try it.
+          </p>
+        </div>
+        <div class="palette" role="search">
+          <label class="visually-hidden" for="pq">Search devkit commands</label>
+          <input id="pq" type="search" autocomplete="off" spellcheck="false" placeholder="clear cache, json-ld, jwt, headers, ask ai…" aria-controls="pr" />
+          <ul id="pr" class="results" aria-live="polite"></ul>
+          <p class="palette-foot"><span id="pcount">49 commands</span><span>↑ ↓ move · Enter picks</span></p>
+          <p class="picked" id="picked" hidden></p>
+        </div>
+        <ul class="keys">
+          <li><span><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>S</kbd></span> side panel</li>
+          <li><span><kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>X</kbd></span> fresh start: clear site data, hard reload</li>
+          <li><span>right-click</span> summarize the page, explain selected code, inspect JSON-LD or headers</li>
+        </ul>
+      </section>
+
+      <section id="tour" class="tour" aria-labelledby="tour-title">
+        <div class="sec-head">
+          <h2 id="tour-title">Six tabs. The tools you open forty times a day.</h2>
+          <p>The same tab bar as the extension. Pick one.</p>
+        </div>
+        <div class="tour-body">
+          <div class="tabs" role="tablist" aria-label="devkit tabs">
+            <button role="tab" id="t-cache" aria-controls="tp" aria-selected="false" data-cat="cache">Cache</button>
+            <button role="tab" id="t-inspect" aria-controls="tp" aria-selected="true" data-cat="inspect">Inspect</button>
+            <button role="tab" id="t-page" aria-controls="tp" aria-selected="false" data-cat="page">Page</button>
+            <button role="tab" id="t-network" aria-controls="tp" aria-selected="false" data-cat="network">Network</button>
+            <button role="tab" id="t-ai" aria-controls="tp" aria-selected="false" data-cat="ai">AI</button>
+            <button role="tab" id="t-utils" aria-controls="tp" aria-selected="false" data-cat="utils">Utils</button>
+          </div>
+          <div id="tp" class="tab-panel" role="tabpanel" aria-labelledby="t-inspect" tabindex="0">
+            <img id="tour-shot" src="img/panel-headers.webp" width="420" height="900" alt="devkit Inspect tab: headers and security grade." />
+            <div class="tab-copy">
+              <h3 id="tour-title-cat">Inspect</h3>
+              <p id="tour-lede">What the page ships, read from the page itself: stack, SEO, structured data, headers, Web Vitals, errors, links.</p>
+              <ul id="tour-list" class="tool-list"></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ai" class="ai" aria-labelledby="ai-title">
+        <div class="ai-copy">
+          <h2 id="ai-title">Your model reads the page devkit just read.</h2>
+          <p>
+            Every analysis sends the same data the inspectors show: the JSON-LD findings, the security checks, the Web Vitals, the captured errors, the page's main text. So the
+            answer quotes the page, not a guess about it.
+          </p>
+          <dl class="receipt" aria-label="A real run">
+            <div><dt>Run</dt><dd>Review structured data, on the demo page of Fig. 1</dd></div>
+            <div><dt>Model</dt><dd>claude-sonnet-5-5 through Anthropic's API</dd></div>
+            <div><dt>Tokens</dt><dd class="num">1,100 in · 2,031 out</dd></div>
+            <div><dt>Cost</dt><dd class="num">$0.023, shown before and after the call</dd></div>
+            <div><dt>Found</dt><dd>the trailing comma, the price format, the relative image URL</dd></div>
+          </dl>
+          <ul class="ai-facts">
+            <li><b>Any provider.</b> The catalog comes live from models.dev and OpenRouter through <a href="https://www.npmjs.com/package/llm-models">llm-models</a>; the offline fallback lists 209 providers and 6,343 models.</li>
+            <li><b>Or no provider.</b> Point it at Ollama, LM Studio or Jan on localhost.</li>
+            <li><b>No devkit server.</b> Calls go from your browser to your provider through <a href="https://www.npmjs.com/package/llm-connect">llm-connect</a>. The key is encrypted on your device (AES-GCM under a non-extractable key).</li>
+            <li><b>Thirteen analyses.</b> Summarize, explain the stack, SEO audit, fix JSON-LD, security headers, performance, accessibility, console errors, explain selected code, write a Playwright test, extract data as JSON, meta tags, UI critique from a screenshot.</li>
+          </ul>
+        </div>
+        <img class="ai-shot" src="img/panel-ai.webp" width="420" height="1000" alt="devkit AI tab: Claude's structured data review of the demo page, ranked by impact." />
+      </section>
+
+      <section class="trust" aria-labelledby="trust-title">
+        <h2 id="trust-title">It asks before it touches anything.</h2>
+        <table>
+          <thead>
+            <tr><th scope="col">Permission</th><th scope="col">When</th><th scope="col">Why</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>activeTab</code>, <code>scripting</code>, <code>storage</code>, <code>sidePanel</code>, <code>contextMenus</code></td><td>install</td><td>read the tab you are on, keep your settings, show the panel and menus</td></tr>
+            <tr><td><code>declarativeNetRequest</code>, <code>debugger</code></td><td>install</td><td>request rules and emulation; Chrome does not let these two be optional</td></tr>
+            <tr><td><code>browsingData</code>, <code>cookies</code>, <code>contentSettings</code></td><td>first use</td><td>clear site data, edit cookies, block JavaScript on a site</td></tr>
+            <tr><td>this site, or all sites</td><td>first use</td><td>follow you across tabs, check links, capture errors, rewrite requests</td></tr>
+          </tbody>
+        </table>
+        <p class="note">The options page lists every permission devkit holds and revokes any of them. Accessibility hints are labeled as quick heuristics, not an audit.</p>
+      </section>
+
+      <section id="install" class="install" aria-labelledby="install-title">
+        <h2 id="install-title">Install in a minute.</h2>
+        <ol class="steps">
+          <li>
+            <h3>Get the build</h3>
+            <p>Download the zip from the <a href="https://github.com/maxgfr/devkit/releases/latest">latest release</a> and unzip it, or build it yourself:</p>
+            <div class="cmd" data-copy="git clone https://github.com/maxgfr/devkit && cd devkit && pnpm install && pnpm build">
+              <code><span class="prompt">$</span> pnpm install &amp;&amp; pnpm build</code>
+              <button type="button" class="copy">Copy</button>
+            </div>
+          </li>
+          <li>
+            <h3>Load it in Chrome</h3>
+            <p>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the folder (<code>.output/chrome-mv3</code> when you built it).</p>
+          </li>
+          <li>
+            <h3>Press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>D</kbd></h3>
+            <p>Type <code>json-ld</code> on any page. For AI, open the AI tab, pick a provider or a local server, paste a key, test, save.</p>
+          </li>
+        </ol>
+        <p class="note">Chrome 116 or later. Not on the Chrome Web Store yet.</p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <span><img src="img/favicon.png" alt="" width="16" height="16" /> devkit</span>
+      <span>Built with WXT, React, llm-connect and llm-models.</span>
+      <a href="https://github.com/maxgfr/devkit">Source on GitHub</a>
+    </footer>
+    <script src="app.js" defer></script>
+  </body>
+</html>
