@@ -37,6 +37,18 @@ export async function cdp<T = unknown>(tabId: number, method: string, params: Re
   return (await browser.debugger.sendCommand({ tabId }, method, params)) as T;
 }
 
+/** Clears every override `Emulation` sets: detaching alone can leave them on the page. */
+async function resetEmulation(tabId: number) {
+  if (!attached.has(tabId)) return;
+  const send = (method: string, params: Record<string, unknown>) =>
+    browser.debugger.sendCommand({ tabId }, method, params).catch(() => undefined);
+  const features = ["prefers-color-scheme", "prefers-reduced-motion", "prefers-contrast"].map((name) => ({ name, value: "" }));
+  await send("Emulation.setEmulatedMedia", { media: "", features });
+  await send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  await send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await send("Emulation.setEmulatedVisionDeficiency", { type: "none" });
+}
+
 async function detach(tabId: number) {
   if (!attached.has(tabId)) return;
   attached.delete(tabId);
@@ -132,7 +144,10 @@ export function Emulation() {
           <Button
             size="small"
             onClick={async () => {
-              if (page.tabId !== undefined) await detach(page.tabId);
+              if (page.tabId !== undefined) {
+                await resetEmulation(page.tabId);
+                await detach(page.tabId);
+              }
               setActive(false);
               setState(NONE);
             }}
