@@ -17,7 +17,7 @@ export default defineConfig({
   manifest: {
     name: "devkit",
     description:
-      "Developer toolbox: clear a site's cache and data, inspect the page, rewrite requests, utilities, and AI analysis with your own model.",
+      "Dev toolbox: clear a site's cache and data, inspect the page, rewrite requests, utilities, and AI analysis with your own model.",
     minimum_chrome_version: "116",
     permissions: ["activeTab", "scripting", "storage", "sidePanel", "contextMenus", "declarativeNetRequest", "debugger"],
     optional_permissions: ["browsingData", "cookies", "contentSettings"],
