@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 import { CATEGORIES, type Category } from "../lib/actions";
 import { PANEL_IDS, PANELS, PENDING_ROUTE_KEY, type Route } from "../lib/panels";
-import { ToastProvider } from "./components";
+import { PanelBoundary, ToastProvider } from "./components";
 import { pinnedTabId } from "./hooks";
 import { PageProvider, usePage } from "./page";
 import { PANEL_COMPONENTS } from "./panels";
@@ -109,7 +109,11 @@ function Shell() {
       </nav>
       <main className="content">
         <Suspense fallback={<p className="muted">Loading…</p>}>
-          {Panel ? <Panel key={route.panel + JSON.stringify(route.params ?? {})} params={route.params} /> : null}
+          {Panel ? (
+            <PanelBoundary key={route.panel + JSON.stringify(route.params ?? {})}>
+              <Panel params={route.params} />
+            </PanelBoundary>
+          ) : null}
         </Suspense>
       </main>
     </div>

@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
+import { Component, createContext, type ReactNode, useCallback, useContext, useState } from "react";
 import type { Level } from "../lib/headers";
 
 export function Button({
@@ -264,4 +264,28 @@ export function SubNav<T extends string>({
       ))}
     </nav>
   );
+}
+
+/** Keeps one broken tool from blanking the whole panel: shows its error and a way back. */
+export class PanelBoundary extends Component<{ children: ReactNode }, { error: unknown }> {
+  override state: { error: unknown } = { error: null };
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
+  }
+  override render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <Notice kind="bad">
+        <div className="stack">
+          <strong>This tool crashed.</strong>
+          <span className="small mono">{this.state.error instanceof Error ? this.state.error.message : String(this.state.error)}</span>
+          <div className="row">
+            <Button size="small" onClick={() => this.setState({ error: null })}>
+              Try again
+            </Button>
+          </div>
+        </div>
+      </Notice>
+    );
+  }
 }

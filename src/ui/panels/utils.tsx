@@ -533,7 +533,16 @@ export function Cron() {
           <h3>Next runs</h3>
           <ul className="list mono small">
             {result.value.next.map((d) => (
-              <li key={d.getTime()}>{d.toLocaleString(undefined, { weekday: "short", dateStyle: "medium", timeStyle: "short" })}</li>
+              <li key={d.getTime()}>
+                {d.toLocaleString(undefined, {
+                  weekday: "short",
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </li>
             ))}
           </ul>
         </>
