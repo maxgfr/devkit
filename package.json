@@ -16,7 +16,9 @@
     "test:watch": "vitest",
     "lint": "biome ci --error-on-warnings .",
     "lint:fix": "biome check --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "e2e": "node tests/e2e/run.mjs",
+    "store-assets": "node scripts/store-assets.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.97",
@@ -42,6 +44,7 @@
     "@types/react-dom": "^19.3.0",
     "@wxt-dev/module-react": "^1.2.2",
     "happy-dom": "^21.0.4",
+    "playwright": "1.64.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.12",
     "wxt": "^0.21.5"

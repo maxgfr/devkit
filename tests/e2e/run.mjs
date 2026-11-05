@@ -1,0 +1,359 @@
+// End-to-end test of the built extension in Chromium: `pnpm build && pnpm e2e`.
+// Usage: node tests/e2e/run.mjs [extension dir] — set E2E_SHOTS=<dir> to save screenshots.
+import { spawn } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const source = resolve(process.argv[2] ?? join(here, "../../.output/chrome-mv3"));
+const shots = process.env.E2E_SHOTS ? resolve(process.env.E2E_SHOTS) : undefined;
+if (shots) mkdirSync(shots, { recursive: true });
+
+// Grant the optional permissions up front: automation cannot click Chrome's permission prompts.
+const work = mkdtempSync(join(tmpdir(), "devkit-e2e-"));
+const ext = join(work, "extension");
+const profile = join(work, "profile");
+cpSync(source, ext, { recursive: true });
+const manifest = JSON.parse(readFileSync(join(ext, "manifest.json"), "utf8"));
+manifest.permissions.push(...manifest.optional_permissions);
+manifest.host_permissions = ["<all_urls>"];
+delete manifest.optional_permissions;
+delete manifest.optional_host_permissions;
+writeFileSync(join(ext, "manifest.json"), JSON.stringify(manifest, null, 2));
+
+const server = spawn(process.execPath, [join(here, "server.mjs")], { stdio: ["ignore", "pipe", "inherit"] });
+const port = await new Promise((done) => server.stdout.on("data", (d) => done(Number(/listening (\d+)/.exec(String(d))?.[1]))));
+const base = `http://127.0.0.1:${port}`;
+
+const results = [];
+const check = (name, ok, detail = "") => {
+  results.push({ name, ok });
+  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  — ${detail}` : ""}`);
+};
+
+const context = await chromium.launchPersistentContext(profile, {
+  channel: "chromium",
+  headless: true,
+  viewport: { width: 1200, height: 900 },
+  colorScheme: "no-override",
+  args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
+});
+context.setDefaultTimeout(8000);
+const extErrors = [];
+const watchdog = setTimeout(() => {
+  console.log("WATCHDOG: aborting after 240 s");
+  process.exit(2);
+}, 240_000);
+
+try {
+  const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker", { timeout: 15_000 }));
+  const id = new URL(sw.url()).host;
+  check("extension loads", Boolean(id), id);
+
+  const commands = await sw.evaluate(async () => (await chrome.commands.getAll()).map((c) => c.name));
+  check(
+    "keyboard commands registered",
+    ["_execute_action", "open-side-panel", "fresh-start", "hard-reload"].every((c) => commands.includes(c)),
+  );
+
+  const site = await context.newPage();
+  await site.goto(`${base}/`);
+  await site.evaluate(() => {
+    localStorage.setItem("devkit-test", JSON.stringify({ a: 1 }));
+    document.cookie = "session=abc123; path=/";
+  });
+  const tabId = await sw.evaluate(async (u) => (await chrome.tabs.query({ url: `${u}/*` }))[0].id, base);
+
+  const panel = await context.newPage();
+  panel.on("pageerror", (e) => extErrors.push(`pageerror: ${e.message}`));
+  panel.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && extErrors.push(`console: ${m.text()}`));
+  await panel.setViewportSize({ width: 440, height: 900 });
+  await panel.goto(`chrome-extension://${id}/sidepanel.html?tab=${tabId}`);
+  const text = () => panel.locator("main").innerText();
+  const open = async (tab, sub) => {
+    await panel.getByRole("tab", { name: tab }).click();
+    if (sub) await panel.locator(".subnav button", { hasText: sub }).first().click();
+    await panel.waitForTimeout(600);
+  };
+  const shot = async (name) => {
+    if (shots) await panel.screenshot({ path: join(shots, `${name}.png`), fullPage: true });
+  };
+  const action = (title) => panel.locator(".action", { hasText: title }).first().click();
+  const sessionRules = () => sw.evaluate(() => chrome.declarativeNetRequest.getSessionRules());
+  let t;
+
+  check("panel follows the pinned tab", (await panel.locator(".tabline .host").innerText()).includes("127.0.0.1"));
+
+  // Inspect
+  await open("Inspect", "Overview");
+  await panel.waitForTimeout(800);
+  t = await text();
+  check("tech stack: Next.js + Express", t.includes("Next.js") && t.includes("Express"));
+  await shot("inspect-overview");
+
+  await open("Inspect", "SEO");
+  t = await text();
+  check("SEO: short description flagged", /Meta description[\s\S]*5 chars/.test(t));
+  check("SEO: headings listed", t.includes("Skipped level"));
+
+  await open("Inspect", "Structured data");
+  t = await text();
+  check("JSON-LD: invalid block reported with a line", /Invalid JSON, line \d+/.test(t), t.match(/Invalid JSON[^\n]*/)?.[0]);
+  check("JSON-LD: bad price reported", t.includes('price "€12,50" must be a plain number'));
+  check("JSON-LD: relative image reported", t.includes('image "/mug.jpg" is not an absolute URL'));
+  await shot("inspect-jsonld");
+
+  await open("Inspect", "Headers");
+  await panel.waitForTimeout(500);
+  t = await text();
+  check("headers: grade + version leak", /x-powered-by: Express\/4\.18\.2/.test(t) && /\d+\/100/.test(t), t.match(/\d+\/100/)?.[0]);
+  await shot("inspect-headers");
+
+  await open("Inspect", "Performance");
+  t = await text();
+  check("performance: vitals shown", t.includes("LCP") && t.includes("TTFB"));
+
+  await open("Inspect", "Console errors");
+  await panel.getByRole("button", { name: "Capture on all pages" }).click();
+  await panel.waitForTimeout(400);
+  await site.reload();
+  await site.waitForTimeout(500);
+  await panel.locator("main").getByRole("button", { name: "Refresh" }).click();
+  await panel.waitForTimeout(500);
+  t = await text();
+  check("errors: startup error captured after enabling capture", t.includes("startup error from test page"));
+  const badge = await sw.evaluate((tab) => chrome.action.getBadgeText({ tabId: tab }), tabId);
+  check("errors: count on the toolbar badge (JS error + 404 image)", badge === "2", `badge="${badge}"`);
+
+  await open("Inspect", "Link checker");
+  await panel.getByRole("button", { name: "Check all" }).click();
+  await panel.waitForTimeout(2000);
+  t = await text();
+  check("links: one broken link found", /1 broken/.test(t) && t.includes("/missing"), t.match(/\d+\/\d+ checked · \d+ broken/)?.[0]);
+
+  await open("Inspect", "robots.txt");
+  await panel.waitForTimeout(700);
+  t = await text();
+  check("site files: robots, sitemap, manifest", t.includes("Disallow: /admin") && t.includes("2 entries") && t.includes("512px icon"));
+
+  await open("Inspect", "Accessibility");
+  t = await text();
+  check(
+    "a11y: missing alt + label + skipped headings",
+    t.includes("Images without an alt") && t.includes("Form fields without a label") && t.includes("Skipped heading levels"),
+  );
+
+  await open("Inspect", "Fonts");
+  check("fonts & colors: palette listed", (await text()).includes("Page palette"));
+
+  // Cache
+  await open("Cache", "Local & session storage");
+  check("storage editor lists the key", (await text()).includes("devkit-test"));
+  await open("Cache", "Cookies");
+  t = await text();
+  check("cookie editor lists the cookie", t.includes("session") && t.includes("abc123"));
+
+  await open("Cache", "Cache actions");
+  await site.evaluate(() => {
+    window.__devkitMarker = true;
+  });
+  await action("Hard reload");
+  await site.waitForLoadState("load");
+  await site.waitForTimeout(600);
+  check("hard reload reloads the page", await site.evaluate(() => window.__devkitMarker !== true));
+
+  await action("Toggle no-cache for this tab");
+  await panel.waitForTimeout(400);
+  const noCache = await site.evaluate(async () => (await (await fetch("/echo")).json())["cache-control"]);
+  check("no-cache rule sends Cache-Control: no-cache", noCache === "no-cache", `cache-control=${noCache}`);
+  await action("Toggle no-cache for this tab");
+  await panel.waitForTimeout(400);
+  check("no-cache rule removed on second toggle", !(await sessionRules()).some((r) => r.id >= 900_000));
+
+  await open("Cache", "Clear site data");
+  await panel.getByRole("button", { name: "Clear selected" }).click();
+  await site.waitForLoadState("load");
+  await site.waitForTimeout(800);
+  check("clear site data empties localStorage and reloads", (await site.evaluate(() => localStorage.getItem("devkit-test"))) === null);
+
+  // Page
+  await open("Page", "Page tools");
+  await action("Toggle element outlines");
+  await panel.waitForTimeout(300);
+  check("page tools: outlines injected", await site.evaluate(() => Boolean(document.getElementById("devkit-outline"))));
+  await action("Toggle design mode");
+  await panel.waitForTimeout(300);
+  check("page tools: design mode on", (await site.evaluate(() => document.designMode)) === "on");
+  await action("Toggle design mode");
+
+  await open("Page", "Emulation");
+  const isDark = () => site.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches);
+  const baseline = await isDark();
+  await panel.getByLabel("prefers-color-scheme").selectOption(baseline ? "light" : "dark");
+  await panel.waitForTimeout(800);
+  check("emulation: prefers-color-scheme flipped", (await isDark()) !== baseline, `page default dark=${baseline}`);
+  await panel.getByRole("button", { name: "Stop & reset" }).click();
+  await panel.waitForTimeout(500);
+  check("emulation: reset to the page default", (await isDark()) === baseline);
+
+  await open("Page", "Screenshot");
+  await panel.getByRole("button", { name: "Full page" }).click();
+  const img = await panel
+    .getByAltText("Screenshot of the page")
+    .waitFor({ timeout: 10_000 })
+    .then(() => true)
+    .catch(() => false);
+  check("screenshot: full page captured", img);
+
+  await open("Page", "Form filler");
+  await panel.getByRole("button", { name: "Fill the forms" }).click();
+  await panel.waitForTimeout(300);
+  const filled = await site.evaluate(() => ({
+    email: document.querySelector("[name=email]").value,
+    first: document.querySelector("[name=first_name]").value,
+  }));
+  check("form filler fills by field name", /@example\.com$/.test(filled.email) && filled.first.length > 1, JSON.stringify(filled));
+
+  // Network
+  await open("Network", "Request rules");
+  await panel.getByRole("button", { name: "+ Header" }).click();
+  await panel.getByLabel("URL filter").fill("||127.0.0.1");
+  await panel.getByPlaceholder("x-feature-flag").fill("x-devkit-test");
+  await panel.getByPlaceholder("value", { exact: true }).fill("yes");
+  await panel.getByRole("button", { name: "Apply" }).click();
+  await panel.waitForTimeout(500);
+  const echoed = await site.evaluate(async () => (await (await fetch("/echo")).json())["x-devkit-test"]);
+  check("request rule adds a header", echoed === "yes", `x-devkit-test=${echoed}`);
+  await shot("network-rules");
+
+  await open("Network", "Environments");
+  await panel.getByRole("button", { name: "Create a group from this site" }).click();
+  await panel.waitForTimeout(500);
+  await site.reload();
+  await site.waitForTimeout(800);
+  check("environments: prod ribbon on the page", await site.evaluate(() => Boolean(document.getElementById("devkit-env-ribbon"))));
+  const envBadge = await sw.evaluate((tab) => chrome.action.getBadgeText({ tabId: tab }), tabId);
+  check("environments: PROD badge", envBadge === "PROD", `badge="${envBadge}"`);
+  check("environments: switch button offered", (await text()).includes("Open on local"));
+  await panel.getByRole("button", { name: "Delete group" }).click();
+
+  // AI with a fake OpenAI-compatible endpoint
+  await open("AI", "AI settings");
+  await panel.waitForTimeout(500);
+  await panel.getByLabel("Local / custom endpoint").check();
+  await panel.getByPlaceholder("http://localhost:11434/v1").fill(`${base}/v1`);
+  await panel.getByPlaceholder("llama3.2").fill("fake-model");
+  await panel.getByRole("button", { name: "Test connection" }).click();
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check("AI: connection test against the local endpoint", t.includes("Connection works"), t.match(/Connection[^\n]*/)?.[0]);
+  await panel.getByRole("button", { name: "Save" }).click();
+  await panel.waitForTimeout(500);
+  await open("AI", "Ask AI");
+  await panel.waitForTimeout(800);
+  await action("Summarize the page");
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check(
+    "AI: streamed answer with page title and text",
+    t.includes("FAKE-MODEL answer") && t.includes("Acme Mug") && t.includes("Page text included: true"),
+    t.match(/FAKE-MODEL[^\n]*/)?.[0],
+  );
+  check("AI: usage shown", /1234 in · 20 out/.test(t));
+  await shot("ai-ask");
+
+  await open("AI", "Model browser");
+  await panel.waitForTimeout(1500);
+  check("AI: model browser lists the catalog", /Model browser \(\d{3,}\)/.test(await text()));
+
+  // Utils
+  const field = (n = 0) => panel.locator("main textarea, main input:not([type=checkbox]):not([type=color])").nth(n);
+  await open("Utils", "JSON");
+  await panel.locator("main textarea").first().fill('{"b":1,"a":[true,null]}');
+  await panel.getByRole("button", { name: "TypeScript" }).click();
+  check("utils: JSON → TypeScript", (await text()).includes("interface Root"));
+
+  await open("Utils", "JWT");
+  await panel
+    .getByPlaceholder("eyJhbGciOi…")
+    .fill("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkZXZraXQtdGVzdCIsImlhdCI6MTUxNjIzOTAyMn0.c2lnbmF0dXJl");
+  await panel.waitForTimeout(200);
+  check("utils: JWT payload decoded", (await text()).includes("devkit-test"));
+
+  await open("Utils", "Encode");
+  await panel.getByPlaceholder("Text to encode or decode").fill("hello devkit");
+  await panel.waitForTimeout(200);
+  check("utils: Base64 encode", (await text()).includes("aGVsbG8gZGV2a2l0"));
+
+  await open("Utils", "Hash");
+  await panel.getByPlaceholder("Text to hash (UTF-8)").fill("abc");
+  await panel.waitForTimeout(500);
+  check("utils: SHA-256", (await text()).includes("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"));
+
+  await open("Utils", "Timestamps");
+  await field().fill("0");
+  await panel.waitForTimeout(200);
+  check("utils: timestamp → ISO", (await text()).includes("1970-01-01T00:00:00.000Z"));
+
+  await open("Utils", "Regex");
+  await panel.getByLabel("Pattern").fill("(\\d+)-(\\d+)");
+  await panel.getByLabel("Flags").fill("g");
+  await panel.locator("main textarea").first().fill("10-20 and 30-40");
+  await panel.waitForTimeout(200);
+  check("utils: regex matches", /2 match/.test(await text()), (await text()).match(/\d+ match\w*/)?.[0]);
+
+  await open("Utils", "Cron");
+  await field().fill("*/15 * * * 1-5");
+  await panel.waitForTimeout(200);
+  t = await text();
+  check("utils: cron explained with next runs", t.includes("Next runs") && /15 minutes/.test(t));
+  await shot("utils");
+
+  // Popup palette
+  const popup = await context.newPage();
+  popup.on("pageerror", (e) => extErrors.push(`popup pageerror: ${e.message}`));
+  await popup.setViewportSize({ width: 400, height: 560 });
+  await popup.goto(`chrome-extension://${id}/popup.html`);
+  await popup.getByLabel("Search commands").fill("json-ld");
+  const first = await popup.locator(".palette li button").first().innerText();
+  check("palette finds the JSON-LD analyzer", /Structured data/.test(first), first.split("\n")[0]);
+
+  // Options
+  const options = await context.newPage();
+  options.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
+  await options.goto(`chrome-extension://${id}/options.html`);
+  await options.waitForTimeout(800);
+  const ot = await options.locator("body").innerText();
+  check(
+    "options page renders settings and permissions",
+    ot.includes("AI settings") && ot.includes("Permissions") && ot.includes("Error capture"),
+  );
+
+  check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
+} catch (e) {
+  check("run completed", false, e instanceof Error ? e.stack : String(e));
+  const last = context.pages().find((p) => p.url().includes("sidepanel.html"));
+  if (extErrors.length) console.log(`Extension errors:\n${extErrors.join("\n")}`);
+  if (last)
+    console.log(
+      `Side panel at failure:\n${(
+        await last
+          .locator("body")
+          .innerText()
+          .catch(() => "")
+      ).slice(0, 1500)}`,
+    );
+} finally {
+  clearTimeout(watchdog);
+  await context.close();
+  server.kill();
+  rmSync(work, { recursive: true, force: true });
+}
+
+const failed = results.filter((r) => !r.ok);
+console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+process.exit(failed.length ? 1 : 0);

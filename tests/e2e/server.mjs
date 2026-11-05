@@ -1,0 +1,93 @@
+import http from "node:http";
+
+const page = (base) => `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Acme Mug – devkit test page</title>
+<meta name="description" content="Short">
+<link rel="canonical" href="${base}/">
+<meta property="og:title" content="Acme Mug">
+<meta property="og:image" content="${base}/og.png">
+<link rel="manifest" href="/manifest.json">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Acme Mug","image":"/mug.jpg","offers":{"@type":"Offer","price":"€12,50","priceCurrency":"EUR"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"},]}</script>
+<script>window.__NEXT_DATA__ = {}; setTimeout(() => { throw new Error("startup error from test page"); }, 50);</script>
+</head><body>
+<h1>Acme Mug</h1><h2>Details</h2><h4>Skipped level</h4>
+<p class="px-4 py-2 text-sm">The best mug. ${"Lorem ipsum dolor sit amet. ".repeat(40)}</p>
+<img src="/mug.jpg">
+<a href="/ok">ok link</a> <a href="/missing">broken link</a>
+<form><input name="email"><input name="first_name" placeholder="First name"><textarea name="message"></textarea><select name="country"><option value="">-</option><option value="fr">France</option></select></form>
+</body></html>`;
+
+const sse = (res, text) => {
+  res.writeHead(200, { "content-type": "text/event-stream", "access-control-allow-origin": "*" });
+  const words = text.split(/(?<= )/);
+  let i = 0;
+  const tick = () => {
+    if (i < words.length) {
+      res.write(
+        `data: ${JSON.stringify({ id: "c1", object: "chat.completion.chunk", created: 1, model: "fake-model", choices: [{ index: 0, delta: { content: words[i++] }, finish_reason: null }] })}\n\n`,
+      );
+      setTimeout(tick, 5);
+    } else {
+      res.write(
+        `data: ${JSON.stringify({ id: "c1", object: "chat.completion.chunk", created: 1, model: "fake-model", choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 1234, completion_tokens: 20, total_tokens: 1254 } })}\n\n`,
+      );
+      res.end("data: [DONE]\n\n");
+    }
+  };
+  tick();
+};
+
+const server = http.createServer((req, res) => {
+  const base = `http://${req.headers.host}`;
+  const url = new URL(req.url, base);
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
+  if (req.method === "OPTIONS") return res.writeHead(204, cors).end();
+  if (url.pathname === "/") {
+    res.writeHead(200, {
+      "content-type": "text/html; charset=utf-8",
+      "content-security-policy": "script-src * 'unsafe-inline'",
+      "x-powered-by": "Express/4.18.2",
+      "cache-control": "no-cache",
+    });
+    return res.end(page(base));
+  }
+  if (url.pathname === "/echo") {
+    res.writeHead(200, { "content-type": "application/json", ...cors });
+    return res.end(JSON.stringify(req.headers));
+  }
+  if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
+  if (url.pathname === "/robots.txt")
+    return res.writeHead(200, { "content-type": "text/plain" }).end(`User-agent: *\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`);
+  if (url.pathname === "/sitemap.xml")
+    return res
+      .writeHead(200, { "content-type": "application/xml" })
+      .end(
+        `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${base}/</loc><lastmod>2026-10-01</lastmod></url><url><loc>${base}/ok</loc></url></urlset>`,
+      );
+  if (url.pathname === "/manifest.json")
+    return res
+      .writeHead(200, { "content-type": "application/json" })
+      .end(JSON.stringify({ name: "Acme", start_url: "/", display: "standalone", icons: [{ src: "/i.png", sizes: "192x192" }] }));
+  if (url.pathname === "/v1/models")
+    return res
+      .writeHead(200, { "content-type": "application/json", ...cors })
+      .end(JSON.stringify({ object: "list", data: [{ id: "fake-model", object: "model" }] }));
+  if (url.pathname === "/v1/chat/completions") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const json = JSON.parse(body);
+      const user = json.messages.filter((m) => m.role === "user").at(-1);
+      const content = typeof user.content === "string" ? user.content : user.content.map((p) => p.text ?? "").join("");
+      const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
+      const hasText = content.includes("best mug");
+      sse(res, `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Context length: ${content.length} chars.`);
+    });
+    return;
+  }
+  res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+});
+server.listen(Number(process.argv[2] ?? 0), "127.0.0.1", () => console.log(`listening ${server.address().port}`));
