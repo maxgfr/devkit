@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -20,8 +24,61 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - name: Install Chromium for the end-to-end test
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
       - run: pnpm zip
       - uses: actions/upload-artifact@v4
         with:
           name: devkit-chrome
           path: .output/*.zip
+
+  # Every push to main with a `feat`, `fix` or `perf` commit since the last tag ships a release:
+  # GitHub release with the zip, then the Chrome Web Store when its secrets are set.
+  release:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - id: version
+        run: node scripts/next-version.ts
+      - name: Nothing to release
+        if: steps.version.outputs.version == ''
+        run: echo "No feat, fix or perf commit since ${{ steps.version.outputs.previous }}."
+      - if: steps.version.outputs.version != ''
+        run: pnpm install --frozen-lockfile
+      - name: Build v${{ steps.version.outputs.version }}
+        if: steps.version.outputs.version != ''
+        run: |
+          npm pkg set version=${{ steps.version.outputs.version }}
+          pnpm zip
+      - name: GitHub release
+        if: steps.version.outputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v$VERSION" ".output/devkit-$VERSION-chrome.zip" \
+            --target "$GITHUB_SHA" --title "devkit $VERSION" --generate-notes
+      - name: Chrome Web Store
+        if: steps.version.outputs.version != '' && vars.CWS_EXTENSION_ID != ''
+        env:
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: node scripts/publish-cws.ts ".output/devkit-${{ steps.version.outputs.version }}-chrome.zip"
