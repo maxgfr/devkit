@@ -814,6 +814,17 @@ try {
   );
   check("AI: usage shown", /1234 in · 20 out/.test(t));
   await shot("ai-ask");
+  await panel.getByRole("button", { name: "New chat" }).click();
+  await panel.waitForTimeout(300);
+  await action("Fix plan for the whole page");
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 20_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1500);
+  t = await text();
+  check(
+    "AI: the fix plan gets the masked secrets and the flagged libraries, never a raw key",
+    t.includes("Secrets section: true") && t.includes("Raw secret sent: false") && /First CVE: CVE-\d{4}-\d+/.test(t),
+    t.match(/Secrets section[^\n]*/)?.[0],
+  );
 
   // Element picker → Ask AI: the picked element travels as a context part.
   await open("Page", "Element picker");

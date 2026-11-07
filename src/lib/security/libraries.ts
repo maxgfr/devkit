@@ -415,6 +415,17 @@ function dedupe(list: Detection[]): Detection[] {
 }
 
 /** Library versions written in a script URL: CDN paths (`/3.4.1/jquery.min.js`) and file names (`jquery-3.4.1.min.js`). */
+/** What the page itself tells (globals, script URLs, inline scripts), without fetching any file. */
+export function snapshotDetections(
+  data: { globals: { lib: string; version: string; expr: string }[]; scripts: string[]; inline: { label: string; text: string }[] },
+  db: VulnDb,
+): Detection[] {
+  const out: Detection[] = data.globals.map((g) => ({ lib: g.lib, version: g.version.replace(/^v/i, ""), kind: "global", where: g.expr }));
+  for (const url of data.scripts) out.push(...scanUrl(url, db));
+  for (const s of data.inline) out.push(...scanContent(s.text, s.label, db));
+  return out;
+}
+
 export function scanUrl(url: string, db: VulnDb): Detection[] {
   const c = compile(db);
   const clean = url.split("#")[0]!;

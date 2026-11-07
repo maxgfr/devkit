@@ -269,6 +269,12 @@ function Markdown({ text }: { text: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ node: _n, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+          // Wide tables scroll inside the answer instead of being cut by the panel's edge.
+          table: ({ node: _n, ...props }) => (
+            <div className="md-table">
+              <table {...props} />
+            </div>
+          ),
           pre: ({ node, children }) => {
             const code =
               node?.children?.[0] && "children" in node.children[0]

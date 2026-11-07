@@ -3,6 +3,7 @@ import { collectLibrarySignals } from "../../lib/page/libraries";
 import {
   type Advisory,
   analyzeLibraries,
+  snapshotDetections,
   cveUrl,
   DISCLAIMER,
   type Detection,
@@ -14,7 +15,6 @@ import {
   type Severity,
   SOURCE_LABEL,
   scanContent,
-  scanUrl,
   statusCounts,
   type VulnDb,
 } from "../../lib/security/libraries";
@@ -246,15 +246,7 @@ export function VulnerableLibraries() {
   const pageDetections = useMemo(() => {
     const data = snap.data;
     if (!data || !db.data) return [];
-    const out: Detection[] = data.globals.map((g) => ({
-      lib: g.lib,
-      version: g.version.replace(/^v/i, ""),
-      kind: "global",
-      where: g.expr,
-    }));
-    for (const url of data.scripts) out.push(...scanUrl(url, db.data));
-    for (const s of data.inline) out.push(...scanContent(s.text, s.label, db.data));
-    return out;
+    return snapshotDetections(data, db.data);
   }, [snap.data, db.data]);
 
   // This site's script files, fetched within a budget, for banners and version constants.

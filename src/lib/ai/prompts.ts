@@ -25,9 +25,9 @@ export const AI_ACTIONS: AiAction[] = [
     id: "fix-plan",
     title: "Fix plan for the whole page",
     description: "Every problem devkit found, ranked, each with its fix",
-    parts: ["seo", "jsonld", "headers", "security", "perf", "a11y", "errors", "tech", "meta"],
+    parts: ["secrets", "libraries", "headers", "security", "a11y", "errors", "perf", "seo", "jsonld", "tech", "meta"],
     prompt:
-      "Turn everything devkit measured on this page into one fix plan. Rank the problems by impact on users and on the business (broken features and security first, then accessibility, performance, SEO and structured data). For each: what is wrong and the evidence from the data, where to fix it (file, component, header, server config, selector), and the exact fix (code, header value or config). Group duplicates under one root cause. Skip what passes. End with a short checklist the developer can tick, and the devkit panel to re-run for each item.",
+      "Turn everything devkit measured on this page into one fix plan. Rank the problems by impact on users and on the business (broken features and security first, then accessibility, performance, SEO and structured data). For each: what is wrong and the evidence from the data, where to fix it (file, component, header, server config, selector), and the exact fix (code, header value or config). Group duplicates under one root cause. Skip what passes. Secrets are masked on purpose: never ask for the full value, say to revoke and rotate it. End with a short checklist the developer can tick, with the devkit panel to re-run for each item, using the panel names given in the section headings (e.g. Security › Headers).",
   },
   {
     id: "summarize",

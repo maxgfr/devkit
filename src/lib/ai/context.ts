@@ -38,7 +38,9 @@ export type ContextPart =
   | "a11y"
   | "screenshot"
   | "element"
-  | "report";
+  | "report"
+  | "secrets"
+  | "libraries";
 
 export const PART_LABELS: Record<ContextPart, string> = {
   text: "Page text",
@@ -55,6 +57,8 @@ export const PART_LABELS: Record<ContextPart, string> = {
   screenshot: "Screenshot",
   element: "Picked element",
   report: "Bug report",
+  secrets: "Secrets (masked)",
+  libraries: "Vulnerable libraries",
 };
 
 export interface PageContext {
@@ -79,6 +83,10 @@ export interface PageContext {
   /** The bug report panel's Markdown, and its screenshot. */
   report?: string;
   reportImage?: string;
+  /** The Secrets panel's report of the page's own sources: values masked. */
+  secrets?: string;
+  /** The Libraries panel's report of what the page tells (no file fetched): flagged libraries only. */
+  libraries?: string;
 }
 
 /** A rough token count: about 4 characters per token for English and code. */
@@ -87,8 +95,21 @@ export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 const ms = (n: number | null | undefined) => (n === null || n === undefined ? "n/a" : `${Math.round(n)} ms`);
 
+/** Where each section comes from in devkit, so answers can send the developer to the right panel. */
+const PANEL: Record<string, string> = {
+  "SEO checks": "Inspect › SEO",
+  "Meta & structure": "Inspect › SEO",
+  "Detected technologies": "Inspect › Overview",
+  "Response headers (document)": "Security › Headers",
+  "Security checks": "Security › Headers",
+  Performance: "Inspect › Performance",
+  "Console errors": "Inspect › Errors",
+  "Structured data (JSON-LD)": "Inspect › JSON-LD",
+  "Accessibility (axe-core audit)": "Inspect › A11y",
+};
+
 function section(title: string, body: string) {
-  return `## ${title}\n${body.trim()}\n`;
+  return `## ${title}${PANEL[title] ? ` (devkit panel: ${PANEL[title]})` : ""}\n${body.trim()}\n`;
 }
 
 /** The context as Markdown sections, the page text cut first so the whole fits `maxChars`. */
@@ -179,6 +200,9 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
     );
   }
   if (has("a11y") && ctx.a11y) out.push(section("Accessibility (axe-core audit)", auditContext(ctx.a11y.audit, ctx.a11y.focus)));
+  if (has("secrets") && ctx.secrets)
+    out.push(`${ctx.secrets.replace(/^## Secrets/, "## Secrets (devkit panel: Security › Secrets)").trim()}\n`);
+  if (has("libraries") && ctx.libraries) out.push(`${ctx.libraries.trim()}\n`);
 
   const fixed = out.join("\n");
   if (has("text") && ctx.page) {

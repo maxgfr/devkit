@@ -209,9 +209,12 @@ const server = http.createServer((req, res) => {
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
       const axe = content.includes("## Accessibility (axe-core audit)") ? (/`(image-alt)`/.exec(content)?.[1] ?? "none") : "none";
       const report = content.includes("# Bug report:");
+      const secrets = content.includes("## Secrets (devkit panel: Security › Secrets)");
+      const leaked = /sk_live_[A-Za-z0-9]{8,}/.test(content);
+      const cve = /CVE-\d{4}-\d+/.exec(content)?.[0] ?? "none";
       sse(
         res,
-        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Context length: ${content.length} chars.`,
+        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Secrets section: ${secrets}. Raw secret sent: ${leaked}. First CVE: ${cve}. Context length: ${content.length} chars.`,
       );
     });
     return;

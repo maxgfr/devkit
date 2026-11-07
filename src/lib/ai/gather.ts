@@ -8,6 +8,11 @@ import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
 import { collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
 import { readErrors } from "../page/errors";
+import { secretsMarkdown } from "../agent/security";
+import { collectLibrarySignals } from "../page/libraries";
+import { collectSecretSources } from "../page/security";
+import { analyzeLibraries, libraryMarkdown, pageProbes, snapshotDetections, type VulnDb } from "../security/libraries";
+import { scanSecrets } from "../security/secrets";
 import { seoReport } from "../seo";
 import { detectTech } from "../tech";
 import type { CapturedError, ContextPart, PageContext, PageText } from "./context";
@@ -31,7 +36,7 @@ export async function gatherContext(
   };
   const needsMeta = want("meta") || want("seo") || want("jsonld");
   const needsHeaders = want("headers") || want("security") || want("tech");
-  const [page, selection, meta, signals, headers, perf, errors, a11y, screenshot] = await Promise.all([
+  const [page, selection, meta, signals, headers, perf, errors, a11y, screenshot, secrets, libraries] = await Promise.all([
     want("text") ? safe(() => readPage(tabId)) : undefined,
     want("selection") ? (extra.selection ? Promise.resolve(extra.selection) : safe(() => runInTab(tabId, collectSelection))) : undefined,
     needsMeta ? safe(() => runInTab(tabId, collectMeta)) : undefined,
@@ -41,7 +46,11 @@ export async function gatherContext(
     want("errors") ? safe(() => runInTab(tabId, readErrors, [], "MAIN")) : undefined,
     want("a11y") ? safe(() => readAudit(tabId, url)) : undefined,
     want("screenshot") ? safe(() => browser.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 75 })) : undefined,
+    want("secrets") ? safe(() => readSecrets(tabId, url)) : undefined,
+    want("libraries") ? safe(() => readLibraries(tabId, url)) : undefined,
   ]);
+  if (secrets) ctx.secrets = secrets;
+  if (libraries) ctx.libraries = libraries;
   if (page) ctx.page = page;
   if (selection) ctx.selection = selection;
   if (meta) {
@@ -76,6 +85,31 @@ export async function gatherContext(
     }
   }
   return ctx;
+}
+
+/** The Secrets panel's scan of the page's own sources (inline scripts, globals, storage…), values masked. */
+async function readSecrets(tabId: number, url: string): Promise<string> {
+  const snap = await runInTab(tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN");
+  return secretsMarkdown(scanSecrets(snap.sources), { url, scan: { sources: snap.sources.length } });
+}
+
+/** Libraries the page reveals (globals, script URLs, inline scripts) checked against the bundled database. */
+async function readLibraries(tabId: number, url: string): Promise<string> {
+  const res = await fetch(browser.runtime.getURL("/vuln-db.json"));
+  const db = (await res.json()) as VulnDb;
+  const snap = await runInTab(tabId, collectLibrarySignals, [pageProbes(db), 512 * 1024, 2 * 1024 * 1024], "MAIN");
+  const results = analyzeLibraries(snapshotDetections(snap, db), db, snap.present);
+  const flagged = results.filter((r) => r.status === "vulnerable" || r.status === "eol");
+  const known = results.filter((r) => r.version).map((r) => `${r.name} ${r.version}`);
+  const head = `## Vulnerable libraries (devkit panel: Security › Libraries)\nPage: ${url}\nResult: ${flagged.length ? `${flagged.length} of ${results.length} detected libraries flagged` : `none of the ${results.length} detected libraries is flagged`}. Detected: ${known.join(", ") || "none"}. Script files were not fetched for this summary; the Libraries panel scans them too.`;
+  return [
+    head,
+    ...flagged.map((r) =>
+      libraryMarkdown(r, { page: url, source: db.source })
+        .replace(/^## /gm, "### ")
+        .replace(/^### Advisories/gm, "#### Advisories"),
+    ),
+  ].join("\n\n");
 }
 
 /** The tab's last axe audit of this page, else a fresh one with the panel's options. A focused rule is read once. */

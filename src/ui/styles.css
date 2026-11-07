@@ -659,13 +659,21 @@ table.kv td {
   background: none;
   padding: 0;
 }
+.markdown .md-table {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+}
 .markdown table {
   border-collapse: collapse;
+  font-size: 12px;
 }
 .markdown table th,
 .markdown table td {
   border: 1px solid var(--line);
   padding: 3px 6px;
+  vertical-align: top;
+  min-width: 8ch;
 }
 .reasoning {
   color: var(--fg-3);
