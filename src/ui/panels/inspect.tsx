@@ -464,6 +464,7 @@ export function JsonLd() {
       </AccessGate>
       <Section title="Validate a snippet" hint="Paste JSON-LD (with or without its <script> tag) to check it before shipping.">
         <textarea
+          aria-label="JSON-LD snippet"
           rows={6}
           value={paste}
           placeholder='{"@context":"https://schema.org","@type":"Product",…}'
@@ -1297,7 +1298,7 @@ export function SiteFiles() {
         ) : null}
       </Section>
       <Section title="Sitemap">
-        <input placeholder={sitemapUrl} value={sitemapInput} onChange={(e) => setSitemapInput(e.target.value)} />
+        <input aria-label="Sitemap URL" placeholder={sitemapUrl} value={sitemapInput} onChange={(e) => setSitemapInput(e.target.value)} />
         <ErrorText error={sitemap.error} />
         {sitemap.data ? (
           sitemap.data.parsed ? (

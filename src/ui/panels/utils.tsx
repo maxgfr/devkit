@@ -61,7 +61,14 @@ export function Json() {
         </>
       }
     >
-      <textarea rows={8} value={text} placeholder='{"paste": "JSON here"}' onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <textarea
+        aria-label="JSON"
+        rows={8}
+        value={text}
+        placeholder='{"paste": "JSON here"}'
+        onChange={(e) => setText(e.target.value)}
+        spellCheck={false}
+      />
       {parsed && !parsed.ok ? (
         <Notice kind="bad">
           Invalid JSON{parsed.line ? ` at line ${parsed.line}, column ${parsed.column}` : ""}: {parsed.error}
@@ -111,7 +118,14 @@ export function Jwt() {
   }, [token]);
   return (
     <Section title="JWT decoder" hint="Decoded locally; the signature is not verified (devkit does not know the key).">
-      <textarea rows={4} value={token} placeholder="eyJhbGciOi…" onChange={(e) => setToken(e.target.value)} spellCheck={false} />
+      <textarea
+        aria-label="JWT"
+        rows={4}
+        value={token}
+        placeholder="eyJhbGciOi…"
+        onChange={(e) => setToken(e.target.value)}
+        spellCheck={false}
+      />
       {decoded && !decoded.ok ? <ErrorText error={decoded.error} /> : null}
       {decoded?.ok ? (
         <>
@@ -155,7 +169,7 @@ export function Encode() {
     <Section
       title="Encode / decode"
       actions={
-        <select value={codec} onChange={(e) => setCodec(e.target.value as Codec)} style={{ width: "auto" }}>
+        <select aria-label="Encoding" value={codec} onChange={(e) => setCodec(e.target.value as Codec)} style={{ width: "auto" }}>
           {CODECS.map(([c, l]) => (
             <option key={c} value={c}>
               {l}
@@ -164,7 +178,13 @@ export function Encode() {
         </select>
       }
     >
-      <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text to encode or decode" />
+      <textarea
+        aria-label="Text to encode or decode"
+        rows={5}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Text to encode or decode"
+      />
       <h3>Encoded</h3>
       <Code text={enc.value} empty="Type or paste text above." />
       <h3>Decoded</h3>
@@ -198,8 +218,14 @@ export function Hash() {
   }, [text, key]);
   return (
     <Section title="Hash & SRI">
-      <textarea rows={4} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text to hash (UTF-8)" />
-      <input placeholder="HMAC key (optional)" value={key} onChange={(e) => setKey(e.target.value)} />
+      <textarea
+        aria-label="Text to hash"
+        rows={4}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Text to hash (UTF-8)"
+      />
+      <input aria-label="HMAC key" placeholder="HMAC key (optional)" value={key} onChange={(e) => setKey(e.target.value)} />
       <table className="kv">
         <tbody>
           {rows.map(([k, v]) => (
@@ -234,7 +260,7 @@ export function Ids() {
   return (
     <Section title="UUID & IDs">
       <div className="row">
-        <select value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} style={{ width: "auto" }}>
+        <select aria-label="ID type" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)} style={{ width: "auto" }}>
           <option value="v7">UUID v7 (time-sortable)</option>
           <option value="v4">UUID v4 (random)</option>
           <option value="nanoid">nanoid (21 chars)</option>
@@ -254,7 +280,13 @@ export function Ids() {
       </div>
       <Code text={ids.join("\n")} />
       <h3>Inspect a UUID</h3>
-      <input className="mono" value={inspect} onChange={(e) => setInspect(e.target.value)} placeholder="0190f1c4-…" />
+      <input
+        aria-label="UUID to inspect"
+        className="mono"
+        value={inspect}
+        onChange={(e) => setInspect(e.target.value)}
+        placeholder="0190f1c4-…"
+      />
       {inspect ? (
         info ? (
           <KV
@@ -284,7 +316,13 @@ export function Time() {
   return (
     <Section title="Timestamps" hint="Unix seconds, milliseconds, µs or ns, or any date string (ISO 8601, RFC 2822…).">
       <div className="row">
-        <input className="grow mono" style={{ width: "auto" }} value={input} onChange={(e) => setInput(e.target.value)} />
+        <input
+          aria-label="Timestamp or date"
+          className="grow mono"
+          style={{ width: "auto" }}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
         <Button onClick={() => setInput(String(Math.floor(Date.now() / 1000)))}>Now</Button>
       </div>
       {v ? (
@@ -377,7 +415,7 @@ export function Regex() {
           aria-label="Flags"
         />
       </div>
-      <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} />
+      <textarea aria-label="Test text" rows={5} value={text} onChange={(e) => setText(e.target.value)} />
       {result.error ? (
         <Notice kind="bad">{result.error}</Notice>
       ) : (
@@ -400,7 +438,13 @@ export function Regex() {
             ])}
         />
       ) : null}
-      <input className="mono" placeholder="Replacement ($1, $<name>)" value={replace} onChange={(e) => setReplace(e.target.value)} />
+      <input
+        aria-label="Replacement"
+        className="mono"
+        placeholder="Replacement ($1, $<name>)"
+        value={replace}
+        onChange={(e) => setReplace(e.target.value)}
+      />
       {replace ? <Code text={replaced} /> : null}
     </Section>
   );
@@ -422,6 +466,7 @@ export function Diff() {
     <Section title="Text diff">
       <div className="row" style={{ alignItems: "stretch" }}>
         <textarea
+          aria-label="Original text"
           className="grow"
           style={{ width: "auto" }}
           rows={7}
@@ -430,6 +475,7 @@ export function Diff() {
           onChange={(e) => setA(e.target.value)}
         />
         <textarea
+          aria-label="Changed text"
           className="grow"
           style={{ width: "auto" }}
           rows={7}
@@ -468,7 +514,13 @@ export function Color() {
     <Section title="Color converter">
       <div className="row">
         <span className="swatch" style={{ background: c ? toRgb(c) : "transparent", width: 32, height: 32 }} />
-        <input className="grow mono" style={{ width: "auto" }} value={input} onChange={(e) => setInput(e.target.value)} />
+        <input
+          aria-label="Color"
+          className="grow mono"
+          style={{ width: "auto" }}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+        />
         <input type="color" value={c ? toHex({ ...c, a: 1 }) : "#000000"} onChange={(e) => setInput(e.target.value)} aria-label="Pick" />
       </div>
       {c ? (
@@ -500,7 +552,13 @@ export function Color() {
           />
           <div className="row">
             <span className="small">Contrast against</span>
-            <input className="mono" style={{ width: 110 }} value={against} onChange={(e) => setAgainst(e.target.value)} />
+            <input
+              aria-label="Contrast against"
+              className="mono"
+              style={{ width: 110 }}
+              value={against}
+              onChange={(e) => setAgainst(e.target.value)}
+            />
             {bg ? <b>{contrast(c, bg)}:1</b> : null}
           </div>
         </>
@@ -525,7 +583,7 @@ export function Cron() {
       title="Cron explainer"
       hint="Five fields: minute hour day-of-month month day-of-week. Aliases like @daily work too. Times are local."
     >
-      <input className="mono" value={expr} onChange={(e) => setExpr(e.target.value)} />
+      <input aria-label="Cron expression" className="mono" value={expr} onChange={(e) => setExpr(e.target.value)} />
       <ErrorText error={result.error} />
       {result.value ? (
         <>
@@ -585,7 +643,7 @@ export function UrlTool() {
         </>
       }
     >
-      <textarea rows={3} value={url} onChange={(e) => setUrl(e.target.value)} />
+      <textarea aria-label="URL" rows={3} value={url} onChange={(e) => setUrl(e.target.value)} />
       {parsed ? (
         <>
           <KV
@@ -647,7 +705,7 @@ export function Qr() {
   }, [text]);
   return (
     <Section title="QR code" hint="Scan to open the page on your phone. For localhost, use your machine's LAN address instead.">
-      <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} />
+      <textarea aria-label="Text or URL" rows={2} value={text} onChange={(e) => setText(e.target.value)} />
       {svg ? (
         <>
           <img

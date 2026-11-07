@@ -114,6 +114,7 @@ export function AiSettings({ onSaved }: { onSaved?: () => void }) {
             Model {state.recommendedModel ? <span className="muted">(recommended: {state.recommendedModel.name})</span> : null}
             <input type="search" placeholder="Search models" value={state.search} onChange={(e) => store.setSearch(e.target.value)} />
             <select
+              aria-label="Model"
               value={d.model}
               onChange={(e) => store.selectModel(e.target.value)}
               size={Math.min(8, Math.max(3, state.models.length))}
@@ -620,7 +621,13 @@ export function Models() {
       hint="Live from models.dev and OpenRouter through llm-models. Prices are USD per million tokens."
     >
       <ErrorText error={models.error} />
-      <input type="search" placeholder="Search: claude, gemini flash, qwen coder…" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input
+        aria-label="Search models"
+        type="search"
+        placeholder="Search: claude, gemini flash, qwen coder…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+      />
       <div className="row small">
         {(Object.keys(filters) as (keyof typeof filters)[]).map((k) => (
           <label key={k} className="check">
@@ -629,7 +636,7 @@ export function Models() {
           </label>
         ))}
         <span className="grow" />
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} style={{ width: "auto" }}>
+        <select aria-label="Sort models" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} style={{ width: "auto" }}>
           <option value="input">cheapest input</option>
           <option value="output">cheapest output</option>
           <option value="context">largest context</option>

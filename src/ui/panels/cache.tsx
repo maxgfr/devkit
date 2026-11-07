@@ -245,7 +245,13 @@ export function Cookies() {
           <Checks checks={audit.summary} />
         </details>
       ) : null}
-      <input type="search" placeholder="Filter cookies" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <input
+        aria-label="Filter cookies"
+        type="search"
+        placeholder="Filter cookies"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
       {shown.length ? (
         <ul className="list">
           {shown.map((c) => (
@@ -409,7 +415,12 @@ export function Storage() {
         title={`${kind}Storage (${items.data?.length ?? 0})`}
         actions={
           <>
-            <select value={kind} onChange={(e) => setKind(e.target.value as "local" | "session")} style={{ width: "auto" }}>
+            <select
+              aria-label="Storage area"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as "local" | "session")}
+              style={{ width: "auto" }}
+            >
               <option value="local">localStorage</option>
               <option value="session">sessionStorage</option>
             </select>
@@ -467,7 +478,13 @@ export function Storage() {
             </div>
           </div>
         ) : null}
-        <input type="search" placeholder="Filter keys and values" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <input
+          aria-label="Filter keys and values"
+          type="search"
+          placeholder="Filter keys and values"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
         {shown.length ? (
           <ul className="list">
             {shown.map((i) => (
