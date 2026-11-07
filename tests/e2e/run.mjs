@@ -705,6 +705,84 @@ try {
   t = await text();
   check("a11y: Ask AI sends the axe audit", t.includes("Accessibility review") && t.includes("Axe rules seen: image-alt"));
 
+  // Bug report: record steps, trigger a failing request, read the Markdown.
+  const preview = () => panel.locator(".section", { hasText: "Markdown preview" }).locator("pre.code").innerText();
+  await open("AI", "Bug report");
+  await panel.getByLabel("What happened / what did you expect?").fill("Placing the order fails with a 500.");
+  await panel.getByRole("button", { name: "Start recording" }).click();
+  await panel.getByText("Recording.", { exact: false }).waitFor({ timeout: 5000 });
+  await site.bringToFront();
+  await site.click("#save-btn");
+  await site.fill("#coupon", "SPRING-SALE");
+  await site.press("#coupon", "Enter");
+  await site.click("#order-btn");
+  await site.waitForTimeout(800);
+  await panel.bringToFront();
+  await panel.getByRole("button", { name: "Stop recording" }).click();
+  await panel.waitForTimeout(1500);
+  t = await text();
+  check(
+    "bug report: recorder lists the steps live",
+    t.includes('Click button "Save changes"') &&
+      t.includes('Type in textbox "Coupon code" (value masked)') &&
+      t.includes('Click button "Place order"'),
+  );
+  let md = await preview();
+  check(
+    "bug report: steps in order with a Playwright test, typed value masked",
+    /\d\. Click button "Save changes"\n\d\. Type in textbox "Coupon code" \(value masked\)\n\d\. Press Enter in textbox "Coupon code"\n\d\. Click button "Place order"/.test(
+      md,
+    ) &&
+      md.includes("await page.getByRole('button', { name: 'Place order' }).click();") &&
+      !md.includes("SPRING-SALE"),
+    md.match(/## Steps[\s\S]{0,300}/)?.[0],
+  );
+  check(
+    "bug report: failed requests with their status (500 fetch, 404 image)",
+    /- 500 fetch `\/api\/orders\?api_key=\[redacted\]`/.test(md) && /- 404 img `\/mug\.jpg`/.test(md),
+    md.match(/## Failed[\s\S]{0,300}/)?.[0],
+  );
+  check("bug report: console error captured", md.includes("Order failed: 500"), md.match(/## Console errors[^\n]*/)?.[0]);
+  check(
+    "bug report: environment lines",
+    /- Browser: Chrom\w* [\d.]+ on /.test(md) &&
+      /- Viewport: \d+×\d+ at DPR [\d.]+/.test(md) &&
+      md.includes("Placing the order fails with a 500."),
+  );
+  check(
+    "bug report: planted key redacted everywhere",
+    !md.includes(FAKE_STRIPE_KEY) &&
+      /values? that looked like (a secret was|secrets were) redacted/.test(md) &&
+      /\d+ values? redacted/.test(t),
+  );
+  await shot("ai-report");
+
+  // The recorder survives a navigation of the tab: devkit starts it again in the new document.
+  await panel.getByRole("button", { name: "Record again" }).click();
+  await panel.getByText("Recording.", { exact: false }).waitFor({ timeout: 5000 });
+  await site.bringToFront();
+  await site.click("text=Next page");
+  await site.waitForLoadState("load");
+  await site.waitForTimeout(900);
+  await site.click("#save-btn");
+  await site.waitForTimeout(400);
+  await panel.bringToFront();
+  await panel.getByRole("button", { name: "Stop recording" }).click();
+  await panel.waitForTimeout(1200);
+  md = await preview();
+  check(
+    "bug report: recording continues across a navigation",
+    /Click link "Next page"\n\d\. Page navigated to \/\?from=link\n\d\. Click button "Save changes"/.test(md) &&
+      md.includes("await expect(page).toHaveURL("),
+    md.match(/## Steps[\s\S]{0,260}/)?.[0],
+  );
+
+  await panel.getByRole("button", { name: "Ask AI about it" }).click();
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check("bug report: Ask AI sends the report", t.includes("Fix the reported bug") && t.includes("Bug report included: true"));
+
   await open("AI", "Model browser");
   await panel.waitForTimeout(1500);
   check("AI: model browser lists the catalog", /Model browser \(\d{3,}\)/.test(await text()));
@@ -763,6 +841,13 @@ try {
   await popup.getByLabel("Search commands").fill("pick");
   const pickFirst = await popup.getByRole("option").first().innerText();
   check("palette finds the element picker", /Pick an element/.test(pickFirst), pickFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("bug report");
+  const reportItems = await popup.getByRole("option").allInnerTexts();
+  check(
+    "palette finds the bug report panel and its copy action",
+    reportItems.some((r) => r.startsWith("Copy a bug report")) && reportItems.some((r) => r.startsWith("Bug report")),
+    reportItems.map((r) => r.split("\n")[0]).join(" | "),
+  );
 
   // Options
   const options = await context.newPage();

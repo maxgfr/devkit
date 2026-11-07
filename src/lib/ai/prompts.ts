@@ -142,4 +142,13 @@ export const AI_ACTIONS: AiAction[] = [
     prompt:
       "Explain the accessibility rule marked 'In focus' in the audit: who it affects and which WCAG criterion it fails. Then give the fix for each failing element as corrected HTML (or the CSS / ARIA change), using the selectors and snippets given, and how to verify it (keyboard, screen reader, contrast). Keep it short.",
   },
+  {
+    id: "report",
+    title: "Fix the reported bug",
+    description: "From the bug report: description, steps, errors, failed requests, environment",
+    parts: ["report"],
+    hidden: true,
+    prompt:
+      "The developer collected this bug report on the page. From the description, the recorded steps, the console errors, the failed and slow requests and the environment, find the most likely cause (say which evidence points to it, and what is missing to be sure), then give the fix as a code change. End with how to check it: the Playwright test from the report, finished with the assertion that fails today.",
+  },
 ];

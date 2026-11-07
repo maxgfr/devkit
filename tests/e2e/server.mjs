@@ -30,6 +30,15 @@ const page = (base, port) => `<!doctype html>
 <form><input name="email"><input name="first_name" placeholder="First name"><textarea name="message"></textarea><select name="country"><option value="">-</option><option value="fr">France</option></select></form>
 <p><button id="slow-btn" type="button">Slow button</button> <output id="slow-out"></output></p>
 <div id="app"><section class="toolbar"><button id="save-btn" class="btn" type="button" onclick="window.__saveClicks = (window.__saveClicks || 0) + 1">Save changes</button></section></div>
+<section id="checkout"><label for="coupon">Coupon code</label> <input id="coupon" name="coupon"> <button id="order-btn" type="button">Place order</button> <a href="/?from=link">Next page</a></section>
+<script>
+// The bug report's failing request: a 500 whose URL carries the planted key, and the console error it causes.
+document.getElementById("order-btn").addEventListener("click", async () => {
+  const url = "/api/orders?api_key=" + window.__ENV__.STRIPE_KEY;
+  const res = await fetch(url, { method: "POST" });
+  if (!res.ok) console.error("Order failed: " + res.status + " for " + url);
+});
+</script>
 <script>
 // A React 18 dev-build fiber on the button, as react-dom attaches it: the element picker reads it.
 (function () {
@@ -126,6 +135,8 @@ const server = http.createServer((req, res) => {
       );
   if (url.pathname === "/vendor.js") return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__vendor = 1;");
   if (url.pathname === "/.git/HEAD") return res.writeHead(200, { "content-type": "text/plain" }).end("ref: refs/heads/main\n");
+  if (url.pathname === "/api/orders")
+    return res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "payment provider unavailable" }));
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
     return res.writeHead(200, { "content-type": "text/plain" }).end(`User-agent: *\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`);
@@ -154,9 +165,10 @@ const server = http.createServer((req, res) => {
       const hasText = content.includes("best mug");
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
       const axe = content.includes("## Accessibility (axe-core audit)") ? (/`(image-alt)`/.exec(content)?.[1] ?? "none") : "none";
+      const report = content.includes("# Bug report:");
       sse(
         res,
-        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Context length: ${content.length} chars.`,
+        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Context length: ${content.length} chars.`,
       );
     });
     return;

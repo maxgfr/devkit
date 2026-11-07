@@ -4,6 +4,7 @@ import { loadEnvs, matchEnv, showRibbon } from "../lib/envs";
 import { installMockSession } from "../lib/mock-session";
 import { hasPermission } from "../lib/permissions";
 import { PENDING_ROUTE_KEY, type Route } from "../lib/panels";
+import { registerRecorder } from "../lib/recorder";
 
 const MENU = {
   page: "devkit-ask-page",
@@ -11,6 +12,7 @@ const MENU = {
   jsonld: "devkit-jsonld",
   headers: "devkit-headers",
   element: "devkit-pick-element",
+  report: "devkit-bug-report",
 } as const;
 
 function createMenus() {
@@ -20,6 +22,7 @@ function createMenus() {
     browser.contextMenus.create({ id: MENU.jsonld, title: "Inspect structured data (JSON-LD)", contexts: ["page"] });
     browser.contextMenus.create({ id: MENU.headers, title: "Inspect headers & security", contexts: ["page"] });
     browser.contextMenus.create({ id: MENU.element, title: "Pick an element for a coding agent", contexts: ["page", "link", "image"] });
+    browser.contextMenus.create({ id: MENU.report, title: "Write a bug report for a coding agent", contexts: ["page"] });
   });
 }
 
@@ -60,6 +63,7 @@ export default defineBackground(() => {
     browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => undefined);
   });
   browser.runtime.onStartup.addListener(createMenus);
+  registerRecorder();
 
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.windowId) return;
@@ -73,6 +77,7 @@ export default defineBackground(() => {
     else if (info.menuItemId === MENU.jsonld) openPanel(tab.windowId, { panel: "jsonld" });
     else if (info.menuItemId === MENU.headers) openPanel(tab.windowId, { panel: "headers" });
     else if (info.menuItemId === MENU.element) openPanel(tab.windowId, { panel: "element", params: { pick: "1", at: String(Date.now()) } });
+    else if (info.menuItemId === MENU.report) openPanel(tab.windowId, { panel: "report" });
   });
 
   browser.commands.onCommand.addListener(async (command, tab) => {

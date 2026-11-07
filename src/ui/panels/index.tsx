@@ -7,6 +7,7 @@ import { Mocks } from "./mocks";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { Responsiveness } from "./responsiveness";
+import { BugReport } from "./report";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
 import { StorageUsage } from "./usage";
 import { Color, Cron, Diff, Encode, Hash, Ids, Json, Jwt, Qr, Regex, Time, UrlTool } from "./utils";
@@ -51,6 +52,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   mocks: Mocks,
   envs: Envs,
   ask: Ask,
+  report: BugReport,
   models: Models,
   "ai-settings": AiSettings as ComponentType<PanelProps>,
   json: Json,

@@ -1,8 +1,10 @@
 import { browser } from "wxt/browser";
+import { quickReport } from "./bug-report-gather";
 import { runInTab } from "./inject";
 import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
 import { ALL_SITES, type PermissionNeed } from "./permissions";
+import { formatBytes } from "./storage-usage";
 import { originOf, originPattern, type Tab } from "./tab";
 
 export type Category = "cache" | "inspect" | "security" | "page" | "network" | "ai" | "utils";
@@ -236,6 +238,23 @@ export const ACTIONS: ActionDef[] = [
       browser.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
       await browser.storage.session.set({ [PENDING_ROUTE_KEY]: { panel: "element", params: { pick: "1", at: String(Date.now()) } } });
       return { message: "Click an element in the page (Esc cancels)." };
+    },
+  },
+  {
+    id: "copy-bug-report",
+    title: "Copy a bug report",
+    description: "Steps, console errors, failed requests and environment as Markdown for a coding agent",
+    category: "ai",
+    keywords: "bug report issue repro reproduce steps jam ticket agent claude cursor playwright failed requests errors clipboard",
+    needsPage: true,
+    scripts: true,
+    run: async ({ tab }) => {
+      const { markdown, redacted } = await quickReport(tab);
+      const size = formatBytes(new Blob([markdown]).size);
+      return {
+        message: `Bug report copied (${size}${redacted ? `, ${redacted} value${redacted > 1 ? "s" : ""} redacted` : ""}).`,
+        copy: markdown,
+      };
     },
   },
   {

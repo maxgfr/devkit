@@ -270,6 +270,14 @@ export const PANELS: PanelDef[] = [
     keywords: "llm gpt claude gemini summarize chat",
   },
   {
+    id: "report",
+    category: "ai",
+    title: "Bug report",
+    short: "Report",
+    description: "Steps, errors, failed requests and environment as Markdown for a coding agent",
+    keywords: "bug issue repro reproduce steps recorder jam ticket agent claude cursor playwright failed requests errors",
+  },
+  {
     id: "models",
     category: "ai",
     title: "Model browser",

@@ -318,7 +318,7 @@ export function Ask({ params }: { params?: Record<string, string> }) {
     if (firstTurn && ctxParts.length && page.canScript) {
       const ctx = await gatherContext(page.tab, ctxParts, { selection });
       contextText = renderContext(ctx, ctxParts, budget);
-      screenshot = ctx.screenshot ?? (capabilities.vision ? ctx.elementImage : undefined);
+      screenshot = ctx.screenshot ?? (capabilities.vision ? (ctx.elementImage ?? ctx.reportImage) : undefined);
     } else if (selection) {
       contextText = `## Selected text\n\`\`\`\n${selection}\n\`\`\``;
     }

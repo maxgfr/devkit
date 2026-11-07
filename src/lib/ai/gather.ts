@@ -2,6 +2,7 @@ import { browser } from "wxt/browser";
 import { type AuditOptions, DEFAULT_AUDIT_OPTIONS } from "../a11y";
 import { loadAudit, runAxeAudit, saveAudit } from "../axe";
 import { fetchHeaders, securityReport } from "../headers";
+import { REPORT_HANDOFF_KEY, type ReportHandoff } from "../bug-report";
 import { runInTab } from "../inject";
 import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
@@ -64,6 +65,14 @@ export async function gatherContext(
     if (handoff?.tabId === tabId) {
       ctx.element = handoff.markdown;
       ctx.elementImage = handoff.image;
+    }
+  }
+  if (want("report")) {
+    const stored = await safe(() => browser.storage.session.get(REPORT_HANDOFF_KEY));
+    const handoff = stored?.[REPORT_HANDOFF_KEY] as ReportHandoff | undefined;
+    if (handoff?.tabId === tabId) {
+      ctx.report = handoff.markdown;
+      ctx.reportImage = handoff.image;
     }
   }
   return ctx;
