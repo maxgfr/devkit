@@ -41,7 +41,7 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 ## Evidence on Hand
 
 - Real screenshots of the extension on Wikipedia and on a local test page (JSON-LD analyzer, headers grade, AI answer, popup palette, options).
-- Verified runs: 47 unit tests, 29 end-to-end checks in Chromium, a real Anthropic analysis of Wikipedia's JSON-LD (≈4k tokens in, 4.5k out, $0.053).
+- Verified runs: 298 unit tests, 124 end-to-end checks in Chromium, a real Anthropic analysis of Wikipedia's JSON-LD (≈4k tokens in, 4.5k out, $0.053).
 - No users, testimonials, download counts or store ratings exist: never invent them.
 
 ## Product Principles
