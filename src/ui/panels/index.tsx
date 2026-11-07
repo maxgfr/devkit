@@ -6,6 +6,7 @@ import { ElementPicker } from "./element";
 import { Mocks } from "./mocks";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { Responsiveness } from "./responsiveness";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
 import { StorageUsage } from "./usage";
 import { Color, Cron, Diff, Encode, Hash, Ids, Json, Jwt, Qr, Regex, Time, UrlTool } from "./utils";
@@ -28,6 +29,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   jsonld: JsonLd,
   headers: Headers,
   perf: Perf,
+  responsiveness: Responsiveness,
   errors: Errors,
   links: Links,
   fonts: Fonts,

@@ -21,12 +21,14 @@ const page = (base, port) => `<!doctype html>
 <script src="http://localhost:${port}/vendor.js"></script>
 <script src="/js/jquery-3.4.1.min.js"></script>
 <script src="/js/lodash.js"></script>
+<script type="speculationrules">{"prefetch":[{"urls":["/ok"]}],"prerender":[{"where":{"and":[{"href_matches":"/*"},{"not":{"selector_matches":".no-prerender"}}]},"eagerness":"conservative"}]}</script>
 </head><body>
 <h1>Acme Mug</h1><h2>Details</h2><h4>Skipped level</h4>
 <p class="px-4 py-2 text-sm">The best mug. ${"Lorem ipsum dolor sit amet. ".repeat(40)}</p>
 <img src="/mug.jpg">
 <a href="/ok">ok link</a> <a href="/missing">broken link</a>
 <form><input name="email"><input name="first_name" placeholder="First name"><textarea name="message"></textarea><select name="country"><option value="">-</option><option value="fr">France</option></select></form>
+<p><button id="slow-btn" type="button">Slow button</button> <output id="slow-out"></output></p>
 <div id="app"><section class="toolbar"><button id="save-btn" class="btn" type="button" onclick="window.__saveClicks = (window.__saveClicks || 0) + 1">Save changes</button></section></div>
 <script>
 // A React 18 dev-build fiber on the button, as react-dom attaches it: the element picker reads it.
@@ -39,6 +41,7 @@ const page = (base, port) => `<!doctype html>
   document.getElementById("save-btn").__reactFiber$e2e = { tag: 5, type: "button", return: save, _debugOwner: save, _debugSource: { fileName: "/app/src/components/SaveButton.tsx", lineNumber: 14, columnNumber: 9 } };
 })();
 </script>
+<script src="/slow.js"></script>
 </body></html>`;
 
 const sse = (res, text) => {
@@ -72,9 +75,26 @@ const server = http.createServer((req, res) => {
       "content-security-policy": "script-src * 'unsafe-inline'",
       "x-powered-by": "Express/4.18.2",
       "cache-control": "no-cache",
+      "speculation-rules": '"/speculation.json"',
     });
     return res.end(page(base, req.socket.localPort));
   }
+  // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
+  // back/forward cache: the Responsiveness panel must name both.
+  if (url.pathname === "/slow.js")
+    return res
+      .writeHead(200, { "content-type": "text/javascript" })
+      .end(
+        'function busyWait(ms) {\n  const end = performance.now() + ms;\n  while (performance.now() < end) {}\n}\ndocument.getElementById("slow-btn").addEventListener("click", function onSlowClick() {\n  busyWait(250);\n  document.getElementById("slow-out").textContent = "done";\n});\naddEventListener("unload", function () {});\n',
+      );
+  if (url.pathname === "/speculation.json")
+    return res
+      .writeHead(200, { "content-type": "application/speculationrules+json" })
+      .end(JSON.stringify({ prefetch: [{ where: { href_matches: "/docs/*" }, eagerness: "moderate" }], tag: "e2e-header" }));
+  if (url.pathname === "/plain")
+    return res
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end("<!doctype html><title>Plain page</title><p>Nothing here keeps the page out of the back/forward cache.</p>");
   if (url.pathname === "/echo") {
     res.writeHead(200, { "content-type": "application/json", ...cors });
     return res.end(JSON.stringify(req.headers));

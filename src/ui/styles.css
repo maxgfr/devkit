@@ -2295,3 +2295,452 @@ textarea.mock-body.invalid {
 .ax-same {
   margin: 0;
 }
+
+/* Responsiveness panel (src/ui/panels/responsiveness.tsx) ------------------
+   Interaction phases take the first three categorical slots in a fixed order:
+   input delay --viz-1, processing --viz-2, presentation --viz-3; scripts that
+   ran before the input are --viz-other. INP thresholds are hairlines, the
+   rating is a StatusIcon and a word. */
+.t-fg {
+  color: var(--fg);
+}
+.vital .btn.vital-link,
+.btn.rs-link {
+  padding-left: 0;
+  padding-right: 0;
+  color: var(--accent);
+}
+.vital .btn.vital-link {
+  margin: -2px 0 4px;
+}
+.btn.rs-link {
+  font-size: inherit;
+  vertical-align: baseline;
+}
+.btn.vital-link:hover,
+.btn.rs-link:hover {
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.rs-rec {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bad);
+  animation: rs-pulse 1.6s ease-out infinite;
+}
+@keyframes rs-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rs-rec {
+    animation: none;
+  }
+}
+.notice:has(> .rs-rec) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Slowest interactions: one row each, a stacked phase bar on a shared axis. */
+.rs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rs-list > li.open {
+  background: var(--bg-2);
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.rs-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 6px 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.rs-row:hover {
+  background: color-mix(in srgb, var(--bg-3) 70%, transparent);
+}
+.rs-row:focus-visible {
+  outline-offset: -2px;
+}
+.rs-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+}
+.rs-head > b {
+  font-weight: 600;
+}
+.rs-target {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+  font-size: 11.5px;
+}
+.rs-when {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.rs-dur {
+  flex: none;
+  min-width: 52px;
+  text-align: right;
+  font-weight: 650;
+}
+.rs-track {
+  position: relative;
+  display: block;
+  height: 10px;
+}
+.rs-limit {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  border-left: 1px dashed var(--fg-3);
+}
+.rs-stack {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  min-width: 3px;
+}
+.rs-seg {
+  flex-basis: 0;
+  min-width: 2px;
+}
+.rs-seg:first-child {
+  border-radius: 3px 0 0 3px;
+}
+.rs-seg:last-child {
+  border-radius: 0 3px 3px 0;
+}
+.rs-seg:only-child {
+  border-radius: 3px;
+}
+.rs-axis {
+  margin: 0 6px;
+}
+
+/* One interaction opened: phases, what ran, suggestions. */
+.rs-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 8px 10px;
+}
+.rs-files .rs-detail {
+  padding: 6px 2px 10px;
+}
+.rs-phases {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.rs-phases li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.rs-phases .viz-key {
+  align-self: center;
+}
+.rs-gantt {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rs-grow {
+  display: flex;
+  flex-direction: column;
+}
+.rs-grow-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 32%) 1fr 50px;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  font-size: 12px;
+}
+button.rs-grow-row {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+button.rs-grow-row:hover,
+button.rs-grow-row[aria-pressed="true"] {
+  background: var(--bg-3);
+}
+button.rs-grow-row:focus-visible {
+  outline-offset: -2px;
+}
+.rs-glabel {
+  padding-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+}
+.rs-glabel.mono {
+  font-size: 11.5px;
+  color: var(--fg);
+}
+button.rs-grow-row[aria-pressed="true"] .rs-glabel {
+  font-weight: 600;
+}
+.rs-gtrack {
+  position: relative;
+  align-self: stretch;
+}
+.rs-gtrack .grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.rs-gtrack .rs-stack {
+  top: 6px;
+}
+.rs-frame,
+.rs-sbar {
+  position: absolute;
+  min-width: 3px;
+}
+.rs-frame {
+  top: 6px;
+  height: 10px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg-3) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg-3) 45%, transparent);
+}
+.rs-sbar {
+  top: 7px;
+  height: 8px;
+  border-radius: 2px;
+}
+.rs-gvalue {
+  text-align: right;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.rs-gaxis {
+  align-items: start;
+  min-height: 16px;
+}
+.rs-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.rs-snippet {
+  margin: 0;
+  max-height: 120px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rs-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rs-tips h3 {
+  margin: 0;
+}
+.rs-tips ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+
+/* Blocking scripts: the bar list, each file opening its functions. */
+.rs-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rs-file {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(80px, 38%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rs-file:hover,
+.rs-files > li.open > .rs-file {
+  background: var(--bg-3);
+}
+.rs-file:focus-visible {
+  outline-offset: -2px;
+}
+.rs-fname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.rs-fns {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+}
+table.rs-fns th,
+table.rs-fns td {
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+}
+table.rs-fns th {
+  color: var(--fg-2);
+  font-weight: 550;
+}
+table.rs-fns th:first-child,
+table.rs-fns td:first-child {
+  text-align: left;
+  width: 52%;
+}
+.btn.rs-more {
+  align-self: flex-start;
+}
+
+/* Back/forward cache verdict and reasons tree. */
+.rs-verdict {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  align-items: center;
+  gap: 2px 8px;
+}
+.rs-why {
+  grid-column: 2;
+}
+.rs-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+.rs-facts > li {
+  white-space: nowrap;
+}
+.rs-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rs-tree .rs-tree {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+.rs-frame-label {
+  margin-bottom: 4px;
+}
+.rs-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rs-reasons > li {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+.rs-reasons .status-icon {
+  margin-top: 2px;
+}
+.rs-code {
+  font-size: 11px;
+}
+
+/* Speculation rules. */
+.rs-rulesets,
+.rs-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rs-rulesets {
+  gap: 10px;
+}
+.rs-rules {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.rs-rules > li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 10px;
+}
+.rs-rules > li + li {
+  border-top: 1px solid var(--line);
+}
+.rs-url {
+  font-size: 11.5px;
+}
+.rs-card table.kv th {
+  width: 40%;
+}

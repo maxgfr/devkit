@@ -42,6 +42,8 @@ const context = await chromium.launchPersistentContext(profile, {
   viewport: { width: 1200, height: 900 },
   colorScheme: "no-override",
   args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`],
+  // Playwright turns the back/forward cache off by default; the Responsiveness panel tests it.
+  ignoreDefaultArgs: ["--disable-back-forward-cache"],
 });
 context.setDefaultTimeout(8000);
 const extErrors = [];
@@ -221,6 +223,106 @@ try {
     `${rows.length} rows`,
   );
   check("performance: navigation timeline", t.includes("Waiting (server)") && t.includes("DOMContentLoaded"));
+  await panel.getByRole("button", { name: "Find the slow interactions and their scripts" }).click();
+  await panel.waitForTimeout(600);
+  check("performance: INP line opens the Responsiveness panel", (await text()).includes("Slow interactions"));
+
+  // Responsiveness: record, click a button whose handler blocks 250 ms, stop, and find the click and its script.
+  t = await text();
+  check(
+    "responsiveness: bfcache not measured yet, with a test button",
+    /Back\/forward cache[\s\S]*Not measured/.test(t) && (await panel.getByRole("button", { name: "Test now" }).count()) === 1,
+  );
+  check(
+    "responsiveness: speculation rules from the page and the header",
+    t.includes("Prerender") &&
+      t.includes("conservative") &&
+      t.includes('href matches "/*" and not link matches ".no-prerender"') &&
+      t.includes("immediate (default)") &&
+      t.includes("/speculation.json") &&
+      t.includes('href matches "/docs/*"'),
+  );
+  await panel.getByRole("button", { name: "Record", exact: true }).click();
+  await panel.waitForTimeout(400);
+  await site.bringToFront();
+  await site.click("#slow-btn");
+  await site.waitForFunction(() => document.getElementById("slow-out")?.textContent === "done");
+  await site.waitForTimeout(500);
+  await panel.bringToFront();
+  await panel.waitForTimeout(1200);
+  check("responsiveness: recording counts the interaction live", /Recording for [\d.]+ s: [1-9]\d* interactions?/.test(await text()));
+  await panel.getByRole("button", { name: "Stop and analyze" }).click();
+  await panel.waitForSelector(".rs-row", { timeout: 5000 }).catch(() => undefined);
+  await panel.waitForTimeout(400);
+  t = await text();
+  const slowRow = await panel
+    .locator(".rs-row", { hasText: "button#slow-btn" })
+    .first()
+    .innerText()
+    .catch(() => "");
+  const slowMs = Number(/(\d+) ms/.exec(slowRow)?.[1] ?? 0);
+  check("responsiveness: the slow click is listed with its duration", /click/.test(slowRow) && slowMs >= 250, slowRow.replace(/\s+/g, " "));
+  check(
+    "responsiveness: INP estimate rated",
+    /INP\s*estimate for this tab/.test(t) && /Worst of \d+ interactions?/.test(t) && /Needs improvement|Poor/.test(t),
+  );
+  check(
+    "responsiveness: blocking scripts name slow.js",
+    (await panel.locator(".rs-file", { hasText: "slow.js" }).count()) === 1,
+    (await panel.locator(".rs-file").allInnerTexts()).join(" | "),
+  );
+  await panel.locator(".rs-script", { hasText: "onSlowClick" }).first().click();
+  await panel.waitForTimeout(500);
+  t = await text();
+  check("responsiveness: script card with file:line:column and invoker", /slow\.js:5:\d+/.test(t) && t.includes("BUTTON#slow-btn.onclick"));
+  await panel.evaluate(() => {
+    navigator.clipboard.writeText = async (s) => {
+      window.__copied = s;
+    };
+  });
+  await panel.locator(".rs-card").getByRole("button", { name: "Copy for agent" }).click();
+  await panel.waitForTimeout(300);
+  const md = await panel.evaluate(() => window.__copied ?? "");
+  check(
+    "responsiveness: Markdown for an agent with the script, position and suggestions",
+    md.includes("# Slow interaction on") &&
+      /`onSlowClick` in http:\/\/127\.0\.0\.1:\d+\/slow\.js at line 5, column \d+/.test(md) &&
+      md.includes("## Suggestions (heuristics"),
+  );
+  await shot("inspect-responsiveness");
+
+  await panel.getByRole("button", { name: "Test now" }).click();
+  await panel.waitForFunction(
+    () => /Restored from the cache|The page reloaded \(/.test(document.querySelector("main")?.innerText ?? ""),
+    null,
+    {
+      timeout: 20_000,
+    },
+  );
+  t = await text();
+  check(
+    "bfcache: test reports the unload handler",
+    t.includes("Not restored") && t.includes("An unload handler") && t.includes("unload-listener"),
+  );
+  await shot("inspect-bfcache");
+  await site.goto(`${base}/plain`);
+  await panel.waitForTimeout(800);
+  await panel.getByRole("button", { name: "Test now" }).click();
+  await panel.waitForFunction(
+    () => /Restored from the cache|The page reloaded \(/.test(document.querySelector("main")?.innerText ?? ""),
+    null,
+    {
+      timeout: 20_000,
+    },
+  );
+  t = await text();
+  check(
+    "bfcache: a plain page is restored",
+    t.includes("Restored from the cache"),
+    t.match(/(Not restored|Restored from the cache)\s*[^\n]*/)?.[0],
+  );
+  await site.goto(`${base}/`);
+  await site.waitForTimeout(400);
 
   await open("Inspect", "Console errors");
   await panel.getByRole("button", { name: "Capture on all pages" }).click();

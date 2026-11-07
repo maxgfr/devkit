@@ -92,6 +92,15 @@ export const PANELS: PanelDef[] = [
     keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources",
   },
   {
+    id: "responsiveness",
+    category: "inspect",
+    title: "Responsiveness",
+    short: "Slowness",
+    description: "Slow interactions and the scripts behind them, back/forward cache, speculation rules",
+    keywords:
+      "inp interaction to next paint long animation frames loaf jank main thread blocking script slow click why slow bfcache back forward cache not restored reasons unload speculation rules prefetch prerender",
+  },
+  {
     id: "errors",
     category: "inspect",
     title: "Console errors",

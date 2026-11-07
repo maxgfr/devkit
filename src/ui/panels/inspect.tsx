@@ -531,6 +531,7 @@ const KIND_SHORT: Record<ResourceKind, string> = { script: "JS", style: "CSS", f
 const WATERFALL_ROWS = 25;
 
 function VitalRow({ name, value }: { name: VitalName; value: number | null }) {
+  const go = useNav();
   const t = VITALS[name];
   const rating = rateVital(name, value);
   const scale = vitalScale(name, value);
@@ -561,6 +562,11 @@ function VitalRow({ name, value }: { name: VitalName; value: number | null }) {
       ) : (
         <p className="vital-why">{NOT_MEASURED[name]}</p>
       )}
+      {name === "inp" && go ? (
+        <Button variant="ghost" size="small" className="vital-link" onClick={() => go({ panel: "responsiveness" })}>
+          Find the slow interactions and their scripts
+        </Button>
+      ) : null}
     </li>
   );
 }
