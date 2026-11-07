@@ -93,7 +93,17 @@ try {
   await panel.waitForTimeout(800);
   t = await text();
   check("tech stack: Next.js + Express", t.includes("Next.js") && t.includes("Express"));
+  check(
+    "report card: security grade, JSON-LD errors, a11y hints",
+    /Security headers\s*Grade [A-F] · \d+\/100/.test(t) &&
+      /Structured data\s*2 errors, \d+ warnings in 2 blocks/.test(t) &&
+      /Accessibility\s*\d+ hints/.test(t),
+    t.match(/Security headers[^\n]*\n?[^\n]*/)?.[0],
+  );
   await shot("inspect-overview");
+  await panel.locator(".report-row", { hasText: "Structured data" }).click();
+  await panel.waitForTimeout(600);
+  check("report card row opens its panel", /Invalid JSON, line \d+/.test(await text()));
 
   await open("Inspect", "SEO");
   t = await text();
@@ -116,6 +126,13 @@ try {
   await open("Inspect", "Performance");
   t = await text();
   check("performance: vitals shown", t.includes("LCP") && t.includes("TTFB"));
+  const rows = await panel.locator(".viz-waterfall li").allInnerTexts();
+  check(
+    "performance: waterfall rows with type, name, size and duration",
+    rows.length > 0 && rows.some((r) => /mug\.jpg/.test(r) && /Img/.test(r) && /\d+ B · \d+ ms/.test(r)),
+    `${rows.length} rows`,
+  );
+  check("performance: navigation timeline", t.includes("Waiting (server)") && t.includes("DOMContentLoaded"));
 
   await open("Inspect", "Console errors");
   await panel.getByRole("button", { name: "Capture on all pages" }).click();
