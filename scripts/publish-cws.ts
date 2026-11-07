@@ -45,8 +45,17 @@ async function main() {
     headers: { ...auth, "x-goog-upload-protocol": "raw", "x-goog-upload-file-name": "extension.zip" },
     body: readFileSync(zip),
   }).catch((e: unknown) => {
-    const hint = "the previous version may still be in review, or this version is not above the store's";
-    throw new Error(`upload refused (${hint}): ${e instanceof Error ? e.message : String(e)}`);
+    const message = e instanceof Error ? e.message : String(e);
+    // Not a failure of this release: the store takes one version at a time. The next release, or the
+    // "Chrome Web Store" workflow run by hand once the review is over, sends the newest zip.
+    if (/in review/i.test(message)) {
+      console.log(
+        `::warning::Chrome Web Store: the previous version is still in review, so ${zip} was not uploaded. ` +
+          "Once the review is over, run the Chrome Web Store workflow (gh workflow run store.yml) to send the latest release.",
+      );
+      process.exit(0);
+    }
+    throw new Error(`upload refused (this version may not be above the store's): ${message}`);
   });
   let state = upload.uploadState;
   for (let i = 0; state === "IN_PROGRESS" && i < 30; i++) {
