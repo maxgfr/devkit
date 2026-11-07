@@ -1024,12 +1024,12 @@ table.kv td {
   display: grid;
   place-items: center;
   font-size: 10.5px;
-  font-weight: 600;
-  color: var(--fg-2);
+  font-weight: 500;
+  color: var(--fg);
 }
 .viz-meter .band.current {
   background: color-mix(in srgb, var(--c) 55%, var(--bg));
-  color: var(--fg);
+  font-weight: 700;
 }
 .viz-meter .marker {
   top: -3px;
