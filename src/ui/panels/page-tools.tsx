@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 import { ACTIONS } from "../../lib/actions";
+import { claimDebugger, type DebuggerUser, releaseDebugger } from "../../lib/debugger";
 import { runInTab } from "../../lib/inject";
 import { fillForms } from "../../lib/page/forms";
 import { viewportDelta } from "../../lib/page/toggles";
@@ -23,23 +24,37 @@ export function PageTools() {
   );
 }
 
-/* chrome.debugger: one session per tab, kept for the life of the side panel. */
-const attached = new Set<number>();
+/* chrome.debugger: one session per tab, shared with API mocks (src/lib/debugger.ts). */
+const claimed = new Set<string>();
+const claimKey = (tabId: number, user: DebuggerUser) => `${tabId}:${user}`;
 
-async function attach(tabId: number) {
-  if (attached.has(tabId)) return;
-  await browser.debugger.attach({ tabId }, "1.3");
-  attached.add(tabId);
+async function attach(tabId: number, user: DebuggerUser) {
+  if (claimed.has(claimKey(tabId, user))) return;
+  await claimDebugger(tabId, user);
+  claimed.add(claimKey(tabId, user));
 }
 
-export async function cdp<T = unknown>(tabId: number, method: string, params: Record<string, unknown> = {}): Promise<T> {
-  await attach(tabId);
-  return (await browser.debugger.sendCommand({ tabId }, method, params)) as T;
+export async function cdp<T = unknown>(
+  tabId: number,
+  method: string,
+  params: Record<string, unknown> = {},
+  user: DebuggerUser = "emulation",
+): Promise<T> {
+  await attach(tabId, user);
+  try {
+    return (await browser.debugger.sendCommand({ tabId }, method, params)) as T;
+  } catch (e) {
+    if (!/not attached/i.test(String(e))) throw e;
+    // The session ended under us (another tool detached): attach again once.
+    claimed.delete(claimKey(tabId, user));
+    await attach(tabId, user);
+    return (await browser.debugger.sendCommand({ tabId }, method, params)) as T;
+  }
 }
 
 /** Clears every override `Emulation` sets: detaching alone can leave them on the page. */
 async function resetEmulation(tabId: number) {
-  if (!attached.has(tabId)) return;
+  if (!claimed.has(claimKey(tabId, "emulation"))) return;
   const send = (method: string, params: Record<string, unknown>) =>
     browser.debugger.sendCommand({ tabId }, method, params).catch(() => undefined);
   const features = ["prefers-color-scheme", "prefers-reduced-motion", "prefers-contrast"].map((name) => ({ name, value: "" }));
@@ -49,10 +64,11 @@ async function resetEmulation(tabId: number) {
   await send("Emulation.setEmulatedVisionDeficiency", { type: "none" });
 }
 
-async function detach(tabId: number) {
-  if (!attached.has(tabId)) return;
-  attached.delete(tabId);
-  await browser.debugger.detach({ tabId }).catch(() => undefined);
+/** Drops this tool's claim; the session stays while another tool (API mocks) holds it. */
+async function detach(tabId: number, user: DebuggerUser = "emulation") {
+  if (!claimed.has(claimKey(tabId, user))) return;
+  claimed.delete(claimKey(tabId, user));
+  await releaseDebugger(tabId, user);
 }
 
 interface EmulationState {
@@ -81,14 +97,14 @@ export function Emulation() {
   const [active, setActive] = useState(false);
   useEffect(() => {
     const onDetach = (source: { tabId?: number }) => {
-      if (source.tabId !== undefined) attached.delete(source.tabId);
+      if (source.tabId !== undefined) for (const user of ["emulation", "screenshot"] as const) claimed.delete(claimKey(source.tabId, user));
       if (source.tabId === page.tabId) {
         setActive(false);
         setState(NONE);
       }
     };
     browser.debugger.onDetach.addListener(onDetach);
-    setActive(page.tabId !== undefined && attached.has(page.tabId));
+    setActive(page.tabId !== undefined && claimed.has(claimKey(page.tabId, "emulation")));
     return () => browser.debugger.onDetach.removeListener(onDetach);
   }, [page.tabId]);
 
@@ -285,19 +301,29 @@ export function Screenshot() {
     setBusy(true);
     setError(null);
     try {
-      const metrics = await cdp<{ cssContentSize: { width: number; height: number } }>(page.tabId, "Page.getLayoutMetrics");
+      const metrics = await cdp<{ cssContentSize: { width: number; height: number } }>(
+        page.tabId,
+        "Page.getLayoutMetrics",
+        {},
+        "screenshot",
+      );
       const width = Math.ceil(metrics.cssContentSize.width);
       const height = Math.min(Math.ceil(metrics.cssContentSize.height), 16384);
-      const { data } = await cdp<{ data: string }>(page.tabId, "Page.captureScreenshot", {
-        format: "png",
-        captureBeyondViewport: true,
-        clip: { x: 0, y: 0, width, height, scale: 1 },
-      });
+      const { data } = await cdp<{ data: string }>(
+        page.tabId,
+        "Page.captureScreenshot",
+        {
+          format: "png",
+          captureBeyondViewport: true,
+          clip: { x: 0, y: 0, width, height, scale: 1 },
+        },
+        "screenshot",
+      );
       setShot(`data:image/png;base64,${data}`);
-      await detach(page.tabId);
     } catch (e) {
       setError(e);
     } finally {
+      await detach(page.tabId, "screenshot");
       setBusy(false);
     }
   };
