@@ -1,9 +1,11 @@
 import { browser } from "wxt/browser";
+import { type AuditOptions, DEFAULT_AUDIT_OPTIONS } from "../a11y";
+import { loadAudit, runAxeAudit, saveAudit } from "../axe";
 import { fetchHeaders, securityReport } from "../headers";
 import { runInTab } from "../inject";
 import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
-import { collectA11yHints, collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
+import { collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
 import { readErrors } from "../page/errors";
 import { seoReport } from "../seo";
 import { detectTech } from "../tech";
@@ -36,7 +38,7 @@ export async function gatherContext(
     needsHeaders && /^https?:/.test(url) ? safe(() => fetchHeaders(url)) : undefined,
     want("perf") ? safe(() => runInTab(tabId, collectPerf)) : undefined,
     want("errors") ? safe(() => runInTab(tabId, readErrors, [], "MAIN")) : undefined,
-    want("a11y") ? safe(() => runInTab(tabId, collectA11yHints)) : undefined,
+    want("a11y") ? safe(() => readAudit(tabId, url)) : undefined,
     want("screenshot") ? safe(() => browser.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 75 })) : undefined,
   ]);
   if (page) ctx.page = page;
@@ -65,6 +67,17 @@ export async function gatherContext(
     }
   }
   return ctx;
+}
+
+/** The tab's last axe audit of this page, else a fresh one with the panel's options. A focused rule is read once. */
+async function readAudit(tabId: number, url: string): Promise<PageContext["a11y"]> {
+  const stored = await loadAudit(tabId, url);
+  if (stored) {
+    if (stored.focus) await saveAudit({ tabId, audit: stored.audit });
+    return { audit: stored.audit, focus: stored.focus };
+  }
+  const { a11yOptions } = await browser.storage.local.get("a11yOptions");
+  return { audit: await runAxeAudit(tabId, { ...DEFAULT_AUDIT_OPTIONS, ...(a11yOptions as Partial<AuditOptions> | undefined) }) };
 }
 
 /** Main content through Readability (page-snapshot.js), else the body's text. */

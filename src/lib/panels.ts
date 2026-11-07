@@ -117,10 +117,10 @@ export const PANELS: PanelDef[] = [
   {
     id: "a11y",
     category: "inspect",
-    title: "Accessibility hints",
+    title: "Accessibility audit",
     short: "A11y",
-    description: "Quick checks: alt, labels, names, headings",
-    keywords: "a11y wcag rgaa alt label",
+    description: "axe-core audit against WCAG 2.2 A/AA: violations by impact, failing elements outlined in the page",
+    keywords: "a11y accessibility axe wcag rgaa audit alt label contrast aria heading screen reader",
   },
   {
     id: "site-files",

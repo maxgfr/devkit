@@ -1,6 +1,7 @@
+import { type Audit, auditContext } from "../a11y";
 import type { Check } from "../headers";
 import type { JsonLdReport } from "../jsonld";
-import type { A11yHint, MetaSnapshot, PerfSnapshot } from "../page/collect";
+import type { MetaSnapshot, PerfSnapshot } from "../page/collect";
 import type { Tech } from "../tech";
 
 export interface CapturedError {
@@ -49,7 +50,7 @@ export const PART_LABELS: Record<ContextPart, string> = {
   perf: "Performance",
   errors: "Console errors",
   jsonld: "Structured data",
-  a11y: "A11y hints",
+  a11y: "Accessibility audit",
   screenshot: "Screenshot",
   element: "Picked element",
 };
@@ -67,7 +68,8 @@ export interface PageContext {
   perf?: PerfSnapshot;
   errors?: CapturedError[];
   jsonld?: JsonLdReport;
-  a11y?: A11yHint[];
+  /** The axe-core audit, and the rule the developer asked about. */
+  a11y?: { audit: Audit; focus?: string };
   screenshot?: string;
   /** The element picker's Markdown, and its crop (sent as the image when the model has vision). */
   element?: string;
@@ -170,14 +172,7 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
       ),
     );
   }
-  if (has("a11y") && ctx.a11y)
-    out.push(
-      section(
-        "Accessibility hints",
-        ctx.a11y.map((h) => `- ${h.rule}: ${h.count}${h.samples.length ? ` (${h.samples.join(", ")})` : ""}`).join("\n") ||
-          "No quick issue found",
-      ),
-    );
+  if (has("a11y") && ctx.a11y) out.push(section("Accessibility (axe-core audit)", auditContext(ctx.a11y.audit, ctx.a11y.focus)));
 
   const fixed = out.join("\n");
   if (has("text") && ctx.page) {

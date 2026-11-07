@@ -93,13 +93,18 @@ try {
   // Inspect
   await open("Inspect", "Overview");
   await panel.waitForTimeout(800);
+  // Small page: the Overview runs the axe audit on its own.
+  await panel
+    .locator(".report-row", { hasText: /violations/ })
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
   t = await text();
   check("tech stack: Next.js + Express", t.includes("Next.js") && t.includes("Express"));
   check(
-    "report card: security grade, JSON-LD errors, a11y hints",
+    "report card: security grade, JSON-LD errors, axe violations",
     /Security headers\s*Grade [A-F] · \d+\/100/.test(t) &&
       /Structured data\s*2 errors, \d+ warnings in 2 blocks/.test(t) &&
-      /Accessibility\s*\d+ hints/.test(t),
+      /Accessibility\s*\d+ violations \(\d+ critical\)/.test(t),
     t.match(/Security headers[^\n]*\n?[^\n]*/)?.[0],
   );
   await shot("inspect-overview");
@@ -241,11 +246,59 @@ try {
   check("site files: robots, sitemap, manifest", t.includes("Disallow: /admin") && t.includes("2 entries") && t.includes("512px icon"));
 
   await open("Inspect", "Accessibility");
+  await panel.waitForSelector(".ax-summary", { timeout: 15_000 }).catch(() => undefined);
   t = await text();
   check(
-    "a11y: missing alt + label + skipped headings",
-    t.includes("Images without an alt") && t.includes("Form fields without a label") && t.includes("Skipped heading levels"),
+    "a11y: axe reports image-alt, label and heading-order, with the honesty note",
+    ["image-alt", "label", "heading-order"].every((id) => new RegExp(`\\n${id}\\s`).test(t)) &&
+      t.includes("Automated checks catch part of WCAG issues; manual testing"),
+    t.match(/\d+ rules? fails? on \d+ elements?/)?.[0],
   );
+  check("a11y: WCAG criterion named", /image-alt\s+critical\s+WCAG 2\.0 A\s+1\.1\.1 Non-text Content/.test(t));
+  const imageAlt = panel.locator(".ax-rule", { has: panel.locator(".ax-rule-id", { hasText: /^image-alt$/ }) });
+  await imageAlt.locator("summary").click();
+  await imageAlt.locator(".ax-target").first().click();
+  await panel.waitForTimeout(400);
+  const outlined = await site.evaluate(() => {
+    const host = document.querySelector("devkit-a11y");
+    return host ? document.querySelector("img").getBoundingClientRect().top >= 0 : false;
+  });
+  check("a11y: clicking a failing element outlines it in the page", outlined);
+  await site.keyboard.press("Escape");
+  await panel.waitForTimeout(200);
+  check("a11y: the outline goes away on the next key", !(await site.evaluate(() => Boolean(document.querySelector("devkit-a11y")))));
+  await panel.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__copied.push(s);
+    };
+  });
+  await imageAlt.getByRole("button", { name: "Copy for agent" }).click();
+  await panel.locator(".ax-summary").getByRole("button", { name: "Copy for agent" }).click();
+  await panel.waitForTimeout(200);
+  const copied = await panel.evaluate(() => window.__copied);
+  check(
+    "a11y: Copy for agent gives Markdown with the rule, WCAG refs, selector and snippet",
+    copied[0]?.includes("## `image-alt`: Images must have alternative text") &&
+      copied[0]?.includes("WCAG 1.1.1 Non-text Content (A)") &&
+      copied[0]?.includes("1. `img`") &&
+      copied[0]?.includes('<img src="/mug.jpg">') &&
+      copied[1]?.includes("# Accessibility audit") &&
+      copied[1]?.includes('`input[name="email"]`'),
+    copied[0]?.split("\n")[0],
+  );
+  await shot("inspect-a11y");
+  await panel.getByLabel("Region (CSS selector)").fill("form");
+  await panel.getByLabel("Region (CSS selector)").press("Enter");
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check(
+    "a11y: region audit covers only the selector",
+    /\nform · \d+ elements/.test(t) && /\nlabel\s/.test(t) && !/\nimage-alt\s/.test(t),
+    t.match(/\n(form|Whole page) · [^\n]*/)?.[0],
+  );
+  await panel.getByRole("button", { name: "Whole page" }).click();
+  await panel.waitForTimeout(1200);
 
   await open("Inspect", "Fonts");
   check("fonts & colors: palette listed", (await text()).includes("Page palette"));
@@ -540,6 +593,15 @@ try {
   await panel.waitForTimeout(1200);
   t = await text();
   check("element picker: Ask AI sends the picked element", t.includes("Fix the picked element") && t.includes("Picked element: button"));
+
+  // Accessibility audit → Ask AI: the axe results travel as the a11y part.
+  await open("Inspect", "Accessibility");
+  await panel.waitForSelector(".ax-summary", { timeout: 15_000 }).catch(() => undefined);
+  await panel.locator(".ax-summary").getByRole("button", { name: "Ask AI about it" }).click();
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check("a11y: Ask AI sends the axe audit", t.includes("Accessibility review") && t.includes("Axe rules seen: image-alt"));
 
   await open("AI", "Model browser");
   await panel.waitForTimeout(1500);

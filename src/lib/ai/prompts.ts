@@ -71,10 +71,10 @@ export const AI_ACTIONS: AiAction[] = [
   {
     id: "a11y-review",
     title: "Accessibility review",
-    description: "Quick wins from the a11y hints and structure",
+    description: "From the axe-core audit and the page structure",
     parts: ["a11y", "meta", "text"],
     prompt:
-      "Review the accessibility of this page from these hints and its structure. Explain each problem with the WCAG criterion, who it affects, and the fix (HTML). Note what an automated look cannot tell.",
+      "Review the accessibility of this page from this axe-core audit and its structure. Group the violations by root cause and rank them by impact on users: for each, the WCAG criterion, who it affects, and the fix (corrected HTML for the selectors given). Then say how to check the 'needs review' items by hand, and what automated checks cannot tell (keyboard flow, screen reader experience, zoom).",
   },
   {
     id: "explain-errors",
@@ -132,5 +132,14 @@ export const AI_ACTIONS: AiAction[] = [
     hidden: true,
     prompt:
       "The developer picked this element in the page and described what is wrong. Find the most likely cause from the component stack, props, markup and computed styles (and the screenshot, if attached), then give the fix as a code change to the source file named in the data. If no source file is known, say which component or selector to look for. Keep it short: cause, fix, how to check it.",
+  },
+  {
+    id: "a11y-rule",
+    title: "Fix this accessibility issue",
+    description: "From the accessibility audit: one axe rule and its failing elements",
+    parts: ["a11y", "meta"],
+    hidden: true,
+    prompt:
+      "Explain the accessibility rule marked 'In focus' in the audit: who it affects and which WCAG criterion it fails. Then give the fix for each failing element as corrected HTML (or the CSS / ARIA change), using the selectors and snippets given, and how to verify it (keyboard, screen reader, contrast). Keep it short.",
   },
 ];

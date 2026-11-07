@@ -29,6 +29,7 @@
     "@ai-sdk/openai-compatible": "^3.0.85",
     "@mozilla/readability": "^0.6.0",
     "ai": "^7.0.163",
+    "axe-core": "^4.14.0",
     "llm-connect": "^2.8.0",
     "llm-models": "^1.14.1",
     "qrcode": "^1.5.4",

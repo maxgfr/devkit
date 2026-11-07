@@ -1,6 +1,7 @@
 import { lazy, type ComponentType } from "react";
+import { A11yAudit } from "./a11y";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
-import { A11y, Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
+import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
 import { Mocks } from "./mocks";
 import { Envs, Rules } from "./network";
@@ -30,7 +31,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   errors: Errors,
   links: Links,
   fonts: Fonts,
-  a11y: A11y,
+  a11y: A11yAudit,
   "site-files": SiteFiles,
   external: External,
   secrets: Secrets,

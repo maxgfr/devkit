@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { AuditRule, Impact } from "../src/lib/a11y";
 import { analyzeJsonLd } from "../src/lib/jsonld";
 import { a11yVerdict, errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict } from "../src/lib/report";
 
@@ -30,8 +31,30 @@ describe("page report card", () => {
     expect(errorsVerdict({ installed: true, errors: [] })).toEqual({ level: "good", text: "None captured" });
     expect(errorsVerdict({ installed: false, errors: [] })).toEqual({ level: "info", text: "Not listening on this page" });
   });
-  it("counts a11y hints", () => {
-    expect(a11yVerdict([])).toEqual({ level: "good", text: "No quick issue" });
-    expect(a11yVerdict([{ count: 2 }, { count: 1 }])).toEqual({ level: "warn", text: "2 hints to check" });
+  it("sums up the axe audit: violations, the worst impact, rules to review", () => {
+    const rule = (impact: Impact, nodeCount = 1): AuditRule => ({
+      id: `r-${impact}`,
+      impact,
+      help: "",
+      description: "",
+      helpUrl: "",
+      tags: [],
+      nodeCount,
+      nodes: [],
+    });
+    const passes = [{ id: "p", help: "", nodeCount: 3 }];
+    expect(a11yVerdict({ violations: [], incomplete: [], passes })).toEqual({ level: "good", text: "No automated violation" });
+    expect(a11yVerdict({ violations: [], incomplete: [rule("serious")], passes })).toEqual({
+      level: "good",
+      text: "No automated violation · 1 to review",
+    });
+    expect(a11yVerdict({ violations: [rule("critical"), rule("moderate", 4)], incomplete: [], passes })).toEqual({
+      level: "bad",
+      text: "2 violations (1 critical)",
+    });
+    expect(a11yVerdict({ violations: [rule("moderate"), rule("minor")], incomplete: [rule("minor")], passes })).toEqual({
+      level: "warn",
+      text: "2 violations · 1 to review",
+    });
   });
 });

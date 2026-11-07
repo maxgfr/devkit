@@ -133,9 +133,10 @@ const server = http.createServer((req, res) => {
       const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
       const hasText = content.includes("best mug");
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
+      const axe = content.includes("## Accessibility (axe-core audit)") ? (/`(image-alt)`/.exec(content)?.[1] ?? "none") : "none";
       sse(
         res,
-        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Context length: ${content.length} chars.`,
+        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Context length: ${content.length} chars.`,
       );
     });
     return;

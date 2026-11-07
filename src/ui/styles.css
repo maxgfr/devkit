@@ -2025,3 +2025,272 @@ textarea.mock-body.invalid {
   padding-left: 0;
   color: var(--accent);
 }
+
+/* Accessibility audit (src/ui/panels/a11y.tsx) ------------------------------
+   Impact is an ordinal status scale, critical → minor, then "needs review" and
+   "passed". Checked with the dataviz validator against --bg-2 in both themes:
+   adjacent pairs ≥ 15 ΔE for normal vision; light-mode deutan serious↔moderate
+   sits at 7.8, so every mark also carries a distinct shape and its word.
+   Minor is neutral on purpose (lowest severity). */
+:root {
+  --impact-critical: #9f1239;
+  --impact-serious: #e2531c;
+  --impact-moderate: #c99a06;
+  --impact-minor: #8a91a0;
+  --impact-review: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --impact-critical: #f43f5e;
+    --impact-serious: #fb923c;
+    --impact-moderate: #fde047;
+    --impact-minor: #6b7280;
+    --impact-review: #3987e5;
+  }
+}
+.ax-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+.ax-scope {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0;
+}
+.ax-scope input {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.ax-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ax-headline {
+  margin: 0;
+  font-size: 14px;
+  color: var(--fg-2);
+  text-wrap: balance;
+}
+.ax-headline b {
+  color: var(--fg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.ax-meta {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ax-rules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--line);
+}
+.ax-rule {
+  background: var(--bg-2);
+}
+.ax-rule > details > summary {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px 8px 28px;
+  cursor: pointer;
+  position: relative;
+}
+.ax-rule > details > summary::-webkit-details-marker {
+  display: none;
+}
+/* Disclosure chevron, turned down when open. */
+.ax-chev {
+  position: absolute;
+  left: 9px;
+  top: 10px;
+  color: var(--fg-3);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.ax-rule > details[open] .ax-chev {
+  transform: rotate(90deg);
+}
+.ax-rule > details > summary:hover {
+  background: var(--bg-3);
+}
+.ax-rule > details > summary:hover .ax-chev {
+  color: var(--fg);
+}
+.ax-rule > details > summary:focus-visible {
+  outline-offset: -2px;
+}
+.ax-rule-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ax-rule-head .status-icon {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.ax-rule-help {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  text-wrap: pretty;
+}
+.ax-rule-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  padding-left: 20px;
+  font-size: 11.5px;
+  color: var(--fg-3);
+}
+.ax-rule-id {
+  font-size: 11.5px;
+  color: var(--fg-2);
+}
+.ax-rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 10px 28px;
+}
+.ax-desc {
+  margin: 0;
+  color: var(--fg-2);
+}
+.ax-nodes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ax-nodes > li {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  min-width: 0;
+}
+.ax-nodes > li.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.ax-target {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--accent);
+  text-align: left;
+  cursor: pointer;
+}
+.ax-target svg {
+  flex: none;
+  margin-top: 2px;
+}
+.ax-target-sel {
+  color: inherit;
+  min-width: 0;
+}
+.ax-target:hover {
+  background: var(--accent-soft);
+}
+.ax-target[aria-pressed="true"] {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.ax-target:disabled {
+  color: var(--fg-3);
+  cursor: default;
+  background: none;
+}
+.ax-html {
+  margin: 0;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--fg-2);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 120px;
+  overflow: auto;
+}
+.ax-fix {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.ax-fix-head {
+  margin: 0;
+  font-weight: 550;
+  color: var(--fg);
+}
+.ax-fix ul {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.ax-fix li::marker {
+  color: var(--fg-3);
+}
+.ax-passes-summary {
+  cursor: pointer;
+}
+.ax-passes ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ax-passes li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.ax-passes li .status-icon {
+  align-self: center;
+}
+.ax-pass-id {
+  font-size: 11px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ax-chev {
+    transition: none;
+  }
+}
+.ax-learn {
+  margin-left: auto;
+  text-underline-offset: 2px;
+}
+.ax-same {
+  margin: 0;
+}

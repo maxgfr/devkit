@@ -3,18 +3,10 @@ import { browser } from "wxt/browser";
 import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
 import { runInTab } from "../../lib/inject";
 import { analyzeJsonLd, type JsonLdBlock, richResultsTestUrl, schemaValidatorUrl } from "../../lib/jsonld";
-import {
-  collectA11yHints,
-  collectFontsColors,
-  collectLinks,
-  collectMeta,
-  collectPerf,
-  collectTechSignals,
-  type MetaSnapshot,
-} from "../../lib/page/collect";
+import { collectFontsColors, collectLinks, collectMeta, collectPerf, collectTechSignals, type MetaSnapshot } from "../../lib/page/collect";
 import { clearErrors, ERROR_SCRIPT_IDS, installErrorCapture, readErrors } from "../../lib/page/errors";
 import { ALL_SITES, ensurePermission } from "../../lib/permissions";
-import { a11yVerdict, errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict, type Verdict } from "../../lib/report";
+import { errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict, type Verdict } from "../../lib/report";
 import { seoReport, socialPreview } from "../../lib/seo";
 import { EXTERNAL_TOOLS, isAllowed, manifestChecks, parseRobots, parseSitemap } from "../../lib/site-files";
 import { detectTech } from "../../lib/tech";
@@ -78,6 +70,7 @@ import {
 import { type AsyncState, useAsync, useStored } from "../hooks";
 import { useNav } from "../nav";
 import { AccessGate, useInPage, usePage } from "../page";
+import { useA11yReport } from "./a11y";
 
 export function useHeaders() {
   const page = usePage();
@@ -146,7 +139,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const go = useNav();
   const perf = useInPage(collectPerf);
   const errors = useInPage(readErrors, [], "MAIN");
-  const hints = useInPage(collectA11yHints);
+  const a11y = useA11yReport(meta.data?.stats.elements);
   const rows: { panel: string; label: string; state: { loading: boolean; error: unknown }; verdict: Verdict | null }[] = [
     {
       panel: "headers",
@@ -162,7 +155,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
       verdict: meta.data ? jsonLdVerdict(analyzeJsonLd(meta.data.jsonLd)) : null,
     },
     { panel: "errors", label: "Console errors", state: errors, verdict: errors.data ? errorsVerdict(errors.data) : null },
-    { panel: "a11y", label: "Accessibility", state: hints, verdict: hints.data ? a11yVerdict(hints.data) : null },
+    { panel: "a11y", label: "Accessibility", state: meta.error ? meta : a11y.state, verdict: a11y.verdict },
     { panel: "perf", label: "Web Vitals", state: perf, verdict: perf.data ? vitalsSummary(perf.data) : null },
   ];
   return (
@@ -172,7 +165,8 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
         <Button
           size="small"
           onClick={() => {
-            for (const s of [meta, headers, perf, errors, hints]) s.run();
+            for (const s of [meta, headers, perf, errors]) s.run();
+            a11y.run();
           }}
         >
           Refresh
@@ -1165,43 +1159,6 @@ export function Fonts() {
         ) : null}
       </AccessGate>
     </>
-  );
-}
-
-export function A11y() {
-  const hints = useInPage(collectA11yHints);
-  return (
-    <AccessGate>
-      <Section
-        title="Accessibility hints"
-        actions={
-          <Button size="small" onClick={hints.run}>
-            Refresh
-          </Button>
-        }
-        hint="Fast heuristics, not an audit. For WCAG / RGAA conformance, use a full tool such as ultra11y."
-      >
-        <ErrorText error={hints.error} />
-        {hints.data ? (
-          hints.data.length ? (
-            <ul className="list">
-              {hints.data.map((h) => (
-                <li key={h.rule}>
-                  <div className="row">
-                    <Dot level="warn" />
-                    <b className="grow">{h.rule}</b>
-                    <span className="pill">{h.count}</span>
-                  </div>
-                  {h.samples.length ? <div className="mono small muted break">{h.samples.join("  ·  ")}</div> : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Notice kind="good">No quick issue found.</Notice>
-          )
-        ) : null}
-      </Section>
-    </AccessGate>
   );
 }
 

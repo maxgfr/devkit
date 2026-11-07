@@ -328,65 +328,6 @@ export async function collectPerf(): Promise<PerfSnapshot> {
   };
 }
 
-export interface A11yHint {
-  rule: string;
-  count: number;
-  samples: string[];
-}
-
-export function collectA11yHints(): A11yHint[] {
-  const describe = (el: Element) => {
-    const id = el.id ? `#${el.id}` : "";
-    const cls = el.classList.length ? `.${Array.from(el.classList).slice(0, 2).join(".")}` : "";
-    return `${el.tagName.toLowerCase()}${id}${cls}`;
-  };
-  const name = (el: Element) =>
-    (el.getAttribute("aria-label") ?? "").trim() ||
-    (el.getAttribute("aria-labelledby") ? "x" : "") ||
-    (el.textContent ?? "").trim() ||
-    (el.getAttribute("title") ?? "").trim() ||
-    (el.querySelector("img[alt]:not([alt=''])") ? "img" : "");
-  const hints: A11yHint[] = [];
-  const add = (rule: string, els: Element[]) => {
-    if (els.length) hints.push({ rule, count: els.length, samples: els.slice(0, 5).map(describe) });
-  };
-  add("Images without an alt attribute", Array.from(document.querySelectorAll("img:not([alt])")));
-  add(
-    "Form fields without a label",
-    Array.from(document.querySelectorAll("input:not([type=hidden]):not([type=submit]):not([type=button]),select,textarea")).filter((el) => {
-      const id = el.id;
-      return !(
-        el.closest("label") ||
-        (id && document.querySelector(`label[for="${CSS.escape(id)}"]`)) ||
-        el.getAttribute("aria-label") ||
-        el.getAttribute("aria-labelledby") ||
-        el.getAttribute("title")
-      );
-    }),
-  );
-  add(
-    "Buttons without an accessible name",
-    Array.from(document.querySelectorAll("button,[role=button]")).filter((el) => !name(el)),
-  );
-  add(
-    "Links without text",
-    Array.from(document.querySelectorAll("a[href]")).filter((el) => !name(el)),
-  );
-  if (!document.documentElement.lang) hints.push({ rule: "The <html> element has no lang", count: 1, samples: ["html"] });
-  const ids = new Map<string, number>();
-  for (const el of Array.from(document.querySelectorAll("[id]"))) ids.set(el.id, (ids.get(el.id) ?? 0) + 1);
-  const dupes = Array.from(ids.entries()).filter(([, n]) => n > 1);
-  if (dupes.length) hints.push({ rule: "Duplicate ids", count: dupes.length, samples: dupes.slice(0, 5).map(([id, n]) => `#${id} ×${n}`) });
-  const levels = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6")).map((h) => Number(h.tagName[1]));
-  const skips = levels.filter((l, i) => i > 0 && l - levels[i - 1]! > 1).length;
-  if (skips) hints.push({ rule: "Skipped heading levels", count: skips, samples: [] });
-  if (!levels.includes(1)) hints.push({ rule: "No <h1> on the page", count: 1, samples: [] });
-  const vp = document.querySelector('meta[name="viewport"]')?.getAttribute("content") ?? "";
-  if (/user-scalable\s*=\s*no|maximum-scale\s*=\s*1(\.0)?\b/.test(vp))
-    hints.push({ rule: "Zoom is disabled by the viewport meta", count: 1, samples: [vp] });
-  return hints;
-}
-
 export interface FontsColors {
   fonts: { family: string; weight: string; style: string; status: string }[];
   families: { family: string; count: number }[];

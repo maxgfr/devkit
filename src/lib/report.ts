@@ -1,4 +1,5 @@
 // One-line verdicts for the Overview's page report card, from data the inspectors already collect.
+import { type Audit, auditSummary } from "./a11y";
 import type { Check, Level } from "./headers";
 import type { JsonLdReport } from "./jsonld";
 import { scoreLevel } from "./viz";
@@ -41,7 +42,14 @@ export function errorsVerdict(data: { installed: boolean; errors: unknown[] }): 
   return { level: "good", text: "None captured" };
 }
 
-export function a11yVerdict(hints: { count: number }[]): Verdict {
-  if (!hints.length) return { level: "good", text: "No quick issue" };
-  return { level: "warn", text: `${plural(hints.length, "hint")} to check` };
+/** From the last axe audit of the page; null when none ran (the Overview does not audit large pages on its own). */
+export function a11yVerdict(audit: Pick<Audit, "violations" | "incomplete" | "passes">): Verdict {
+  const s = auditSummary(audit);
+  const review = s.review ? `${s.review} to review` : "";
+  if (!s.violations) return { level: "good", text: ["No automated violation", review].filter(Boolean).join(" · ") };
+  const worst = s.rules.critical ? `${s.rules.critical} critical` : s.rules.serious ? `${s.rules.serious} serious` : "";
+  return {
+    level: s.rules.critical + s.rules.serious ? "bad" : "warn",
+    text: [`${plural(s.violations, "violation")}${worst ? ` (${worst})` : ""}`, review].filter(Boolean).join(" · "),
+  };
 }
