@@ -234,7 +234,16 @@ export interface PerfSnapshot {
   inp: number | null;
   fcp: number | null;
   longTasks: { count: number; total: number };
-  resources: { name: string; type: string; transfer: number; decoded: number; duration: number }[];
+  /** `startTime` and `responseStart` are ms from navigation start; `responseStart` is 0 when the server hides it (no Timing-Allow-Origin). */
+  resources: {
+    name: string;
+    type: string;
+    transfer: number;
+    decoded: number;
+    duration: number;
+    startTime: number;
+    responseStart: number;
+  }[];
 }
 
 export async function collectPerf(): Promise<PerfSnapshot> {
@@ -289,6 +298,17 @@ export async function collectPerf(): Promise<PerfSnapshot> {
           load: nav.loadEventEnd - nav.startTime,
           transfer: nav.transferSize,
           decoded: nav.decodedBodySize,
+          // Phase boundaries in ms from navigation start, for the timeline.
+          redirectEnd: nav.redirectEnd,
+          fetchStart: nav.fetchStart,
+          dnsStart: nav.domainLookupStart,
+          dnsEnd: nav.domainLookupEnd,
+          connectStart: nav.connectStart,
+          tlsStart: nav.secureConnectionStart,
+          connectEnd: nav.connectEnd,
+          requestStart: nav.requestStart,
+          responseStart: nav.responseStart,
+          responseEnd: nav.responseEnd,
         }
       : null,
     lcp: lcpEntries.length ? lcpEntries[lcpEntries.length - 1]!.startTime : null,
@@ -302,6 +322,8 @@ export async function collectPerf(): Promise<PerfSnapshot> {
       transfer: r.transferSize,
       decoded: r.decodedBodySize,
       duration: r.duration,
+      startTime: r.startTime,
+      responseStart: r.responseStart,
     })),
   };
 }
