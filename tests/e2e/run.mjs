@@ -530,12 +530,21 @@ try {
   await site.click("#m-a");
   await site.hover("#m-b");
   await site.click("#m-b");
-  await panel.waitForTimeout(500);
+  // The frozen pair reaches the panel through a message: wait for it rather than a fixed delay (slower on CI).
+  await panel
+    .waitForFunction(
+      () =>
+        /Frozen/.test(document.querySelector("main")?.innerText ?? "") &&
+        /Horizontal gap\s*24px/.test(document.querySelector("main")?.innerText ?? ""),
+      null,
+      { timeout: 5000 },
+    )
+    .catch(() => undefined);
   t = await text();
   check(
     "measure: gap and sizes of two elements",
     /Horizontal gap\s*24px/.test(t) && t.includes("Frozen") && /#m-a\s*120 × 40/.test(t) && /#m-b\s*120 × 40/.test(t),
-    t.match(/Horizontal gap[^\n]*\n?[^\n]*/)?.[0],
+    JSON.stringify(t.match(/Horizontal gap[\s\S]{0,120}/)?.[0] ?? t.slice(0, 300)),
   );
   check("measure: the page never saw the clicks", (await site.evaluate(() => window.__measureClicks ?? 0)) === 0);
   await panel.getByLabel("Expected").fill("16");
