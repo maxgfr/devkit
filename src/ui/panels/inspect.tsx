@@ -526,11 +526,11 @@ export function Headers() {
 }
 
 const NOT_MEASURED: Record<VitalName, string> = {
-  lcp: "Not measured: the page is still loading, or it loaded in a background tab.",
-  inp: "Not measured yet: click, tap or type in the page, then refresh.",
-  cls: "Not measured: layout shifts are not reported in this tab.",
-  fcp: "Not measured: the page has not painted, or it loaded in a background tab.",
-  ttfb: "Not measured: no navigation entry (restored from the back/forward cache?).",
+  lcp: "The page is still loading, or it loaded in a background tab.",
+  inp: "No interaction yet: click, tap or type in the page, then refresh.",
+  cls: "Layout shifts are not reported in this tab.",
+  fcp: "The page has not painted, or it loaded in a background tab.",
+  ttfb: "No navigation entry: the page may have been restored from the back/forward cache.",
 };
 const KIND_SHORT: Record<ResourceKind, string> = { script: "JS", style: "CSS", font: "Font", image: "Img", fetch: "Fetch", other: "Other" };
 const WATERFALL_ROWS = 25;
@@ -546,16 +546,10 @@ function VitalRow({ name, value }: { name: VitalName; value: number | null }) {
       <div className="vital-head">
         <b>{t.label}</b>
         <span className="vital-name">{name === "inp" ? `${t.name}, slowest so far` : t.name}</span>
-        <span className="vital-value">{text}</span>
+        {rating ? <span className="vital-value">{text}</span> : null}
         <span className="vital-rating">
-          {rating ? (
-            <>
-              <StatusIcon level={RATING_LEVEL[rating]} />
-              {RATING_TEXT[rating]}
-            </>
-          ) : (
-            <span className="muted">–</span>
-          )}
+          <StatusIcon level={rating ? RATING_LEVEL[rating] : "none"} />
+          {rating ? RATING_TEXT[rating] : "Not measured"}
         </span>
       </div>
       {rating ? (
