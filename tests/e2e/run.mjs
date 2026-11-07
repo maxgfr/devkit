@@ -390,6 +390,52 @@ try {
     copied[0]?.split("\n")[0],
   );
   await shot("inspect-a11y");
+
+  // Copy for agent: the page-wide fix list on Overview, and the per-panel reports it points to.
+  const lastCopy = async (button) => {
+    const before = await panel.evaluate(() => window.__copied.length);
+    await button.click();
+    await panel.waitForFunction((n) => window.__copied.length > n, before, { timeout: 10000 }).catch(() => undefined);
+    return panel.evaluate(() => window.__copied.at(-1) ?? "");
+  };
+  await open("Inspect", "Overview");
+  await panel.waitForTimeout(2500);
+  const fixList = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "agent: Overview copies one fix list with a status table and every area to fix",
+    fixList.startsWith("# Fix list for Acme Mug") &&
+      fixList.includes("| Area | Result | Re-run in devkit |") &&
+      fixList.includes("## Secrets") &&
+      fixList.includes("sk_l…") &&
+      !/sk_live_[A-Za-z0-9]{8,}/.test(fixList) &&
+      fixList.includes("## Content-Security-Policy") &&
+      !fixList.includes("1. Content-Security-Policy: Weak") &&
+      fixList.includes("#### `image-alt`") &&
+      fixList.includes("`#1.offers.price`"),
+    fixList.split("\n")[2],
+  );
+  await open("Security", "Headers");
+  await panel.waitForTimeout(1500);
+  const headersMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "agent: Headers gives the header lines to add",
+    headersMd.startsWith("## Response headers") && headersMd.includes("`X-Content-Type-Options: nosniff`"),
+    headersMd.split("\n")[2],
+  );
+  await open("Inspect", "Link checker");
+  await panel
+    .getByRole("button", { name: /Check all/ })
+    .first()
+    .click();
+  await panel.waitForTimeout(4000);
+  const linksMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "agent: Links lists the broken link with a selector to find it",
+    linksMd.includes("HTTP 404: `http://") && linksMd.includes('`a[href*="/missing"]`'),
+    linksMd.split("\n")[2],
+  );
+  await open("Inspect", "Accessibility");
+  await panel.waitForTimeout(800);
   await panel.getByLabel("Region (CSS selector)").fill("form");
   await panel.getByLabel("Region (CSS selector)").press("Enter");
   await panel.waitForTimeout(1200);

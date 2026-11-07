@@ -72,6 +72,8 @@ export function useStoredAudit(): [StoredAudit | null, boolean] {
  */
 export function useA11yReport(elements: number | undefined): {
   verdict: Verdict | null;
+  /** The stored audit of this page, when there is one. */
+  audit: Audit | null;
   state: { loading: boolean; error: unknown };
   run: () => void;
 } {
@@ -102,7 +104,7 @@ export function useA11yReport(elements: number | undefined): {
       ? { level: "info", text: "Large page: open to run the audit" }
       : null;
   const waiting = !error && page.canScript && (!ready || (!stored && elements === undefined));
-  return { verdict, state: { loading: loading || waiting, error }, run };
+  return { verdict, audit: stored?.audit ?? null, state: { loading: loading || waiting, error }, run };
 }
 
 /* Marks */

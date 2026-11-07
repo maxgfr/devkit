@@ -26,6 +26,8 @@ describe("agent Markdown helpers", () => {
       ],
       verify: "reload.",
     });
-    expect(md).toBe("## SEO checks\nPage: https://a.test/\nResult: 2 problems\n\n### To fix\n\n1. No title\n   - Add one\n\nTo check the fix: reload.");
+    expect(md).toBe(
+      "## SEO checks\nPage: https://a.test/\nResult: 2 problems\n\n### To fix\n\n1. No title\n   - Add one\n\nTo check the fix: reload.",
+    );
   });
 });

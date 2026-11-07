@@ -3,8 +3,9 @@ import { browser, type Browser } from "wxt/browser";
 import { ACTIONS, isNoCacheOn } from "../../lib/actions";
 import { runInTab } from "../../lib/inject";
 import { ensurePermission } from "../../lib/permissions";
+import { cookiesMarkdown } from "../../lib/agent/security";
 import { auditCookies } from "../../lib/security/cookies";
-import { Button, Checks, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
+import { Button, Checks, CopyButton, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
 import { useAsync } from "../hooks";
 import { AccessGate, useInPage, usePage, useRunAction } from "../page";
 
@@ -144,6 +145,8 @@ export function Cookies() {
     const flags = new Map(list.map((c, i) => [`${c.domain}${c.path}${c.name}`, a.perCookie[i]!]));
     return { ...a, flags, bad: a.perCookie.flat().filter((f) => f.level === "bad").length };
   }, [cookies.data, page.url]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: list derives from cookies.data
+  const markdown = useMemo(() => (Array.isArray(cookies.data) ? cookiesMarkdown(list, { url: page.url }) : ""), [cookies.data, page.url]);
 
   if (!page.origin) return <Empty>Open a web page to see its cookies.</Empty>;
   if (cookies.data === "no-permission")
@@ -186,6 +189,7 @@ export function Cookies() {
       title={`Cookies (${list.length})`}
       actions={
         <>
+          {markdown ? <CopyButton text={markdown} label="Copy for agent" /> : null}
           <Button size="small" onClick={() => download(`cookies-${new URL(page.origin!).host}.json`, JSON.stringify(list, null, 2))}>
             Export
           </Button>

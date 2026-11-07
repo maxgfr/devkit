@@ -1,5 +1,21 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { browser } from "wxt/browser";
+import {
+  errorsMarkdown,
+  fontsMarkdown,
+  headersMarkdown,
+  jsonLdMarkdown,
+  linksMarkdown,
+  perfMarkdown,
+  seoMarkdown,
+  siteFilesMarkdown,
+} from "../../lib/agent/inspect";
+import { demoteHeadings, type PagePart, pageReportMarkdown } from "../../lib/agent/page";
+import { cspMarkdown, secretsMarkdown, thirdPartiesMarkdown } from "../../lib/agent/security";
+import { auditMarkdown } from "../../lib/a11y";
+import { collectSecretSources, collectSurface } from "../../lib/page/security";
+import { parseCsp, starterCsp } from "../../lib/security/csp";
+import { scanSecrets } from "../../lib/security/secrets";
 import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
 import { runInTab } from "../../lib/inject";
 import { analyzeJsonLd, type JsonLdBlock, richResultsTestUrl, schemaValidatorUrl } from "../../lib/jsonld";
@@ -40,6 +56,7 @@ import {
   Checks,
   Code,
   CopyButton,
+  copyText,
   Dot,
   Empty,
   ErrorText,
@@ -140,6 +157,110 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const perf = useInPage(collectPerf);
   const errors = useInPage(readErrors, [], "MAIN");
   const a11y = useA11yReport(meta.data?.stats.elements);
+  const page = usePage();
+  const toast = useToast();
+  const [copying, setCopying] = useState(false);
+  /** Everything Overview measured, plus the in-page security reads (no extra request), as one fix list. */
+  const copyForAgent = async () => {
+    if (page.tabId === undefined) return;
+    setCopying(true);
+    try {
+      const ctx = { url: page.url };
+      const [surface, secretSources] = await Promise.all([
+        runInTab(page.tabId, collectSurface).catch(() => null),
+        runInTab(page.tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
+      ]);
+      const h = headers.data?.headers ?? {};
+      const policies = [
+        ...(h["content-security-policy"] ? parseCsp(h["content-security-policy"], "header", false) : []),
+        ...(h["content-security-policy-report-only"] ? parseCsp(h["content-security-policy-report-only"], "header", true) : []),
+        ...(surface?.metaCsp ?? []).flatMap((m) => parseCsp(m, "meta", false)),
+      ];
+      const notRead = (s: { error: unknown }) => (s.error instanceof Error ? s.error.message : "not read yet");
+      const parts: PagePart[] = [
+        {
+          area: "Secrets in the page",
+          panel: "Security › Secrets",
+          md: secretSources
+            ? secretsMarkdown(scanSecrets(secretSources.sources), { ...ctx, scan: { sources: secretSources.sources.length } })
+            : null,
+          missing: "the page could not be read",
+        },
+        {
+          area: "Security headers",
+          panel: "Security › Headers",
+          md: headers.data ? headersMarkdown(headers.data, { ...ctx, omitCsp: true }) : null,
+          missing: notRead(headers),
+        },
+        {
+          area: "Content-Security-Policy",
+          panel: "Security › CSP",
+          md:
+            headers.data || surface
+              ? cspMarkdown(
+                  {
+                    policies,
+                    https: page.url.startsWith("https:"),
+                    xfo: h["x-frame-options"],
+                    starter: surface ? starterCsp(surface) : null,
+                  },
+                  ctx,
+                )
+              : null,
+          missing: "no headers and no page read",
+        },
+        {
+          area: "Accessibility",
+          panel: "Inspect › A11y",
+          md: a11y.audit ? demoteHeadings(auditMarkdown(a11y.audit, { maxNodes: 10 })) : null,
+          findings: a11y.audit ? a11y.audit.violations.length > 0 : undefined,
+          missing: "run the audit in Inspect › A11y",
+        },
+        {
+          area: "Console errors",
+          panel: "Inspect › Errors",
+          md: errors.data ? errorsMarkdown({ installed: errors.data.installed, errors: errors.data.errors as CapturedError[] }, ctx) : null,
+          missing: notRead(errors),
+        },
+        {
+          area: "Web Vitals and loading",
+          panel: "Inspect › Performance",
+          md: perf.data ? perfMarkdown(perf.data, ctx) : null,
+          missing: notRead(perf),
+        },
+        {
+          area: "Third parties and SRI",
+          panel: "Security › Third parties",
+          md: surface ? thirdPartiesMarkdown(surface, ctx) : null,
+          missing: "the page could not be read",
+        },
+        { area: "SEO", panel: "Inspect › SEO", md: meta.data ? seoMarkdown(meta.data, ctx) : null, missing: notRead(meta) },
+        {
+          area: "Structured data",
+          panel: "Inspect › JSON-LD",
+          md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd), ctx) : null,
+          missing: notRead(meta),
+        },
+      ];
+      const md = pageReportMarkdown(parts, {
+        url: page.url,
+        title: meta.data?.title,
+        notCovered: [
+          "secrets in this origin's script files (Security › Secrets)",
+          "source maps and exposed files (Security › Exposed files)",
+          "vulnerable libraries (Security › Libraries)",
+          "broken links (Inspect › Links)",
+          "robots.txt, sitemap and manifest (Inspect › Site files)",
+          "cookie flags (Cache › Cookies)",
+          "image weight and alt text (Page › Assets)",
+        ],
+      });
+      const ok = await copyText(md);
+      toast(ok ? "Fix list for your agent copied." : "The clipboard refused the copy.", !ok);
+    } finally {
+      setCopying(false);
+    }
+  };
   const rows: { panel: string; label: string; state: { loading: boolean; error: unknown }; verdict: Verdict | null }[] = [
     {
       panel: "headers",
@@ -162,15 +283,20 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
     <Section
       title="Page report"
       actions={
-        <Button
-          size="small"
-          onClick={() => {
-            for (const s of [meta, headers, perf, errors]) s.run();
-            a11y.run();
-          }}
-        >
-          Refresh
-        </Button>
+        <>
+          <Button size="small" busy={copying} disabled={!meta.data && !headers.data} onClick={copyForAgent}>
+            Copy for agent
+          </Button>
+          <Button
+            size="small"
+            onClick={() => {
+              for (const s of [meta, headers, perf, errors]) s.run();
+              a11y.run();
+            }}
+          >
+            Refresh
+          </Button>
+        </>
       }
     >
       <ul className="report" aria-label="Page report">
@@ -282,6 +408,7 @@ export function Seo() {
   const meta = useInPage(collectMeta);
   const snap = meta.data;
   const checks = useMemo(() => (snap ? seoReport(snap) : []), [snap]);
+  const agentMd = useMemo(() => (snap ? seoMarkdown(snap, { url: snap.url }) : ""), [snap]);
   const social = snap ? socialPreview(snap) : null;
   return (
     <AccessGate>
@@ -291,9 +418,12 @@ export function Seo() {
           <Section
             title="SEO checks"
             actions={
-              <Button size="small" onClick={meta.run}>
-                Refresh
-              </Button>
+              <>
+                <Button size="small" onClick={meta.run}>
+                  Refresh
+                </Button>
+                <CopyButton text={agentMd} label="Copy for agent" />
+              </>
             }
           >
             <Checks checks={checks} />
@@ -394,6 +524,7 @@ export function JsonLd() {
   const meta = useInPage(collectMeta);
   const [paste, setPaste] = useState("");
   const report = useMemo(() => (meta.data ? analyzeJsonLd(meta.data.jsonLd) : null), [meta.data]);
+  const agentMd = useMemo(() => (report ? jsonLdMarkdown(report, { url: page.url }) : ""), [report, page.url]);
   const pasted = useMemo(
     () => (paste.trim() ? analyzeJsonLd([{ raw: paste.replace(/^\s*<script[^>]*>|<\/script>\s*$/g, ""), index: 0 }]) : null),
     [paste],
@@ -410,6 +541,7 @@ export function JsonLd() {
                 <Button size="small" onClick={meta.run}>
                   Refresh
                 </Button>
+                <CopyButton text={agentMd} label="Copy for agent" />
                 <a className="btn small" href={richResultsTestUrl(page.url)} target="_blank" rel="noreferrer">
                   Rich Results Test
                 </a>
@@ -476,6 +608,7 @@ export function Headers() {
   const sec = headers.data ? securityReport(headers.data.headers, headers.data.url) : null;
   const cache = headers.data ? cachingReport(headers.data.headers) : null;
   const raw = headers.data ? Object.entries(headers.data.headers).sort(([a], [b]) => a.localeCompare(b)) : [];
+  const agentMd = useMemo(() => (headers.data ? headersMarkdown(headers.data, { url: page.url }) : ""), [headers.data, page.url]);
   return (
     <AccessGate>
       <ErrorText error={headers.error} />
@@ -484,9 +617,12 @@ export function Headers() {
           <Section
             title="Security headers"
             actions={
-              <Button size="small" onClick={headers.run}>
-                Refresh
-              </Button>
+              <>
+                <Button size="small" onClick={headers.run}>
+                  Refresh
+                </Button>
+                <CopyButton text={agentMd} label="Copy for agent" />
+              </>
             }
             hint="The document is fetched again from devkit with your cookies; Set-Cookie is hidden by the browser."
           >
@@ -572,6 +708,7 @@ function VitalRow({ name, value }: { name: VitalName; value: number | null }) {
 }
 
 export function Perf() {
+  const page = usePage();
   const perf = useInPage(collectPerf);
   const [sort, setSort] = useState<WaterfallSort>("start");
   const [all, setAll] = useState(false);
@@ -579,6 +716,7 @@ export function Perf() {
   const nav = useMemo(() => (p?.navigation ? navigationPhases(p.navigation) : null), [p]);
   const navAxis = nav ? niceTicks(nav.end, 2) : null;
   const breakdown = useMemo(() => resourceBreakdown(p?.resources ?? []), [p]);
+  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url }) : ""), [p, page.url]);
   const waterfall = useMemo(
     () =>
       p ? waterfallLayout(p.resources, { sort, limit: all ? undefined : WATERFALL_ROWS, markers: nav?.markers.map((m) => m.at) }) : null,
@@ -601,9 +739,12 @@ export function Perf() {
           <Section
             title="Web Vitals"
             actions={
-              <Button size="small" onClick={perf.run}>
-                Refresh
-              </Button>
+              <>
+                <Button size="small" onClick={perf.run}>
+                  Refresh
+                </Button>
+                <CopyButton text={agentMd} label="Copy for agent" />
+              </>
             }
             hint="Measured in this tab from buffered entries, on web.dev's good / needs improvement / poor thresholds. Field data (CrUX) can differ."
           >
@@ -758,6 +899,13 @@ export function Errors() {
   const errors = useInPage(readErrors, [], "MAIN");
   const registered = useAsync(async () => (await browser.scripting.getRegisteredContentScripts({ ids: ERROR_SCRIPT_IDS })).length > 0, []);
   const list = (errors.data?.errors ?? []) as CapturedError[];
+  const agentMd = useMemo(
+    () =>
+      errors.data
+        ? errorsMarkdown({ installed: errors.data.installed, errors: errors.data.errors as CapturedError[] }, { url: page.url })
+        : "",
+    [errors.data, page.url],
+  );
   return (
     <AccessGate>
       <Section
@@ -767,6 +915,7 @@ export function Errors() {
             <Button size="small" onClick={errors.run}>
               Refresh
             </Button>
+            {errors.data ? <CopyButton text={agentMd} label="Copy for agent" /> : null}
             <Button
               size="small"
               onClick={async () => {
@@ -950,6 +1099,7 @@ export function Links() {
   const bad = results.filter((r) => r.status === "error" || (typeof r.status === "number" && r.status >= 400));
   const done = results.filter((r) => r.status !== "pending").length;
   const shown = onlyBad ? bad : results;
+  const agentMd = useMemo(() => (done ? linksMarkdown(results, { url: page.url }) : ""), [done, results, page.url]);
   return (
     <AccessGate>
       <Section
@@ -960,9 +1110,12 @@ export function Links() {
               Stop
             </Button>
           ) : (
-            <Button size="small" variant="primary" disabled={!links.data?.length} onClick={start}>
-              Check all
-            </Button>
+            <>
+              <Button size="small" variant="primary" disabled={!links.data?.length} onClick={start}>
+                Check all
+              </Button>
+              {done ? <CopyButton text={agentMd} label="Copy for agent" /> : null}
+            </>
           )
         }
         hint="Same-page anchors are skipped. Requests go from devkit without cookies, 6 at a time."
@@ -1039,6 +1192,7 @@ function PaletteStrip({ colors }: { colors: { color: string; count: number }[] }
 }
 
 export function Fonts() {
+  const page = usePage();
   const data = useInPage(collectFontsColors);
   const toast = useToast();
   const [picked, setPicked] = useStored<string[]>("pickedColors", []);
@@ -1049,6 +1203,11 @@ export function Fonts() {
     const b = parseColor(bg);
     return a && b ? contrast(a, b) : null;
   })();
+  const pair = ratio !== null;
+  const agentMd = useMemo(
+    () => (data.data ? fontsMarkdown(data.data, { url: page.url, contrast: pair ? { fg, bg } : undefined }) : ""),
+    [data.data, page.url, pair, fg, bg],
+  );
   const pick = async () => {
     if (!window.EyeDropper) return toast("The EyeDropper API is not available here.", true);
     try {
@@ -1117,9 +1276,12 @@ export function Fonts() {
             <Section
               title="Font families in use"
               actions={
-                <Button size="small" onClick={data.run}>
-                  Refresh
-                </Button>
+                <>
+                  <Button size="small" onClick={data.run}>
+                    Refresh
+                  </Button>
+                  <CopyButton text={agentMd} label="Copy for agent" />
+                </>
               }
               hint="Text elements set in each family."
             >
@@ -1208,15 +1370,29 @@ export function SiteFiles() {
     return { href, status: r.status, json };
   }, [page.tabId, page.url, page.canScript]);
   const verdict = robots.data?.parsed ? isAllowed(robots.data.parsed, agent, path) : null;
+  const loaded = Boolean(robots.data || sitemap.data || manifest.data);
+  const agentMd = useMemo(
+    () =>
+      loaded
+        ? siteFilesMarkdown(
+            { robots: robots.data ?? undefined, sitemap: sitemap.data ?? undefined, manifest: manifest.data ?? undefined },
+            { url: page.url },
+          )
+        : "",
+    [loaded, robots.data, sitemap.data, manifest.data, page.url],
+  );
   return (
     <AccessGate>
       <Section
         title="robots.txt"
         actions={
           page.origin ? (
-            <a className="btn small" href={`${page.origin}/robots.txt`} target="_blank" rel="noreferrer">
-              Open
-            </a>
+            <>
+              <a className="btn small" href={`${page.origin}/robots.txt`} target="_blank" rel="noreferrer">
+                Open
+              </a>
+              {loaded ? <CopyButton text={agentMd} label="Copy for agent" /> : null}
+            </>
           ) : null
         }
       >

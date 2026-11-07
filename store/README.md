@@ -78,7 +78,7 @@ NETWORK
 • Environment groups: jump between local, staging and prod on the same path, with a red ribbon on prod
 
 AI, WITH YOUR OWN MODEL
-• Summaries, SEO and security reviews, structured data reviews, error explanations, generated Playwright tests, and a chat about the page
+• A fix plan for the whole page, summaries, SEO and security reviews, structured data reviews, error explanations, generated Playwright tests, and a chat about the page
 • Fed with what the inspectors found, so answers cite the page's actual data
 • Works with any provider of the llm-models catalog (OpenAI, Anthropic, Google, Mistral and more) or a local server (Ollama, LM Studio, Jan)
 • Your key stays in your browser, encrypted. Token counts and a cost estimate are shown for every answer

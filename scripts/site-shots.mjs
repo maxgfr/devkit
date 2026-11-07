@@ -185,6 +185,9 @@ try {
     });
     await panel.evaluate(() => window.scrollTo(0, 0));
     await shot("panel-ai", `${DEMO}, answered by a real model`, 1000);
+    // The site's "A real run" receipt quotes these: update it with the new run.
+    const usage = (await panel.locator(".msg.assistant .row.small.muted").first().textContent()) ?? "";
+    console.log("AI run:", usage.replace(/^Copy\s*/, "").replace(/\s+/g, " "));
   }
 
   const test = await context.newPage();

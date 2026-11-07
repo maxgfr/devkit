@@ -7,12 +7,14 @@ import {
   findSourceMapUrl,
   isSourceMap,
   judgeProbe,
+  type MapCheck,
   PROBES,
   type ProbeResponse,
   type ProbeVerdict,
 } from "../../lib/security/exposed";
 import { mergeFindings, SECRET_RULES, type SecretFinding, type SecretSource, scanSecrets } from "../../lib/security/secrets";
 import { groupBySite, siteOf, surfaceFindings } from "../../lib/security/third-party";
+import { cspMarkdown, exposedMarkdown, secretsMarkdown, thirdPartiesMarkdown } from "../../lib/agent/security";
 import { Button, bytes, CopyButton, Dot, Empty, ErrorText, Metric, Notice, Section } from "../components";
 import { useAsync } from "../hooks";
 import { AccessGate, useInPage, usePage } from "../page";
@@ -175,6 +177,7 @@ function SecretItem({ f }: { f: SecretFinding }) {
 }
 
 export function Secrets() {
+  const page = usePage();
   const snap = useInPage(collectSecretSources, [MAX_SOURCE], "MAIN");
   const [scan, setScan] = useState<ScriptScan>(NO_SCAN);
   const [ctrl, setCtrl] = useState<AbortController | null>(null);
@@ -222,26 +225,39 @@ export function Secrets() {
   const findings = useMemo(() => mergeFindings(pageFindings, scan.findings), [pageFindings, scan.findings]);
   const count = (l: Level) => findings.filter((f) => f.severity === l).length;
   const sources = snap.data?.sources.length ?? 0;
+  const markdown = useMemo(
+    () =>
+      snap.data && !scan.running
+        ? secretsMarkdown(findings, {
+            url: page.url,
+            scan: { sources: snap.data.sources.length, scripts: scan.done, skipped: scan.skipped, failed: scan.failed },
+          })
+        : "",
+    [snap.data, scan, findings, page.url],
+  );
   return (
     <AccessGate>
       <Section
         title="Secrets"
         actions={
-          scan.running && ctrl ? (
-            <Button
-              size="small"
-              onClick={() => {
-                ctrl.abort();
-                setScan({ ...scan, running: false });
-              }}
-            >
-              Stop
-            </Button>
-          ) : (
-            <Button size="small" onClick={snap.run}>
-              Rescan
-            </Button>
-          )
+          <>
+            {markdown ? <CopyButton text={markdown} label="Copy for agent" /> : null}
+            {scan.running && ctrl ? (
+              <Button
+                size="small"
+                onClick={() => {
+                  ctrl.abort();
+                  setScan({ ...scan, running: false });
+                }}
+              >
+                Stop
+              </Button>
+            ) : (
+              <Button size="small" onClick={snap.run}>
+                Rescan
+              </Button>
+            )}
+          </>
         }
         hint="Pattern matching over what this page ships and keeps: inline scripts and JSON blobs, this origin's scripts, HTML comments, meta tags, data attributes, config globals, Web Storage and readable cookies. A finding is a lead to verify, not proof."
       >
@@ -307,17 +323,6 @@ export function Secrets() {
 }
 
 /* Source maps & exposed files */
-
-interface MapCheck {
-  file: string;
-  kind: "script" | "stylesheet";
-  map: string | null;
-  via: "comment" | "header" | null;
-  state: "pending" | "none" | "inline" | "reachable" | "unreachable" | "error";
-  status?: number;
-  size?: number;
-  sources?: boolean;
-}
 
 const MAP_LEVEL: Record<MapCheck["state"], Level | null> = {
   pending: null,
@@ -457,14 +462,24 @@ export function Exposed() {
   const referenced = maps.filter((m) => m.map);
   const exposedMaps = maps.filter((m) => m.state === "reachable" || m.state === "inline");
   const exposedFiles = probes?.filter((p) => p?.state === "exposed").length ?? 0;
+  const markdown = useMemo(
+    () =>
+      surface.data && !maps.some((m) => m.state === "pending") && !probing
+        ? exposedMarkdown({ maps, probes, origin: page.origin }, { url: page.url })
+        : "",
+    [surface.data, maps, probes, probing, page.origin, page.url],
+  );
   return (
     <AccessGate>
       <Section
         title="Source maps"
         actions={
-          <Button size="small" onClick={surface.run}>
-            Recheck
-          </Button>
+          <>
+            {markdown ? <CopyButton text={markdown} label="Copy for agent" /> : null}
+            <Button size="small" onClick={surface.run}>
+              Recheck
+            </Button>
+          </>
         }
         hint={`This origin's scripts and stylesheets${page.access === "all" ? " (and the rest of its site)" : ""}: a reachable map lets anyone read the original source. Fine on purpose for open source; worth a look for an app.`}
       >
@@ -581,6 +596,7 @@ export function ThirdParties() {
   const totalBytes = groups.reduce((s, g) => s + g.bytes, 0);
   const thirdBytes = third.reduce((s, g) => s + g.bytes, 0);
   const maxBytes = Math.max(1, ...groups.map((g) => g.bytes));
+  const markdown = useMemo(() => (snap ? thirdPartiesMarkdown(snap, { url: snap.url }) : ""), [snap]);
   return (
     <AccessGate>
       <ErrorText error={surface.error} />
@@ -589,9 +605,12 @@ export function ThirdParties() {
           <Section
             title={`Sites (${groups.length})`}
             actions={
-              <Button size="small" onClick={surface.run}>
-                Refresh
-              </Button>
+              <>
+                <CopyButton text={markdown} label="Copy for agent" />
+                <Button size="small" onClick={surface.run}>
+                  Refresh
+                </Button>
+              </>
             }
             hint="From resource timing since the page loaded, grouped by approximate registrable domain (a built-in list of common suffixes such as co.uk, not the full Public Suffix List). Cross-origin servers without Timing-Allow-Origin report no size."
           >
@@ -759,20 +778,28 @@ export function Csp() {
   const xfo = headers.data?.headers["x-frame-options"];
   const starter = useMemo(() => (surface.data ? starterCsp(surface.data) : null), [surface.data]);
   const enforced = policies.some((p) => !p.reportOnly);
+  const loaded = Boolean(headers.data || surface.data) && !headers.loading && !surface.loading;
+  const markdown = useMemo(
+    () => (loaded ? cspMarkdown({ policies, https, xfo, starter }, { url: page.url }) : ""),
+    [loaded, policies, https, xfo, starter, page.url],
+  );
   return (
     <AccessGate>
       <Section
         title={`Content-Security-Policy (${policies.length})`}
         actions={
-          <Button
-            size="small"
-            onClick={() => {
-              headers.run();
-              surface.run();
-            }}
-          >
-            Refresh
-          </Button>
+          <>
+            {markdown ? <CopyButton text={markdown} label="Copy for agent" /> : null}
+            <Button
+              size="small"
+              onClick={() => {
+                headers.run();
+                surface.run();
+              }}
+            >
+              Refresh
+            </Button>
+          </>
         }
         hint="From the response headers (the document is fetched again) and <meta http-equiv> tags. Several policies all apply: a load must pass every one."
       >

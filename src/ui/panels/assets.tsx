@@ -11,11 +11,12 @@ import {
   svgDataUrl,
   zipPath,
 } from "../../lib/assets";
+import { assetsMarkdown } from "../../lib/agent/security";
 import { runInTab } from "../../lib/inject";
 import { collectAssets, fetchInPage } from "../../lib/page/assets";
 import { percent, shares } from "../../lib/viz";
 import { type Part, Legend, SegmentBar } from "../charts";
-import { Button, bytes, copyText, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
+import { Button, bytes, CopyButton, copyText, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
 import { AccessGate, type PageCtx, useInPage, usePage } from "../page";
 
 const KIND_COLOR: Record<AssetKind, string> = {
@@ -80,6 +81,10 @@ export function Assets() {
   const snap = useInPage(collectAssets);
   const assets = useMemo(() => (snap.data ? buildAssets(snap.data) : []), [snap.data]);
   const summary = useMemo(() => summarizeAssets(assets), [assets]);
+  const markdown = useMemo(
+    () => (snap.data ? assetsMarkdown(assets, { url: snap.data.url, dpr: snap.data.dpr, capped: snap.data.capped }) : ""),
+    [snap.data, assets],
+  );
   const [kind, setKind] = useState<AssetKind | "all">("all");
   const [missingAlt, setMissingAlt] = useState(false);
   const [oversized, setOversized] = useState(false);
@@ -164,9 +169,12 @@ export function Assets() {
       <Section
         title={snap.data ? `Assets (${summary.count}, ${bytes(summary.bytes)})` : "Assets"}
         actions={
-          <Button size="small" busy={snap.loading} onClick={snap.run}>
-            Rescan
-          </Button>
+          <>
+            {markdown && !snap.loading ? <CopyButton text={markdown} label="Copy for agent" /> : null}
+            <Button size="small" busy={snap.loading} onClick={snap.run}>
+              Rescan
+            </Button>
+          </>
         }
         hint={
           snap.data

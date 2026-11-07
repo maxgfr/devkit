@@ -144,3 +144,15 @@ export function baselinePath(random = Math.random): string {
   const id = Array.from({ length: 16 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(random() * 36)]).join("");
   return `/devkit-probe-${id}.txt`;
 }
+
+/** What the source map check found for one script or stylesheet. */
+export interface MapCheck {
+  file: string;
+  kind: "script" | "stylesheet";
+  map: string | null;
+  via: "comment" | "header" | null;
+  state: "pending" | "none" | "inline" | "reachable" | "unreachable" | "error";
+  status?: number;
+  size?: number;
+  sources?: boolean;
+}
