@@ -77,6 +77,10 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json", ...cors });
     return res.end(JSON.stringify(req.headers));
   }
+  if (url.pathname === "/api/user") {
+    res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors });
+    return res.end(JSON.stringify({ id: 1, name: "Real User", plan: "free" }));
+  }
   if (url.pathname === "/app.js")
     return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__app = 1;\n//# sourceMappingURL=app.js.map\n");
   if (url.pathname === "/app.js.map")

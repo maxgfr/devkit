@@ -7,6 +7,7 @@ import { pinnedTabId } from "./hooks";
 import { NavContext } from "./nav";
 import { PageProvider, usePage } from "./page";
 import { PANEL_COMPONENTS } from "./panels";
+import { MocksBadge } from "./panels/mocks";
 
 const SHORT: Record<Category, string> = {
   cache: "Cache",
@@ -141,6 +142,7 @@ function Shell() {
               title={`${p.title} · ${p.description}`}
             >
               {p.short ?? p.title}
+              {p.id === "mocks" ? <MocksBadge /> : null}
             </button>
           ))}
         </nav>

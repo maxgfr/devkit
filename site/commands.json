@@ -320,6 +320,14 @@
     "keywords": "modheader redirect block cors declarativenetrequest"
   },
   {
+    "id": "mocks",
+    "kind": "panel",
+    "category": "network",
+    "title": "Mock API responses",
+    "description": "Fake the body, status, headers or delay of fetch/XHR calls on this tab",
+    "keywords": "mock api response fake stub fetch xhr json status delay network error requestly mokku intercept"
+  },
+  {
     "id": "envs",
     "kind": "panel",
     "category": "network",

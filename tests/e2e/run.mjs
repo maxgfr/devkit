@@ -384,6 +384,94 @@ try {
   check("environments: switch button offered", (await text()).includes("Open on local"));
   await panel.getByRole("button", { name: "Delete group" }).click();
 
+  // API mocks: create from the real response, serve it through the debugger, coexist with Emulation
+  const getUser = () =>
+    site.evaluate(async () => {
+      const r = await fetch("/api/user");
+      return { status: r.status, body: await r.json(), mock: r.headers.get("x-devkit-mock") };
+    });
+  // getTargets() counts Playwright's own CDP client: ask the session itself whether devkit holds it.
+  const attachedTo = () =>
+    sw.evaluate(
+      (tab) =>
+        chrome.debugger.sendCommand({ tabId: tab }, "Runtime.evaluate", { expression: "0" }).then(
+          () => true,
+          (e) => !/not attached/i.test(String(e)),
+        ),
+      tabId,
+    );
+  check("mocks: real API answers before mocking", (await getUser()).body.name === "Real User");
+  await open("Network", "Mock API");
+  await panel.getByRole("button", { name: "From URL" }).click();
+  await panel.getByLabel("URL to fetch").fill(`${base}/api/user`);
+  await panel.getByRole("button", { name: "Fetch and create" }).click();
+  await panel.getByLabel("Body").waitFor();
+  check("mocks: created from the real response", (await panel.getByLabel("Body").inputValue()).includes('"name": "Real User"'));
+  await panel.getByLabel("Body").fill('{"id": 1, "name": "Mocked User", "plan": "pro"}');
+  await panel.getByLabel("Status", { exact: true }).fill("201");
+  await panel.getByRole("button", { name: "Turn on" }).click();
+  await panel.waitForTimeout(700);
+  let user = await getUser();
+  check("mocks: page gets the mocked body and status", user.status === 201 && user.body.name === "Mocked User", JSON.stringify(user));
+  await panel.waitForTimeout(400);
+  t = await text();
+  check("mocks: log shows the hit", /201 · \/api\/user/.test(t) && t.includes("1 request mocked"), t.match(/\d+ requests? mocked/)?.[0]);
+  check("mocks: count badge on the panel pill", (await panel.locator(".subnav .mock-badge").innerText()) === "1");
+  await shot("network-mocks");
+
+  await panel.getByRole("radio", { name: "Network error" }).check();
+  await panel.waitForTimeout(600);
+  const failed = await site.evaluate(() =>
+    fetch("/api/user").then(
+      () => "resolved",
+      (e) => e.name,
+    ),
+  );
+  check("mocks: network error mode fails the request", failed === "TypeError", failed);
+  await panel.getByRole("radio", { name: "Response" }).check();
+  await panel.waitForTimeout(600);
+
+  await site.reload();
+  await site.waitForTimeout(600);
+  user = await getUser();
+  check("mocks: still on after the tab reloads", user.status === 201 && user.mock === "/api/user", JSON.stringify(user));
+
+  await site.evaluate(() => fetch("/echo").then((r) => r.text()));
+  await panel.waitForTimeout(500);
+  await panel.locator(".mock-row", { hasText: "/echo" }).getByRole("button", { name: "Mock" }).click();
+  await panel.waitForTimeout(500);
+  const echoBody = await panel.getByLabel("Body").inputValue();
+  check(
+    "mocks: “Mock” on a logged request prefills what the page received",
+    /"host": "127\.0\.0\.1:\d+"/.test(echoBody),
+    echoBody.slice(0, 60),
+  );
+  await panel.getByRole("button", { name: "Delete", exact: true }).click();
+
+  // Emulation shares the session: stopping it must not end mocking.
+  await open("Page", "Emulation");
+  await panel.getByLabel("prefers-color-scheme").selectOption((await isDark()) ? "light" : "dark");
+  await panel.waitForTimeout(500);
+  await panel.getByRole("button", { name: "Stop & reset" }).click();
+  await panel.waitForTimeout(500);
+  user = await getUser();
+  check("mocks: survive Emulation's stop & reset", user.status === 201 && (await attachedTo()), JSON.stringify(user));
+
+  // The session ends behind devkit's back (Cancel on Chrome's bar): the panel says so and re-attaches.
+  await sw.evaluate((tab) => chrome.debugger.detach({ tabId: tab }), tabId);
+  await open("Network", "Mock API");
+  await panel.getByRole("button", { name: "Turn back on" }).waitFor();
+  check("mocks: a lost session is reported", (await text()).includes("Mocking stopped"));
+  await panel.getByRole("button", { name: "Turn back on" }).click();
+  await panel.waitForTimeout(700);
+  check("mocks: re-attached after the session was lost", (await getUser()).status === 201);
+
+  await panel.getByRole("button", { name: "Turn off" }).click();
+  await panel.waitForTimeout(600);
+  user = await getUser();
+  check("mocks: turning off restores the real response", user.status === 200 && user.body.name === "Real User", JSON.stringify(user));
+  check("mocks: debugger detached once nobody needs it", !(await attachedTo()));
+
   // AI with a fake OpenAI-compatible endpoint
   await open("AI", "AI settings");
   await panel.waitForTimeout(500);

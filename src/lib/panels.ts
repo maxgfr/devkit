@@ -228,6 +228,14 @@ export const PANELS: PanelDef[] = [
     keywords: "modheader redirect block cors declarativenetrequest",
   },
   {
+    id: "mocks",
+    category: "network",
+    title: "Mock API responses",
+    short: "Mocks",
+    description: "Fake the body, status, headers or delay of fetch/XHR calls on this tab",
+    keywords: "mock api response fake stub fetch xhr json status delay network error requestly mokku intercept",
+  },
+  {
     id: "envs",
     category: "network",
     title: "Environments",

@@ -2,6 +2,7 @@ import { lazy, type ComponentType } from "react";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { A11y, Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
+import { Mocks } from "./mocks";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -42,6 +43,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   screenshot: Screenshot,
   forms: Forms,
   rules: Rules,
+  mocks: Mocks,
   envs: Envs,
   ask: Ask,
   models: Models,

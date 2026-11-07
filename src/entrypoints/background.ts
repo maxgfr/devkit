@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { actionContext, findAction, NO_CACHE_RULE_BASE } from "../lib/actions";
 import { loadEnvs, matchEnv, showRibbon } from "../lib/envs";
+import { installMockSession } from "../lib/mock-session";
 import { hasPermission } from "../lib/permissions";
 import { PENDING_ROUTE_KEY, type Route } from "../lib/panels";
 
@@ -53,6 +54,7 @@ async function markEnv(tabId: number, url: string | undefined) {
 }
 
 export default defineBackground(() => {
+  installMockSession();
   browser.runtime.onInstalled.addListener(() => {
     createMenus();
     browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => undefined);
