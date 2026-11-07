@@ -137,8 +137,9 @@ if (input) {
 /* Tour */
 const TOUR = {
   cache: { shot: "panel-cache", alt: "devkit Cache tab: cache and storage actions.", lede: "Clear exactly what you mean to clear, for this origin only, then reload. Edit cookies and Web Storage in place." },
-  inspect: { shot: "panel-headers", alt: "devkit Inspect tab: headers and security grade.", lede: "What the page ships, read from the page itself: stack, SEO, structured data, headers, Web Vitals, errors, links." },
-  page: { shot: "panel-page", alt: "devkit Page tab: emulation of color scheme, motion, CPU and network.", lede: "Bend the page without touching its code: edit it, outline it, strip its CSS, emulate media and slow networks, capture it." },
+  inspect: { shot: "panel-overview", alt: "devkit Inspect tab: the page report, one row per area with its status.", lede: "What the page ships, read from the page itself: a page report, stack, SEO, structured data, Web Vitals, errors, links." },
+  security: { shot: "panel-security", alt: "devkit Security tab: a Stripe live secret key found in an inline script, masked.", lede: "What an attacker would look at first: header grade, secrets shipped to the browser, source maps and exposed files, third parties, CSP." },
+  page: { shot: "panel-page", alt: "devkit Page tab: emulation of color scheme, motion, CPU and network.", lede: "Pick an element and hand its component, file:line, props and styles to your coding agent. Then bend the page: edit it, outline it, strip its CSS, emulate media and slow networks, capture it." },
   network: { shot: "panel-network", alt: "devkit Network tab: local, staging and prod environments.", lede: "Rewrite requests with Chrome's own rule engine, and jump between local, staging and prod on the same path." },
   ai: { shot: "panel-ai", alt: "devkit AI tab: a structured data review by Claude.", lede: "Analyses and chat with the model you choose, fed with the data the other tabs collect." },
   utils: { shot: "panel-utils", alt: "devkit Utils tab: JSON converted to TypeScript types.", lede: "The small converters you otherwise paste into random websites, offline and private." },

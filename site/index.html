@@ -113,23 +113,24 @@
 
       <section id="tour" class="tour" aria-labelledby="tour-title">
         <div class="sec-head">
-          <h2 id="tour-title">Six tabs. The tools you open forty times a day.</h2>
+          <h2 id="tour-title">Seven tabs. The tools you open forty times a day.</h2>
           <p>The same tab bar as the extension. Pick one.</p>
         </div>
         <div class="tour-body">
           <div class="tabs" role="tablist" aria-label="devkit tabs">
             <button role="tab" id="t-cache" aria-controls="tp" aria-selected="false" data-cat="cache">Cache</button>
             <button role="tab" id="t-inspect" aria-controls="tp" aria-selected="true" data-cat="inspect">Inspect</button>
+            <button role="tab" id="t-security" aria-controls="tp" aria-selected="false" data-cat="security">Security</button>
             <button role="tab" id="t-page" aria-controls="tp" aria-selected="false" data-cat="page">Page</button>
             <button role="tab" id="t-network" aria-controls="tp" aria-selected="false" data-cat="network">Network</button>
             <button role="tab" id="t-ai" aria-controls="tp" aria-selected="false" data-cat="ai">AI</button>
             <button role="tab" id="t-utils" aria-controls="tp" aria-selected="false" data-cat="utils">Utils</button>
           </div>
           <div id="tp" class="tab-panel" role="tabpanel" aria-labelledby="t-inspect" tabindex="0">
-            <img id="tour-shot" src="img/panel-headers.webp" width="420" height="900" alt="devkit Inspect tab: headers and security grade." />
+            <img id="tour-shot" src="img/panel-overview.webp" width="420" height="900" alt="devkit Inspect tab: the page report, one row per area with its status." />
             <div class="tab-copy">
               <h3 id="tour-title-cat">Inspect</h3>
-              <p id="tour-lede">What the page ships, read from the page itself: stack, SEO, structured data, headers, Web Vitals, errors, links.</p>
+              <p id="tour-lede">What the page ships, read from the page itself: a page report, stack, SEO, structured data, Web Vitals, errors, links.</p>
               <ul id="tour-list" class="tool-list"></ul>
             </div>
           </div>
