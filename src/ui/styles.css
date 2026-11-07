@@ -1436,6 +1436,9 @@ button.report-row:hover .chevron {
 .cookie-flags {
   margin-top: 2px;
 }
+.checks .label .pill {
+  font-family: var(--sans);
+}
 .pill.t-good {
   color: var(--good);
 }

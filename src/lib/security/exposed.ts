@@ -136,7 +136,7 @@ export function judgeProbe(probe: Probe, r: ProbeResponse | { error: string }, b
     return { state: "blocked", level: "info", detail: `HTTP ${r.status}: denied (it may or may not exist)` };
   if (goodWhenFound)
     return { state: "absent", level: "info", detail: `HTTP ${r.status}: no security.txt, researchers have no published contact` };
-  return { state: "absent", level: "good", detail: `HTTP ${r.status}: not served` };
+  return { state: "absent", level: "good", detail: `HTTP ${r.status}` };
 }
 
 /** A path no site has, to learn what the server answers for unknown URLs. */
