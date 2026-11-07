@@ -227,6 +227,38 @@ try {
   check("cookie editor lists the cookie", t.includes("session") && t.includes("abc123"));
   check("cookie audit: session cookie readable by JS", t.includes("readable by JS") && t.includes("1 risky"));
 
+  await site.evaluate(async () => {
+    await new Promise((done, fail) => {
+      const req = indexedDB.open("devkit-e2e-db", 2);
+      req.onupgradeneeded = () => req.result.createObjectStore("items");
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("items", "readwrite");
+        for (let i = 0; i < 3; i++) tx.objectStore("items").put({ i }, i);
+        tx.oncomplete = () => {
+          db.close();
+          done();
+        };
+      };
+      req.onerror = () => fail(req.error);
+    });
+    const cache = await caches.open("devkit-e2e-cache");
+    await cache.put("/cached.json", new Response("x".repeat(2048), { headers: { "content-length": "2048" } }));
+  });
+  await open("Cache", "Storage usage");
+  await panel.waitForTimeout(800);
+  t = await text();
+  check(
+    "storage usage: quota, IndexedDB records and Cache Storage entries",
+    /Quota for this site/.test(t) &&
+      t.includes("devkit-e2e-db") &&
+      t.includes("items: 3 records") &&
+      t.includes("devkit-e2e-cache") &&
+      /1 entry · 2\.00 KB/.test(t),
+    t.match(/items: [^\n]*/)?.[0],
+  );
+  check("storage usage: localStorage key sized", t.includes("devkit-test"));
+
   await open("Cache", "Cache actions");
   await site.evaluate(() => {
     window.__devkitMarker = true;

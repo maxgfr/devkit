@@ -5,6 +5,7 @@ import { ElementPicker } from "./element";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
+import { StorageUsage } from "./usage";
 import { Color, Cron, Diff, Encode, Hash, Ids, Json, Jwt, Qr, Regex, Time, UrlTool } from "./utils";
 
 const Ask = lazy(() => import("./ai").then((m) => ({ default: m.Ask })));
@@ -15,6 +16,7 @@ export type PanelProps = { params?: Record<string, string> };
 
 export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   "cache-actions": CacheActions,
+  usage: StorageUsage,
   "site-data": SiteData,
   cookies: Cookies,
   storage: Storage,

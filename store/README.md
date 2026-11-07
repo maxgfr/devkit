@@ -41,6 +41,7 @@ CACHE & STORAGE
 • Turn the HTTP cache off for one tab
 • Edit cookies, localStorage and sessionStorage in place; export and import cookies as JSON; flag audit of risky cookies (no Secure, readable session cookies, SameSite=None, long expiry)
 • Unregister service workers
+• Storage usage: quota, IndexedDB databases and record counts, Cache Storage sizes, OPFS, the largest Web Storage keys, service workers
 
 INSPECT
 • Tech stack detection (frameworks, CMS, analytics, CDN, server)

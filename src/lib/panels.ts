@@ -21,6 +21,14 @@ export const PANELS: PanelDef[] = [
     keywords: "reload clear",
   },
   {
+    id: "usage",
+    category: "cache",
+    title: "Storage usage",
+    short: "Usage",
+    description: "How much this site stores: quota, IndexedDB, Cache Storage, Web Storage, cookies",
+    keywords: "storage quota disk size space bytes gb mb indexeddb cache storage opfs persist service worker how much",
+  },
+  {
     id: "site-data",
     category: "cache",
     title: "Clear site data",
