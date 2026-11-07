@@ -802,6 +802,9 @@ table.kv td {
   display: flex;
   flex-direction: column;
 }
+table.kv.prose td {
+  font-family: var(--sans);
+}
 .options-head {
   gap: 10px;
   padding-bottom: 18px;

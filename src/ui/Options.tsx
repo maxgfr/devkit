@@ -27,7 +27,7 @@ function Permissions() {
   const sites = (perms.data?.origins ?? []).filter((o) => o !== ALL_SITES);
   return (
     <Section title="Permissions" hint="devkit asks for each permission the first time a tool needs it. You can grant or revoke them here.">
-      <table className="kv">
+      <table className="kv prose">
         <tbody>
           <tr>
             <th>Access to all sites</th>

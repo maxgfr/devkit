@@ -487,7 +487,7 @@ export function Headers() {
       {sec && headers.data ? (
         <>
           <Section
-            title="Security"
+            title="Security headers"
             actions={
               <Button size="small" onClick={headers.run}>
                 Refresh
@@ -612,7 +612,7 @@ export function Perf() {
             <div className="small muted">
               Long tasks (main thread blocked over 50 ms):{" "}
               <span className={`viz-num${p.longTasks.total > 300 ? " t-warn" : ""}`}>
-                {p.longTasks.count} · {msText(p.longTasks.total)}
+                {p.longTasks.count ? `${p.longTasks.count} · ${msText(p.longTasks.total)}` : "none"}
               </span>
             </div>
           </Section>
@@ -962,7 +962,7 @@ export function Links() {
             </Button>
           )
         }
-        hint={`Same-page anchors are skipped. Requests go from devkit without cookies, 6 at a time.${page.origin ? "" : ""}`}
+        hint="Same-page anchors are skipped. Requests go from devkit without cookies, 6 at a time."
       >
         {results.length ? (
           <>
