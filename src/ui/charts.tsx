@@ -45,7 +45,7 @@ export function StatusIcon({ level, label }: { level: Level | "none"; label?: st
         <path d="M4 4l4 4M8 4l-4 4" {...ink} />
       </>
     ) : (
-      <circle cx="6" cy="6" r="4.6" fill="none" stroke="var(--viz-other)" strokeWidth="1.6" />
+      <circle cx="6" cy="6" r="4.6" fill="none" stroke="var(--fg-3)" strokeWidth="1.6" />
     );
   return label ? (
     <svg className="status-icon" width="12" height="12" viewBox="0 0 12 12" role="img" aria-label={label}>

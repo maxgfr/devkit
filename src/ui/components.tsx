@@ -1,5 +1,6 @@
 import { Component, createContext, type ReactNode, useCallback, useContext, useState } from "react";
 import type { Level } from "../lib/headers";
+import { LEVEL_TEXT, StatusIcon } from "./charts";
 
 export function Button({
   variant,
@@ -57,8 +58,10 @@ export function Notice({ kind = "info", children }: { kind?: "info" | "warn" | "
   );
 }
 
+/** Status mark: a distinct shape per level (circle, triangle, square, ring), so it never relies on color alone. */
 export function Dot({ level }: { level: Level | "error" }) {
-  return <span className={`dot ${level}`} role="img" aria-label={level} />;
+  const l = level === "error" ? "bad" : level;
+  return <StatusIcon level={l} label={LEVEL_TEXT[l]} />;
 }
 
 export function Checks({ checks }: { checks: { id: string; label: string; level: Level; detail: string }[] }) {

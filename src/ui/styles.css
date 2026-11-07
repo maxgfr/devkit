@@ -374,8 +374,8 @@ label.check {
 }
 .checks li {
   display: grid;
-  grid-template-columns: 8px 1fr;
-  gap: 1px 10px;
+  grid-template-columns: 12px 1fr;
+  gap: 1px 8px;
   padding: 7px 10px;
   background: var(--bg-2);
   align-items: baseline;
@@ -385,7 +385,7 @@ label.check {
 }
 @container (min-width: 520px) {
   .checks li {
-    grid-template-columns: 8px minmax(150px, 32%) 1fr;
+    grid-template-columns: 12px minmax(150px, 32%) 1fr;
   }
   .checks li .detail {
     grid-column: auto;
@@ -397,27 +397,6 @@ label.check {
 .checks li .detail {
   color: var(--fg-2);
   overflow-wrap: anywhere;
-}
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-  background: var(--info);
-  transform: translateY(-1px);
-}
-.dot.good {
-  background: var(--good);
-}
-.dot.warn {
-  background: var(--warn);
-}
-.dot.bad,
-.dot.error {
-  background: var(--bad);
-}
-.dot.info {
-  background: var(--fg-3);
 }
 .t-good {
   color: var(--good);
@@ -862,6 +841,11 @@ table.kv td {
   flex: none;
   display: inline-block;
   vertical-align: -1px;
+}
+.checks li > .status-icon,
+.csp-findings li > .status-icon {
+  align-self: start;
+  margin-top: 3px;
 }
 .viz-key {
   width: 10px;
@@ -1576,7 +1560,7 @@ kbd {
 }
 .csp-findings li {
   display: grid;
-  grid-template-columns: 8px 1fr;
+  grid-template-columns: 12px 1fr;
   gap: 8px;
   align-items: baseline;
   color: var(--fg-2);
