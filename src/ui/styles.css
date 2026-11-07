@@ -1331,137 +1331,156 @@ button.report-row:hover .chevron {
 [id^="jsonld-block-"] {
   scroll-margin-top: 96px;
 }
-||||||| parent of bffdd54 (feat(security): Security tab with secrets, exposed files, third parties and CSP panels)
 
-/* Security tab */
-.secret {
+/* Element picker */
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--fg-2);
+}
+.el-intro {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--fg-2);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 9px 0;
+  gap: 2px;
 }
-.secret-value {
-  align-self: flex-start;
+.el-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.el-shot {
+  display: block;
   max-width: 100%;
-  padding: 2px 6px;
+  max-height: 180px;
+  margin: 0 auto;
+  object-fit: contain;
+  border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--bg-3);
-  overflow-wrap: anywhere;
 }
-.secret-where {
-  list-style: none;
-  margin: 2px 0 0;
-  padding: 0;
+.el-title {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
-.secret-where li {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-}
-.secret > .btn.ghost {
-  align-self: flex-start;
-  padding-left: 0;
+.el-comp {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 650;
   color: var(--accent);
 }
-.meter {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--bg-3);
-  overflow: hidden;
-  margin: 4px 0 2px;
-}
-.meter .bar {
-  height: 100%;
-  border-radius: 3px;
-}
-.meter .bar.third {
-  background: var(--fg-3);
-}
-.sites li {
-  padding: 7px 0;
-}
-.csp {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  background: var(--line);
-}
-.csp > li {
-  background: var(--bg-2);
-  padding: 7px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.csp-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  align-items: baseline;
-}
-.csp-values {
-  color: var(--fg-2);
-  overflow-wrap: anywhere;
+.el-tag {
+  color: var(--fg);
   min-width: 0;
 }
-.csp-findings {
+.el-title .pill {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.el-source {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.el-source code {
+  font-weight: 600;
+  color: var(--fg);
+}
+.el-nosource {
+  margin: 0;
+}
+.el-crumbs ol {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+.el-crumbs li {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.el-crumbs li + li::before {
+  content: "›";
+  color: var(--fg-3);
+  padding: 0 2px;
+}
+.el-crumb {
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fg-2);
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.el-crumb:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg);
+}
+.el-crumb[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+  cursor: default;
+}
+.el-note {
+  font-family: var(--sans);
+  font-size: 13px;
+  min-height: 64px;
+}
+.el-stack {
+  margin: 0;
+  padding-left: 22px;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.csp-findings li {
-  display: grid;
-  grid-template-columns: 8px 1fr;
-  gap: 8px;
-  align-items: baseline;
+.el-stack li {
+  display: list-item;
+}
+.el-stack li::marker {
+  color: var(--fg-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.el-stack-name {
+  font-weight: 600;
+  margin-right: 6px;
+}
+.el-stack li .pill {
+  margin-right: 6px;
+}
+.el-stack-src {
+  display: block;
+  color: var(--fg-3);
+  font-size: 11.5px;
+}
+.el-props > summary {
+  cursor: pointer;
   color: var(--fg-2);
 }
-.csp-findings b {
-  color: var(--fg);
-}
-.cookie-flags {
-  margin-top: 2px;
-}
-.checks .label .pill {
-  font-family: var(--sans);
-}
-.pill.t-good {
-  color: var(--good);
-}
-.pill.t-warn {
-  color: var(--warn);
-}
-.pill.t-bad {
-  color: var(--bad);
-}
-/* Seven tabs: tighter tab padding so the bar fits down to 360 px. */
-@media (max-width: 440px) {
-  .tabbar {
-    padding: 0 4px;
-    gap: 0;
-  }
-  .tabbar button {
-    padding-left: 8px;
-    padding-right: 8px;
-  }
-}
-@media (max-width: 380px) {
-  .tabbar button {
-    padding-left: 6px;
-    padding-right: 6px;
-  }
+.el-props .tree {
+  margin-top: 4px;
 }

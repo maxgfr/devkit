@@ -357,6 +357,13 @@ export function cropRegion(
   return { sx: x0, sy: y0, sw: x1 - x0, sh: y1 - y0 };
 }
 
+/** False when a capture cannot be the page's viewport (another shape: device emulation, a resize in between). */
+export function captureMatches(viewport: { width: number; height: number }, image: { width: number; height: number }): boolean {
+  if (!viewport.width || !viewport.height || !image.width || !image.height) return false;
+  const a = viewport.width / viewport.height;
+  return Math.abs(image.width / image.height - a) <= a * 0.03;
+}
+
 /* Markdown for a coding agent */
 
 export interface ElementError {

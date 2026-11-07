@@ -21,7 +21,7 @@ const DEFAULT_PANEL: Record<Category, string> = {
   cache: "cache-actions",
   inspect: "overview",
   security: "headers",
-  page: "page-tools",
+  page: "element",
   network: "rules",
   ai: "ask",
   utils: "json",

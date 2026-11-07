@@ -3,6 +3,7 @@ import { renderContext } from "../src/lib/ai/context";
 import {
   buildElementMarkdown,
   buildLocator,
+  captureMatches,
   cropRegion,
   type ElementInfo,
   firstUserFrame,
@@ -190,6 +191,10 @@ describe("cropRegion", () => {
       sw: 56,
       sh: 36,
     });
+  });
+  it("refuses a capture of another shape than the viewport", () => {
+    expect(captureMatches({ width: 1200, height: 800 }, { width: 2400, height: 1600 })).toBe(true);
+    expect(captureMatches({ width: 1200, height: 800 }, { width: 594, height: 713 })).toBe(false);
   });
   it("clips to the image and gives up off screen", () => {
     expect(cropRegion({ x: -50, y: 580, width: 100, height: 100 }, { width: 800 }, { width: 800, height: 600 }, 0)).toEqual({

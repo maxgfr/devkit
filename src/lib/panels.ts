@@ -166,6 +166,14 @@ export const PANELS: PanelDef[] = [
   },
 
   {
+    id: "element",
+    category: "page",
+    title: "Element picker",
+    short: "Element",
+    description: "Pick an element, copy its component, source and styles for a coding agent",
+    keywords: "inspect element react vue svelte angular component props source selector locator agent claude cursor",
+  },
+  {
     id: "page-tools",
     category: "page",
     title: "Page tools",

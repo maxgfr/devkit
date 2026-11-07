@@ -1,6 +1,7 @@
 import { lazy, type ComponentType } from "react";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { A11y, Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
+import { ElementPicker } from "./element";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -32,6 +33,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   exposed: Exposed,
   "third-parties": ThirdParties,
   csp: Csp,
+  element: ElementPicker,
   "page-tools": PageTools,
   emulation: Emulation,
   viewport: Viewport,
