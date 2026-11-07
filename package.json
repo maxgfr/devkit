@@ -11,6 +11,7 @@
     "zip": "wxt zip",
     "postinstall": "wxt prepare",
     "catalog": "llm-models catalog --npm callable --require openai,anthropic,google,mistral --out public/models.json",
+    "vuln-db": "node scripts/vuln-db.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
