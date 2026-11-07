@@ -6,6 +6,11 @@ Web Vitals, errors, links…), rewrite requests, a dozen utilities, and **AI ana
 with your own model** through [llm-connect](https://www.npmjs.com/package/llm-connect) and
 [llm-models](https://www.npmjs.com/package/llm-models).
 
+Every panel that finds a problem has **Copy for agent**: a Markdown report a coding agent (Claude Code,
+Cursor, Copilot…) can act on, with what is wrong, where (selector, JSON path, header, script, cookie
+name), the exact fix and how to check it. Overview copies **one fix list for the whole page**. Secrets
+stay masked and cookie values are left out.
+
 [Chrome Web Store](https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba) · Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`) · [Privacy policy](https://maxgfr.github.io/devkit/privacy.html).
 
 ## Install
