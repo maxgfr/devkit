@@ -1,4 +1,4 @@
-// devkit site: Fig. 1 leaders, the palette demo over the real command list, the tab tour, copy buttons.
+// devkit site: Fig. 1 leaders, the palette demo over the real command list, the tab tour.
 const root = document.documentElement;
 root.classList.add("js", "pre");
 
@@ -19,24 +19,6 @@ if (fig && "IntersectionObserver" in window) {
   io.observe(fig);
 } else {
   root.classList.remove("pre");
-}
-
-/* Copy buttons */
-for (const box of document.querySelectorAll("[data-copy]")) {
-  const button = box.querySelector(".copy");
-  button?.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(box.dataset.copy);
-      button.textContent = "Copied";
-      button.dataset.done = "";
-      setTimeout(() => {
-        button.textContent = "Copy";
-        delete button.dataset.done;
-      }, 1400);
-    } catch {
-      button.textContent = "Select and copy";
-    }
-  });
 }
 
 const commandsReady = fetch("commands.json").then((r) => r.json());
@@ -136,12 +118,36 @@ if (input) {
 
 /* Tour */
 const TOUR = {
-  cache: { shot: "panel-cache", alt: "devkit Cache tab: cache and storage actions.", lede: "Clear exactly what you mean to clear, for this origin only, then reload. Edit cookies and Web Storage in place." },
-  inspect: { shot: "panel-overview", alt: "devkit Inspect tab: the page report, one row per area with its status.", lede: "What the page ships, read from the page itself: a page report, stack, SEO, structured data, Web Vitals, errors, links." },
-  security: { shot: "panel-security", alt: "devkit Security tab: a Stripe live secret key found in an inline script, masked.", lede: "What an attacker would look at first: header grade, secrets shipped to the browser, source maps and exposed files, third parties, CSP." },
-  page: { shot: "panel-page", alt: "devkit Page tab: emulation of color scheme, motion, CPU and network.", lede: "Pick an element and hand its component, file:line, props and styles to your coding agent. Then bend the page: edit it, outline it, strip its CSS, emulate media and slow networks, capture it." },
-  network: { shot: "panel-network", alt: "devkit Network tab: local, staging and prod environments.", lede: "Rewrite requests with Chrome's own rule engine, and jump between local, staging and prod on the same path." },
-  ai: { shot: "panel-ai", alt: "devkit AI tab: a structured data review by Claude.", lede: "Analyses and chat with the model you choose, fed with the data the other tabs collect." },
+  cache: {
+    shot: "panel-usage",
+    alt: "devkit Cache tab, Storage usage: 2.72 MB on disk split between IndexedDB and Cache Storage, with each database, cache and Web Storage key.",
+    lede: "See what the site keeps on your disk, from IndexedDB to Cache Storage, then clear exactly what you mean to clear, for this origin only. Edit cookies and Web Storage in place.",
+  },
+  inspect: {
+    shot: "panel-overview",
+    alt: "devkit Inspect tab: the page report, one row per area with its status.",
+    lede: "What the page ships, read from the page itself: a page report, stack, SEO, structured data, Web Vitals, slow interactions, an axe-core accessibility audit, errors, links.",
+  },
+  security: {
+    shot: "panel-security",
+    alt: "devkit Security tab: a Stripe live secret key found in an inline script, masked.",
+    lede: "What an attacker would look at first: header grade, secrets shipped to the browser, source maps and exposed files, libraries with known CVEs, third parties, CSP.",
+  },
+  page: {
+    shot: "panel-page",
+    alt: "devkit Page tab, Element picker: a Save button traced to its React component and file:line, with a note ready to copy for a coding agent.",
+    lede: "Pick an element and hand its component, file:line, props and styles to your coding agent. Then measure it, grab the page's assets, edit it, emulate media and slow networks, capture it.",
+  },
+  network: {
+    shot: "panel-network",
+    alt: "devkit Network tab, Environments: you are on local, with one click to the same path on staging or prod.",
+    lede: "Rewrite requests with Chrome's own rule engine, mock API responses, and jump between local, staging and prod on the same path.",
+  },
+  ai: {
+    shot: "panel-ai",
+    alt: "devkit AI tab: a structured data review by Claude.",
+    lede: "Analyses and chat with the model you choose, fed with the data the other tabs collect, plus a bug report your coding agent can act on.",
+  },
   utils: { shot: "panel-utils", alt: "devkit Utils tab: JSON converted to TypeScript types.", lede: "The small converters you otherwise paste into random websites, offline and private." },
 };
 

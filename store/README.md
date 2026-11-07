@@ -9,7 +9,7 @@ Listing: https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkc
 - `icon-128.png`: store icon (same as the extension's).
 - Privacy policy: https://maxgfr.github.io/devkit/privacy.html
 
-Regenerate the images with `pnpm store-assets` after updating the screenshots in `site/img/`.
+Regenerate the images with `pnpm store-assets` after updating the screenshots in `site/img/` (`pnpm build && pnpm site-shots` recaptures them from the real extension). The store API only takes the zip: upload these images by hand in the developer dashboard.
 
 ## 1. First submission (by hand, once — done)
 

@@ -19,7 +19,8 @@
     "lint:fix": "biome check --write .",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "e2e": "node tests/e2e/run.mjs",
-    "store-assets": "node scripts/store-assets.mjs"
+    "store-assets": "node scripts/store-assets.mjs",
+    "site-shots": "node scripts/site-shots.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.97",

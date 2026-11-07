@@ -238,45 +238,6 @@ h1 {
 .btn:active {
   transform: translateY(1px);
 }
-.cmd {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px 10px 14px;
-  border-radius: 8px;
-  background: var(--raise);
-  border: 1px solid var(--line);
-  min-width: 0;
-}
-.cmd code {
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none;
-  font-size: 13px;
-}
-.prompt {
-  color: var(--faint);
-  user-select: none;
-}
-.copy {
-  flex: none;
-  font: 600 13px var(--sans);
-  color: var(--text);
-  background: var(--raise-2);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 5px 11px;
-  cursor: pointer;
-}
-.copy:hover {
-  border-color: var(--muted);
-}
-.copy[data-done] {
-  color: var(--cyan);
-  border-color: var(--cyan);
-}
 
 /* Fig. 1 */
 .fig1 {
