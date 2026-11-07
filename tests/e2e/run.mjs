@@ -8,6 +8,8 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const here = dirname(fileURLToPath(import.meta.url));
+// The fake key server.mjs plants in the test page.
+const FAKE_STRIPE_KEY = ["sk", "live", "51DevkitE2eFake9Qw3Er7Ty2Ui8Op4As"].join("_");
 const source = resolve(process.argv[2] ?? join(here, "../../.output/chrome-mv3"));
 const shots = process.env.E2E_SHOTS ? resolve(process.env.E2E_SHOTS) : undefined;
 if (shots) mkdirSync(shots, { recursive: true });
@@ -117,11 +119,61 @@ try {
   check("JSON-LD: relative image reported", t.includes('image "/mug.jpg" is not an absolute URL'));
   await shot("inspect-jsonld");
 
-  await open("Inspect", "Headers");
+  await open("Security", "Headers");
   await panel.waitForTimeout(500);
   t = await text();
   check("headers: grade + version leak", /x-powered-by: Express\/4\.18\.2/.test(t) && /\d+\/100/.test(t), t.match(/\d+\/100/)?.[0]);
   await shot("inspect-headers");
+
+  // Security
+  await open("Security", "Secrets");
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check(
+    "secrets: fake Stripe live key found in an inline script, masked",
+    t.includes("Stripe live secret key") &&
+      /inline script #\d+/.test(t) &&
+      t.includes(`sk_l…${FAKE_STRIPE_KEY.slice(-4)}`) &&
+      !t.includes(FAKE_STRIPE_KEY),
+  );
+  check(
+    "secrets: same-origin script fetched, third-party one skipped",
+    /1 third-party script not fetched/.test(t),
+    t.match(/Scripts:[^\n]*/)?.[0],
+  );
+  await shot("security-secrets");
+
+  await open("Security", "Source maps");
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check("source maps: app.js map reachable with its sources", /app\.js[\s\S]*Map reachable[^\n]*original sources/.test(t));
+  await panel.getByRole("button", { name: /Probe \d+ paths/ }).click();
+  await panel.waitForTimeout(1500);
+  t = await text();
+  check(
+    "exposed files: .git/HEAD exposed, nothing else on a 404-for-everything server",
+    /10\/10 probed · 1 exposed/.test(t) && /\.git\/HEAD\s+exposed/.test(t) && /\/\.env\s+not served/.test(t),
+    t.match(/\d+\/\d+ probed[^\n]*/)?.[0],
+  );
+  await shot("security-exposed");
+
+  await open("Security", "Third parties");
+  await panel.waitForTimeout(500);
+  t = await text();
+  check(
+    "third parties: cross-origin script without integrity",
+    t.includes("Cross-origin script without integrity") && t.includes("localhost"),
+  );
+  await shot("security-third-parties");
+
+  await open("Security", "CSP");
+  await panel.waitForTimeout(800);
+  t = await text();
+  check(
+    "CSP: unsafe-inline and wildcard flagged, starter policy lists the vendor origin",
+    t.includes("'unsafe-inline' without a nonce or hash") && t.includes("Wildcard *") && /script-src 'self' http:\/\/localhost:\d+/.test(t),
+  );
+  await shot("security-csp");
 
   await open("Inspect", "Performance");
   t = await text();
@@ -173,6 +225,7 @@ try {
   await open("Cache", "Cookies");
   t = await text();
   check("cookie editor lists the cookie", t.includes("session") && t.includes("abc123"));
+  check("cookie audit: session cookie readable by JS", t.includes("readable by JS") && t.includes("1 risky"));
 
   await open("Cache", "Cache actions");
   await site.evaluate(() => {

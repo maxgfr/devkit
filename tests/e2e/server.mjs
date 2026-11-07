@@ -1,6 +1,10 @@
 import http from "node:http";
 
-const page = (base) => `<!doctype html>
+// Fake credential planted for the secrets scanner, assembled at runtime so the repository never holds
+// a string that secret scanners would take for a real key.
+const FAKE_STRIPE_KEY = ["sk", "live", "51DevkitE2eFake9Qw3Er7Ty2Ui8Op4As"].join("_");
+
+const page = (base, port) => `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Acme Mug – devkit test page</title>
@@ -12,6 +16,9 @@ const page = (base) => `<!doctype html>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Acme Mug","image":"/mug.jpg","offers":{"@type":"Offer","price":"€12,50","priceCurrency":"EUR"}}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"},]}</script>
 <script>window.__NEXT_DATA__ = {}; setTimeout(() => { throw new Error("startup error from test page"); }, 50);</script>
+<script>window.__ENV__ = { STRIPE_KEY: "${FAKE_STRIPE_KEY}", API_URL: "/api" };</script>
+<script src="/app.js"></script>
+<script src="http://localhost:${port}/vendor.js"></script>
 </head><body>
 <h1>Acme Mug</h1><h2>Details</h2><h4>Skipped level</h4>
 <p class="px-4 py-2 text-sm">The best mug. ${"Lorem ipsum dolor sit amet. ".repeat(40)}</p>
@@ -52,12 +59,22 @@ const server = http.createServer((req, res) => {
       "x-powered-by": "Express/4.18.2",
       "cache-control": "no-cache",
     });
-    return res.end(page(base));
+    return res.end(page(base, req.socket.localPort));
   }
   if (url.pathname === "/echo") {
     res.writeHead(200, { "content-type": "application/json", ...cors });
     return res.end(JSON.stringify(req.headers));
   }
+  if (url.pathname === "/app.js")
+    return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__app = 1;\n//# sourceMappingURL=app.js.map\n");
+  if (url.pathname === "/app.js.map")
+    return res
+      .writeHead(200, { "content-type": "application/json" })
+      .end(
+        JSON.stringify({ version: 3, file: "app.js", sources: ["src/app.ts"], sourcesContent: ["window.__app = 1;"], mappings: "AAAA" }),
+      );
+  if (url.pathname === "/vendor.js") return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__vendor = 1;");
+  if (url.pathname === "/.git/HEAD") return res.writeHead(200, { "content-type": "text/plain" }).end("ref: refs/heads/main\n");
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
     return res.writeHead(200, { "content-type": "text/plain" }).end(`User-agent: *\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`);
