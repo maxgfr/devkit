@@ -199,6 +199,21 @@ export const PANELS: PanelDef[] = [
     keywords: "inspect element react vue svelte angular component props source selector locator agent claude cursor",
   },
   {
+    id: "measure",
+    category: "page",
+    title: "Measure distances",
+    short: "Measure",
+    description: "Box model, spacing between two elements, drag to measure an area",
+    keywords: "ruler spacing distance gap padding margin box model px pixel dimensions visbug page ruler measure",
+  },
+  {
+    id: "assets",
+    category: "page",
+    title: "Assets",
+    description: "Images, SVG, icons and backgrounds: sizes, bytes, alt text, download as zip",
+    keywords: "images img svg icons favicon background poster media download zip alt oversized srcset",
+  },
+  {
     id: "page-tools",
     category: "page",
     title: "Page tools",

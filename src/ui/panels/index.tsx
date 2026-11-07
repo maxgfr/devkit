@@ -4,6 +4,8 @@ import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
 import { Mocks } from "./mocks";
+import { Assets } from "./assets";
+import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { Responsiveness } from "./responsiveness";
@@ -43,6 +45,8 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   libraries: VulnerableLibraries,
   csp: Csp,
   element: ElementPicker,
+  measure: Measure,
+  assets: Assets,
   "page-tools": PageTools,
   emulation: Emulation,
   viewport: Viewport,

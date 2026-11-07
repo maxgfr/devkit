@@ -258,6 +258,19 @@ export const ACTIONS: ActionDef[] = [
     },
   },
   {
+    id: "measure-distances",
+    title: "Measure distances",
+    description: "Hover for the box model, click two elements for the gap between them, drag for an area",
+    category: "page",
+    keywords: "ruler spacing distance gap padding margin box model px pixel dimensions",
+    needsPage: true,
+    run: async ({ tab }) => {
+      browser.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+      await browser.storage.session.set({ [PENDING_ROUTE_KEY]: { panel: "measure", params: { start: "1", at: String(Date.now()) } } });
+      return { message: "Hover the page to measure (Esc exits)." };
+    },
+  },
+  {
     id: "copy-markdown-link",
     title: "Copy as Markdown link",
     description: "[Page title](url) on the clipboard",

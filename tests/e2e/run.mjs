@@ -510,6 +510,82 @@ try {
   await panel.waitForTimeout(600);
   check("element picker: breadcrumb selects the parent", (await panel.locator(".el-tag").innerText()) === "section.toolbar");
 
+  // Measure distances: hover, lock one element, freeze on a second, read the gap in the panel.
+  await panel.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (value) => {
+      window.__copied.push(value);
+    };
+  });
+  const lastCopied = () => panel.evaluate(() => window.__copied.at(-1) ?? "");
+  await open("Page", "Measure distances");
+  const measureOn = () => site.evaluate(() => Boolean(document.querySelector("devkit-measure")));
+  await panel.getByRole("button", { name: "Start measuring" }).click();
+  await site.waitForFunction(() => Boolean(document.querySelector("devkit-measure")), null, { timeout: 5000 }).catch(() => undefined);
+  check("measure: overlay injected", await measureOn());
+  await site.hover("#m-a");
+  await panel.waitForTimeout(400);
+  t = await text();
+  check("measure: hover shows the box model", t.includes("Box model") && t.includes("#m-a") && t.includes("120 × 40"));
+  await site.click("#m-a");
+  await site.hover("#m-b");
+  await site.click("#m-b");
+  await panel.waitForTimeout(500);
+  t = await text();
+  check(
+    "measure: gap and sizes of two elements",
+    /Horizontal gap\s*24px/.test(t) && t.includes("Frozen") && /#m-a\s*120 × 40/.test(t) && /#m-b\s*120 × 40/.test(t),
+    t.match(/Horizontal gap[^\n]*\n?[^\n]*/)?.[0],
+  );
+  check("measure: the page never saw the clicks", (await site.evaluate(() => window.__measureClicks ?? 0)) === 0);
+  await panel.getByLabel("Expected").fill("16");
+  await panel.getByRole("button", { name: "Copy for agent" }).click();
+  await panel.waitForTimeout(200);
+  check(
+    "measure: copy for agent states the gap and the expected value",
+    (await lastCopied()).includes("The horizontal gap between `#m-a` and `#m-b` is 24px; expected 16px (8px too wide)."),
+    (await lastCopied()).split("\n")[2],
+  );
+  await site.keyboard.press("Escape");
+  await panel.waitForTimeout(400);
+  check("measure: Esc removes the overlay, the panel keeps the result", !(await measureOn()) && (await text()).includes("Last measured"));
+  await shot("page-measure");
+
+  // Assets
+  await open("Page", "Assets");
+  await panel.waitForSelector(".as-item", { timeout: 8000 }).catch(() => undefined);
+  await panel.waitForTimeout(400);
+  const assetNames = await panel.locator(".as-item .as-name").allInnerTexts();
+  check(
+    "assets: images, inline SVG, background, manifest icon and social image listed",
+    ["mug.jpg", "big.png", "star.svg", "tile.png", "i.png", "og.png"].every((n) => assetNames.includes(n)) && assetNames.length === 6,
+    assetNames.join(", "),
+  );
+  const row = (name) => panel.locator(".as-item", { has: panel.locator(".as-name", { hasText: name }) });
+  const bigRow = await row("big.png").innerText();
+  check(
+    "assets: oversized image flagged",
+    bigRow.includes("800 × 800 → 100 × 100") && bigRow.includes("Served 8× larger than displayed"),
+    bigRow.replace(/\n/g, " | "),
+  );
+  check("assets: missing alt flagged", (await row("mug.jpg").innerText()).includes("No alt"));
+  await panel.locator(".as-chip", { hasText: "No alt" }).click();
+  check("assets: missing alt filter", (await panel.locator(".as-item").count()) === 1);
+  await panel.locator(".as-chip", { hasText: "No alt" }).click();
+  await row("star.svg").getByRole("button", { name: "Copy SVG" }).click();
+  await panel.waitForTimeout(200);
+  const svg = await lastCopied();
+  check(
+    "assets: inline SVG markup copied",
+    svg.startsWith('<svg id="icon-star"') && svg.includes('aria-label="Star"') && svg.endsWith("</svg>"),
+  );
+  const zip = await Promise.all([
+    panel.waitForEvent("download", { timeout: 10_000 }).catch(() => null),
+    panel.getByRole("button", { name: "Download all as zip" }).click(),
+  ]).then(([d]) => d);
+  check("assets: download all as zip", Boolean(zip && /-assets\.zip$/.test(zip.suggestedFilename())), zip?.suggestedFilename());
+  await shot("page-assets");
+
   await open("Page", "Page tools");
   await action("Toggle element outlines");
   await panel.waitForTimeout(300);
@@ -848,6 +924,9 @@ try {
     reportItems.some((r) => r.startsWith("Copy a bug report")) && reportItems.some((r) => r.startsWith("Bug report")),
     reportItems.map((r) => r.split("\n")[0]).join(" | "),
   );
+  await popup.getByLabel("Search commands").fill("measure");
+  const measureFirst = await popup.getByRole("option").first().innerText();
+  check("palette finds the spacing ruler", /Measure distances/.test(measureFirst), measureFirst.split("\n")[0]);
 
   // Options
   const options = await context.newPage();

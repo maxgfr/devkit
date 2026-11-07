@@ -1,8 +1,45 @@
 import http from "node:http";
+import { deflateSync } from "node:zlib";
 
 // Fake credential planted for the secrets scanner, assembled at runtime so the repository never holds
 // a string that secret scanners would take for a real key.
 const FAKE_STRIPE_KEY = ["sk", "live", "51DevkitE2eFake9Qw3Er7Ty2Ui8Op4As"].join("_");
+
+// Solid-color PNGs for the Assets panel: an 800×800 photo shown at 100×100 (oversized), a background tile.
+const CRC = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc32 = (buf) => {
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+const chunk = (type, data) => {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([len, body, crc]);
+};
+const png = (w, h, [r, g, b]) => {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr.set([8, 2, 0, 0, 0], 8);
+  const row = Buffer.alloc(1 + w * 3);
+  for (let x = 0; x < w; x++) row.set([r, g, b], 1 + x * 3);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+};
+const IMAGES = { "/big.png": png(800, 800, [14, 116, 144]), "/tile.png": png(64, 64, [249, 204, 157]) };
 
 const page = (base, port) => `<!doctype html>
 <html lang="en"><head>
@@ -29,6 +66,10 @@ const page = (base, port) => `<!doctype html>
 <a href="/ok">ok link</a> <a href="/missing">broken link</a>
 <form><input name="email"><input name="first_name" placeholder="First name"><textarea name="message"></textarea><select name="country"><option value="">-</option><option value="fr">France</option></select></form>
 <p><button id="slow-btn" type="button">Slow button</button> <output id="slow-out"></output></p>
+<div id="spacing" style="display:flex;gap:24px;padding:16px;margin:12px 0"><div id="m-a" style="width:120px;height:40px;background:#e0f2fe"></div><div id="m-b" style="width:120px;height:40px;background:#fee2e2" onclick="window.__measureClicks = (window.__measureClicks || 0) + 1"></div></div>
+<img id="big" src="/big.png" alt="Mug, front view" width="100" height="100">
+<svg id="icon-star" width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="Star"><path d="M12 2l3 7h7l-5.5 4.5 2 7.5-6.5-4.5-6.5 4.5 2-7.5L2 9h7z" fill="#f59e0b"/></svg>
+<div id="hero" style="width:200px;height:60px;background:url(/tile.png) left top / 32px 32px repeat"></div>
 <div id="app"><section class="toolbar"><button id="save-btn" class="btn" type="button" onclick="window.__saveClicks = (window.__saveClicks || 0) + 1">Save changes</button></section></div>
 <section id="checkout"><label for="coupon">Coupon code</label> <input id="coupon" name="coupon"> <button id="order-btn" type="button">Place order</button> <a href="/?from=link">Next page</a></section>
 <script>
@@ -137,6 +178,8 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/.git/HEAD") return res.writeHead(200, { "content-type": "text/plain" }).end("ref: refs/heads/main\n");
   if (url.pathname === "/api/orders")
     return res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "payment provider unavailable" }));
+  if (IMAGES[url.pathname])
+    return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
     return res.writeHead(200, { "content-type": "text/plain" }).end(`User-agent: *\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`);
