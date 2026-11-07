@@ -374,6 +374,9 @@ export function Ask({ params }: { params?: Record<string, string> }) {
     if (action) runAction(action, undefined, params?.selection);
   }, [params, settings, capabilities, page.tab]);
 
+  // Leaving the panel drops the conversation: stop the stream too, so it does not keep spending tokens unseen.
+  useEffect(() => () => abort.current?.abort(), []);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on every new delta
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });

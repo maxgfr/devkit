@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchHeaders, type Level } from "../../lib/headers";
 import { collectSecretSources, collectSurface } from "../../lib/page/security";
 import { analyzeCsp, type CspFinding, type CspPolicy, parseCsp, starterCsp } from "../../lib/security/csp";
@@ -412,9 +412,22 @@ export function Exposed() {
     return () => abort.abort();
   }, [surface.data, page.origin, page.access]);
 
+  // The probe in progress; aborted when the page changes or the panel closes, so no request outlives what it reports on.
+  const current = useRef<AbortController | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset per page
+  useEffect(() => {
+    current.current?.abort();
+    current.current = null;
+    setProbing(null);
+    setProbes(null);
+    setBaseline("");
+  }, [page.tabId, page.origin]);
+  useEffect(() => () => current.current?.abort(), []);
+
   const probe = async () => {
     if (!page.origin) return;
     const ctrl = new AbortController();
+    current.current = ctrl;
     setProbing(ctrl);
     const results: (ProbeVerdict | null)[] = PROBES.map(() => null);
     setProbes([...results]);
@@ -428,13 +441,17 @@ export function Exposed() {
     };
     const path = baselinePath();
     const base = await read(path);
+    if (current.current !== ctrl) return;
     const baseResponse = "error" in base ? null : base;
     setBaseline(baseResponse ? `Unknown path ${path} answered HTTP ${baseResponse.status} (${bytes(baseResponse.text.length)}).` : "");
     await pool(PROBES, 3, ctrl.signal, async (p, i) => {
-      results[i] = judgeProbe(p, await read(p.path), baseResponse);
-      if (!ctrl.signal.aborted) setProbes([...results]);
+      const response = await read(p.path);
+      // Stopped mid-request: leave the path unprobed rather than report the abort as an error.
+      if (ctrl.signal.aborted) return;
+      results[i] = judgeProbe(p, response, baseResponse);
+      setProbes([...results]);
     });
-    setProbing(null);
+    if (current.current === ctrl) setProbing(null);
   };
 
   const referenced = maps.filter((m) => m.map);

@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
 import { runInTab } from "../../lib/inject";
@@ -912,10 +912,21 @@ export function Links() {
   const [results, setResults] = useState<LinkResult[]>([]);
   const [running, setRunning] = useState<AbortController | null>(null);
   const [onlyBad, setOnlyBad] = useState(true);
+  // The check in progress; replaced (and aborted) when the page changes or the panel closes.
+  const current = useRef<AbortController | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset per page
+  useEffect(() => {
+    current.current?.abort();
+    current.current = null;
+    setRunning(null);
+    setResults([]);
+  }, [page.tabId, page.url]);
+  useEffect(() => () => current.current?.abort(), []);
   const start = async () => {
     if (!(await ensurePermission({ origins: [ALL_SITES] }))) return toast("Checking links on other sites needs access to all sites.", true);
     const list = links.data ?? [];
     const ctrl = new AbortController();
+    current.current = ctrl;
     setRunning(ctrl);
     const state: LinkResult[] = list.map((l) => ({ href: l.href, text: l.text, status: "pending" }));
     setResults([...state]);
@@ -924,12 +935,14 @@ export function Links() {
       while (next < state.length && !ctrl.signal.aborted) {
         const i = next++;
         const r = await checkLink(state[i]!.href, ctrl.signal);
+        // Stopped mid-request: leave the link pending rather than report the abort as a failure.
+        if (ctrl.signal.aborted || current.current !== ctrl) return;
         state[i] = { ...state[i]!, ...r };
         setResults([...state]);
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
-    setRunning(null);
+    if (current.current === ctrl) setRunning(null);
   };
   const bad = results.filter((r) => r.status === "error" || (typeof r.status === "number" && r.status >= 400));
   const done = results.filter((r) => r.status !== "pending").length;
