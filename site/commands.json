@@ -104,6 +104,14 @@
     "keywords": "bug report issue repro reproduce steps jam ticket agent claude cursor playwright failed requests errors clipboard"
   },
   {
+    "id": "measure-distances",
+    "kind": "action",
+    "category": "page",
+    "title": "Measure distances",
+    "description": "Hover for the box model, click two elements for the gap between them, drag for an area",
+    "keywords": "ruler spacing distance gap padding margin box model px pixel dimensions"
+  },
+  {
     "id": "copy-markdown-link",
     "kind": "action",
     "category": "utils",
@@ -294,6 +302,22 @@
     "title": "Element picker",
     "description": "Pick an element, copy its component, source and styles for a coding agent",
     "keywords": "inspect element react vue svelte angular component props source selector locator agent claude cursor"
+  },
+  {
+    "id": "measure",
+    "kind": "panel",
+    "category": "page",
+    "title": "Measure distances",
+    "description": "Box model, spacing between two elements, drag to measure an area",
+    "keywords": "ruler spacing distance gap padding margin box model px pixel dimensions visbug page ruler measure"
+  },
+  {
+    "id": "assets",
+    "kind": "panel",
+    "category": "page",
+    "title": "Assets",
+    "description": "Images, SVG, icons and backgrounds: sizes, bytes, alt text, download as zip",
+    "keywords": "images img svg icons favicon background poster media download zip alt oversized srcset"
   },
   {
     "id": "page-tools",

@@ -66,6 +66,8 @@ SECURITY
 PAGE
 • Element picker for coding agents: click an element of the page and copy, as Markdown, its React, Vue, Svelte or Angular component stack with file and line (dev builds), props, a unique selector, a Playwright locator, trimmed HTML, the computed styles that matter and your note on what is wrong; plus a cropped screenshot of the element
 • Bug reports for coding agents and teammates, in one click: what happened, the steps you recorded (clicks, typing with values masked, Enter and Escape, navigations) and a Playwright test that replays them, console errors, failed and slow requests, browser and viewport, Web Vitals and the picked element, as Markdown or JSON. Keys and tokens are redacted, and nothing leaves your browser until you copy it
+• Spacing ruler: hover an element for its box model, click two elements for the distance between them, drag to measure an area, then copy the values or a note for your coding agent
+• Assets: every image, SVG, icon and background image of the page, with its displayed and real size (oversized files flagged), bytes, missing alt text, and a download of all of them as a zip
 • Design mode, element outlines, CSS off, JavaScript off for a site
 • Emulate dark/light, reduced motion, contrast, print, CPU and network throttling, vision deficiencies
 • Responsive window sizes, full-page screenshots, a form filler with plausible fake data
