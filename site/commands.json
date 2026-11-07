@@ -154,7 +154,7 @@
   {
     "id": "headers",
     "kind": "panel",
-    "category": "inspect",
+    "category": "security",
     "title": "Headers & security",
     "description": "Security grade, caching, raw response headers",
     "keywords": "csp hsts security headers cache-control"
@@ -214,6 +214,38 @@
     "title": "Open in external tools",
     "description": "PageSpeed, validators, SSL Labs, Wayback…",
     "keywords": "pagespeed lighthouse validator w3c ssl"
+  },
+  {
+    "id": "secrets",
+    "kind": "panel",
+    "category": "security",
+    "title": "Secrets scanner",
+    "description": "API keys, tokens and private keys shipped to the browser",
+    "keywords": "secret leak api key token credential aws stripe github jwt supabase firebase"
+  },
+  {
+    "id": "exposed",
+    "kind": "panel",
+    "category": "security",
+    "title": "Source maps & exposed files",
+    "description": "Reachable source maps, .git, .env and other files that should not be served",
+    "keywords": "sourcemap source map .git .env ds_store phpinfo security.txt"
+  },
+  {
+    "id": "third-parties",
+    "kind": "panel",
+    "category": "security",
+    "title": "Third parties & SRI",
+    "description": "Who the page loads from, integrity, mixed content, iframe sandbox",
+    "keywords": "third party sri subresource integrity crossorigin mixed content iframe sandbox domains"
+  },
+  {
+    "id": "csp",
+    "kind": "panel",
+    "category": "security",
+    "title": "CSP analyzer",
+    "description": "Content-Security-Policy directive by directive, and a starter policy",
+    "keywords": "content security policy csp nonce strict-dynamic unsafe-inline report-only"
   },
   {
     "id": "page-tools",

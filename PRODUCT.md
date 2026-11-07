@@ -26,7 +26,7 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 
 ## Capabilities and Constraints
 
-- Tabs: Cache, Inspect, Page, Network, AI, Utils, plus a DevTools panel. Full list in README.md.
+- Tabs: Cache, Inspect, Security, Page, Network, AI, Utils, plus a DevTools panel. Full list in README.md.
 - Install-time permissions: activeTab, scripting, storage, sidePanel, contextMenus, declarativeNetRequest, debugger (the last two cannot be optional in Chrome). browsingData, cookies, contentSettings and site access are optional and asked on first use.
 - AI cost is the user's own provider bill; devkit shows token counts and a cost estimate from llm-models prices.
 - Open decisions: license. The repository is public on GitHub, with the site on GitHub Pages.

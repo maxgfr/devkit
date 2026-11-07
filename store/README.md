@@ -39,17 +39,23 @@ devkit puts the tools a web developer keeps installing into one Chrome side pane
 CACHE & STORAGE
 • Hard reload, clear this site's cache, or a "fresh start" that clears every kind of site data for the origin and reloads
 • Turn the HTTP cache off for one tab
-• Edit cookies, localStorage and sessionStorage in place; export and import cookies as JSON
+• Edit cookies, localStorage and sessionStorage in place; export and import cookies as JSON; flag audit of risky cookies (no Secure, readable session cookies, SameSite=None, long expiry)
 • Unregister service workers
 
 INSPECT
 • Tech stack detection (frameworks, CMS, analytics, CDN, server)
 • SEO and meta: title and description lengths, canonical, robots, hreflang, Open Graph and Twitter cards, heading outline
 • Structured data (JSON-LD) analyzer: invalid JSON with its line and column, wrong prices, relative URLs, missing recommended fields
-• Response headers with a security grade (CSP, HSTS, framing, referrer policy, COOP/COEP, cookie flags) and what the caching headers do
 • Web Vitals and the heaviest resources
 • Console errors captured from page load, with a count on the toolbar badge
 • Link checker, robots.txt, sitemap and web app manifest checks, fonts and colors, quick accessibility hints
+
+SECURITY
+• Response headers with a security grade (CSP, HSTS, framing, referrer policy, COOP/COEP, cookie flags) and what the caching headers do
+• Secrets scanner: API keys, tokens and private keys shipped to the browser (AWS, Stripe, GitHub, Slack, OpenAI, Anthropic, SendGrid, JWTs…), masked until you reveal them, with where each was found
+• Source maps anyone can download, and an opt-in check of your own site for exposed .git, .env and similar files
+• Third parties: requests and bytes per site, scripts without subresource integrity, mixed content, iframes without sandbox
+• CSP analyzer, directive by directive, and a starter policy built from what the page loads
 
 PAGE
 • Design mode, element outlines, CSS off, JavaScript off for a site
@@ -95,7 +101,7 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | browsingData (optional) | Clears the cache, cookies and storage of the current site only, when asked. |
 | cookies (optional) | The cookie editor: list, edit, delete, export and import the current site's cookies. |
 | contentSettings (optional) | The "JavaScript off for this site" toggle. |
-| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, check its links, capture console errors from page load, and show environment ribbons. |
+| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, its own scripts and source maps (secrets and source map checks), check its links, capture console errors from page load, and show environment ribbons. |
 
 **Remote code**: No, I am not using remote code. All JavaScript is bundled in the package.
 
