@@ -13,9 +13,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -28,10 +28,11 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
       - run: pnpm zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: devkit-chrome
           path: .output/*.zip
+          include-hidden-files: true
 
   # Every push to main with a `feat`, `fix` or `perf` commit since the last tag ships a release:
   # GitHub release with the zip, then the Chrome Web Store once its variables and secrets are set.
@@ -48,11 +49,11 @@ jobs:
       # Secrets cannot be read in `if:`, so the store step checks this instead.
       CWS_READY: ${{ vars.CWS_EXTENSION_ID != '' && vars.CWS_PUBLISHER_ID != '' && secrets.CWS_CLIENT_ID != '' && secrets.CWS_CLIENT_SECRET != '' && secrets.CWS_REFRESH_TOKEN != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
