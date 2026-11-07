@@ -1879,3 +1879,148 @@ textarea.mock-body.invalid {
     display: none;
   }
 }
+/* Vulnerable libraries (src/ui/panels/libraries.tsx) ----------------------
+   Severity ramp red → orange → amber → gray, the same hue order in both
+   schemes; pill text keeps the --bad / --warn tokens for contrast and the
+   swatch carries the ramp color. */
+:root {
+  --sev-critical: #991b1b;
+  --sev-high: #ea580c;
+  --sev-medium: #a16207;
+  --sev-low: #8a91a0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sev-critical: #f87171;
+    --sev-high: #fb923c;
+    --sev-medium: #facc15;
+    --sev-low: #6b7280;
+  }
+}
+.lib-summary {
+  gap: 6px;
+}
+.lib-count {
+  font-size: 15px;
+  font-weight: 650;
+}
+.lib-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lib-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.lib-card.lib-ok,
+.lib-card.lib-unknown {
+  gap: 3px;
+  padding-block: 7px;
+}
+.lib-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.lib-head .status-icon {
+  flex: none;
+  align-self: center;
+}
+.lib-name {
+  font-weight: 650;
+}
+.lib-status {
+  text-align: right;
+}
+.lib-status.t-info {
+  color: var(--fg-2);
+}
+.lib-upgrade b {
+  font-weight: 650;
+}
+.lib-eol {
+  margin: 0;
+  color: var(--fg-2);
+}
+.lib-eol b {
+  color: var(--fg);
+}
+.lib-where {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lib-where li {
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+  align-items: baseline;
+}
+.lib-where .muted {
+  flex: none;
+}
+.lib-where .mono {
+  min-width: 0;
+}
+.lib-advs {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+}
+.lib-adv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.lib-adv-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+.lib-adv-summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.pill.sev {
+  text-transform: capitalize;
+  font-weight: 550;
+}
+.pill.sev .viz-key {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+.pill.sev-critical,
+.pill.sev-high {
+  color: var(--bad);
+}
+.pill.sev-medium {
+  color: var(--warn);
+}
+.lib-card > .row .btn.ghost {
+  padding-left: 0;
+  color: var(--accent);
+}

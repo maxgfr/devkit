@@ -19,6 +19,8 @@ const page = (base, port) => `<!doctype html>
 <script>window.__ENV__ = { STRIPE_KEY: "${FAKE_STRIPE_KEY}", API_URL: "/api" };</script>
 <script src="/app.js"></script>
 <script src="http://localhost:${port}/vendor.js"></script>
+<script src="/js/jquery-3.4.1.min.js"></script>
+<script src="/js/lodash.js"></script>
 </head><body>
 <h1>Acme Mug</h1><h2>Details</h2><h4>Skipped level</h4>
 <p class="px-4 py-2 text-sm">The best mug. ${"Lorem ipsum dolor sit amet. ".repeat(40)}</p>
@@ -88,6 +90,19 @@ const server = http.createServer((req, res) => {
       .writeHead(200, { "content-type": "application/json" })
       .end(
         JSON.stringify({ version: 3, file: "app.js", sources: ["src/app.ts"], sourcesContent: ["window.__app = 1;"], mappings: "AAAA" }),
+      );
+  // Stubs of an old jQuery (known advisories) and a current lodash (none) for the vulnerable libraries panel.
+  if (url.pathname === "/js/jquery-3.4.1.min.js")
+    return res
+      .writeHead(200, { "content-type": "text/javascript" })
+      .end(
+        '/*! jQuery v3.4.1 | (c) JS Foundation and other contributors | jquery.org/license */\nwindow.jQuery = { fn: { jquery: "3.4.1" } };\n',
+      );
+  if (url.pathname === "/js/lodash.js")
+    return res
+      .writeHead(200, { "content-type": "text/javascript" })
+      .end(
+        "/**\n * @license\n * Lodash <https://lodash.com/>\n */\n;(function () {\n  var VERSION = '4.18.1';\n  window._ = { VERSION: VERSION, runInContext: function () {} };\n})();\n",
       );
   if (url.pathname === "/vendor.js") return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__vendor = 1;");
   if (url.pathname === "/.git/HEAD") return res.writeHead(200, { "content-type": "text/plain" }).end("ref: refs/heads/main\n");

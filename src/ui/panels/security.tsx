@@ -34,7 +34,7 @@ interface Fetched {
 }
 
 /** GET `url` from devkit, reading at most `max` bytes of the body, with a timeout. */
-async function fetchCapped(url: string, max: number, signal?: AbortSignal, init: RequestInit = {}): Promise<Fetched> {
+export async function fetchCapped(url: string, max: number, signal?: AbortSignal, init: RequestInit = {}): Promise<Fetched> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   const onAbort = () => ctrl.abort();
@@ -85,7 +85,7 @@ async function fetchCapped(url: string, max: number, signal?: AbortSignal, init:
 }
 
 /** Runs `work` over `items`, `n` at a time, until done or aborted. */
-async function pool<T>(items: T[], n: number, signal: AbortSignal, work: (item: T, index: number) => Promise<void>) {
+export async function pool<T>(items: T[], n: number, signal: AbortSignal, work: (item: T, index: number) => Promise<void>) {
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(n, items.length) }, async () => {

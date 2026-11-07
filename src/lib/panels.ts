@@ -164,6 +164,15 @@ export const PANELS: PanelDef[] = [
     keywords: "third party sri subresource integrity crossorigin mixed content iframe sandbox domains",
   },
   {
+    id: "libraries",
+    category: "security",
+    title: "Vulnerable libraries",
+    short: "Libraries",
+    description: "Outdated jQuery, AngularJS, Bootstrap, lodash… with known CVEs, from the Retire.js database",
+    keywords:
+      "retire retire.js cve ghsa vulnerable outdated library libraries dependency jquery angularjs angular bootstrap lodash moment vue react handlebars dompurify end of life eol",
+  },
+  {
     id: "csp",
     category: "security",
     title: "CSP analyzer",

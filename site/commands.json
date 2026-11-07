@@ -256,6 +256,14 @@
     "keywords": "third party sri subresource integrity crossorigin mixed content iframe sandbox domains"
   },
   {
+    "id": "libraries",
+    "kind": "panel",
+    "category": "security",
+    "title": "Vulnerable libraries",
+    "description": "Outdated jQuery, AngularJS, Bootstrap, lodash… with known CVEs, from the Retire.js database",
+    "keywords": ""
+  },
+  {
     "id": "csp",
     "kind": "panel",
     "category": "security",

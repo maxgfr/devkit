@@ -166,6 +166,37 @@ try {
   );
   await shot("security-third-parties");
 
+  await open("Security", "Vulnerable libraries");
+  await panel.waitForTimeout(1200);
+  t = await text();
+  const jq = await panel
+    .locator(".lib-card", { hasText: "jQuery" })
+    .innerText()
+    .catch(() => "");
+  const lodash = await panel
+    .locator(".lib-card", { hasText: "Lodash" })
+    .innerText()
+    .catch(() => "");
+  check(
+    "vulnerable libraries: jQuery 3.4.1 flagged with CVE-2020-11022, seen as a global, a file name and a banner",
+    /jQuery\s+3\.4\.1/.test(jq) &&
+      jq.includes("CVE-2020-11022") &&
+      jq.includes("≥ 3.5.0") &&
+      jq.includes("window.jQuery.fn.jquery") &&
+      /file name\s+\/js\/jquery-3\.4\.1\.min\.js/.test(jq) &&
+      /file content\s+\/js\/jquery-3\.4\.1\.min\.js/.test(jq),
+    jq.split("\n").slice(0, 3).join(" | "),
+  );
+  check(
+    "vulnerable libraries: an up-to-date lodash 4.18.1 is not flagged",
+    /Lodash\s+4\.18\.1/.test(lodash) &&
+      lodash.includes("No known advisory") &&
+      !/CVE-/.test(lodash) &&
+      /1 vulnerable library\s+of 2 found/.test(t),
+    lodash.split("\n").slice(0, 2).join(" | "),
+  );
+  await shot("security-libraries");
+
   await open("Security", "CSP");
   await panel.waitForTimeout(800);
   t = await text();

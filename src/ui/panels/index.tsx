@@ -12,6 +12,7 @@ import { Color, Cron, Diff, Encode, Hash, Ids, Json, Jwt, Qr, Regex, Time, UrlTo
 const Ask = lazy(() => import("./ai").then((m) => ({ default: m.Ask })));
 const Models = lazy(() => import("./ai").then((m) => ({ default: m.Models })));
 const AiSettings = lazy(() => import("./ai").then((m) => ({ default: m.AiSettings })));
+const VulnerableLibraries = lazy(() => import("./libraries").then((m) => ({ default: m.VulnerableLibraries })));
 
 export type PanelProps = { params?: Record<string, string> };
 
@@ -35,6 +36,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   secrets: Secrets,
   exposed: Exposed,
   "third-parties": ThirdParties,
+  libraries: VulnerableLibraries,
   csp: Csp,
   element: ElementPicker,
   "page-tools": PageTools,
