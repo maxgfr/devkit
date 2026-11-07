@@ -86,6 +86,9 @@ export function ElementPicker({ params }: PanelProps) {
   const [withErrors, setWithErrors] = useStored<boolean>("elementWithErrors", false);
   const [allCrumbs, setAllCrumbs] = useState(false);
   const pickingTab = useRef<number | null>(null);
+  // The page a result belongs to: a pick that ends after the tab or URL changed is dropped.
+  const pageKey = useRef("");
+  pageKey.current = `${page.tabId}|${page.url}`;
   const autoPicked = useRef<string | null>(null);
 
   const tabId = page.tabId;
@@ -131,13 +134,16 @@ export function ElementPicker({ params }: PanelProps) {
     setError(null);
     setPhase("picking");
     pickingTab.current = tabId;
+    const key = pageKey.current;
     try {
       const r = await inPicker(tabId, pickInPage, []);
       if (pickingTab.current === tabId) pickingTab.current = null;
+      if (key !== pageKey.current) return;
       if (r.status === "picked") await load({ scroll: true });
       else if (r.status === "cancelled") setPhase("cancelled");
     } catch (e) {
       pickingTab.current = null;
+      if (key !== pageKey.current) return;
       const message = injectionError(e);
       setPhase(info ? "picked" : "idle");
       setError(/removed|unloaded|navigat|closed/i.test(message) ? "The page changed while picking. Pick again." : message);
