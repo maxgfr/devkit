@@ -184,6 +184,14 @@
     "keywords": "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources"
   },
   {
+    "id": "responsiveness",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Responsiveness",
+    "description": "Slow interactions and the scripts behind them, back/forward cache, speculation rules",
+    "keywords": ""
+  },
+  {
     "id": "errors",
     "kind": "panel",
     "category": "inspect",

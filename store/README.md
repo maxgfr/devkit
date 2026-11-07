@@ -49,6 +49,8 @@ INSPECT
 • SEO and meta: title and description lengths, canonical, robots, hreflang, Open Graph and Twitter cards, heading outline
 • Structured data (JSON-LD) analyzer: invalid JSON with its line and column, wrong prices, relative URLs, missing recommended fields
 • Web Vitals on their good / poor scales, the navigation timeline, bytes by resource type and a request waterfall
+• Why it is slow: record while you use the page, see the slowest interactions split into input delay, handlers and paint, and the scripts behind each (function, file, line), copy the findings as Markdown for a coding agent
+• Back/forward cache test with the reasons Chrome gives when a page is not restored, and the page's speculation rules (prefetch, prerender)
 • Console errors captured from page load, with a count on the toolbar badge
 • Accessibility audit with axe-core (WCAG 2.0, 2.1 and 2.2 A/AA, optional best practices and AAA, whole page or one region): violations by impact, items to review by hand, each failing element outlined in the page on click, Markdown for coding agents. Automated checks catch part of WCAG issues; manual testing is still needed
 • Link checker, robots.txt, sitemap and web app manifest checks, fonts and colors
