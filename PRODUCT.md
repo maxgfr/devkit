@@ -27,6 +27,7 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 ## Capabilities and Constraints
 
 - Tabs: Cache, Inspect, Security, Page, Network, AI, Utils, plus a DevTools panel. Full list in README.md.
+- Accessibility audit: axe-core (MPL-2.0) bundled and injected on demand in the isolated world, never fetched remotely; the Overview audits pages of up to 3,000 elements on its own.
 - Install-time permissions: activeTab, scripting, storage, sidePanel, contextMenus, declarativeNetRequest, debugger (the last two cannot be optional in Chrome). browsingData, cookies, contentSettings and site access are optional and asked on first use.
 - AI cost is the user's own provider bill; devkit shows token counts and a cost estimate from llm-models prices.
 - Open decisions: license. The repository is public on GitHub, with the site on GitHub Pages.
@@ -48,4 +49,4 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 1. One place, found in seconds: every tool reachable from the palette by name.
 2. Show the page's real data, then let the AI reason over that same data.
 3. The developer's keys, model and permissions stay theirs: ask only when a tool needs it.
-4. Honest tooling: heuristics are labeled as heuristics (a11y hints are not an audit).
+4. Honest tooling: heuristics are labeled as heuristics; the axe-core accessibility audit says automated checks catch only part of WCAG issues.

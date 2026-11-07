@@ -211,9 +211,9 @@
     "id": "a11y",
     "kind": "panel",
     "category": "inspect",
-    "title": "Accessibility hints",
-    "description": "Quick checks: alt, labels, names, headings",
-    "keywords": "a11y wcag rgaa alt label"
+    "title": "Accessibility audit",
+    "description": "axe-core audit against WCAG 2.2 A/AA: violations by impact, failing elements outlined in the page",
+    "keywords": "a11y accessibility axe wcag rgaa audit alt label contrast aria heading screen reader"
   },
   {
     "id": "site-files",

@@ -50,7 +50,8 @@ INSPECT
 • Structured data (JSON-LD) analyzer: invalid JSON with its line and column, wrong prices, relative URLs, missing recommended fields
 • Web Vitals on their good / poor scales, the navigation timeline, bytes by resource type and a request waterfall
 • Console errors captured from page load, with a count on the toolbar badge
-• Link checker, robots.txt, sitemap and web app manifest checks, fonts and colors, quick accessibility hints
+• Accessibility audit with axe-core (WCAG 2.0, 2.1 and 2.2 A/AA, optional best practices and AAA, whole page or one region): violations by impact, items to review by hand, each failing element outlined in the page on click, Markdown for coding agents. Automated checks catch part of WCAG issues; manual testing is still needed
+• Link checker, robots.txt, sitemap and web app manifest checks, fonts and colors
 
 SECURITY
 • Response headers with a security grade (CSP, HSTS, framing, referrer policy, COOP/COEP, cookie flags) and what the caching headers do
@@ -97,7 +98,7 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | Permission | Justification |
 |---|---|
 | activeTab | Runs the tool the developer picks (from the popup, a shortcut or the context menu) on the tab they are on. |
-| scripting | Injects devkit's own bundled scripts into the current page to read its metadata, JSON-LD, performance entries and storage, and to apply page tools (design mode, outlines, CSS off, form filler). No remote code. |
+| scripting | Injects devkit's own bundled scripts into the current page to read its metadata, JSON-LD, performance entries and storage, and to apply page tools (design mode, outlines, CSS off, form filler), and to run the accessibility audit (axe-core, bundled). No remote code. |
 | storage | Keeps settings, request rules, environment groups and the last opened tool on the device. |
 | sidePanel | The extension's main interface is a side panel next to the page. |
 | contextMenus | Right-click entries: ask the AI about a selection or the page, open the JSON-LD and headers tools. |
