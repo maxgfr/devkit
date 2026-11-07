@@ -492,7 +492,7 @@ export function Ask({ params }: { params?: Record<string, string> }) {
           ) : null}
         </Section>
       ) : (
-        <div className="chat">
+        <div className="chat" role="log" aria-label="Conversation" aria-busy={abort.current !== null}>
           {turns.map((t, i) =>
             t.role === "user" ? (
               // biome-ignore lint/suspicious/noArrayIndexKey: conversation order

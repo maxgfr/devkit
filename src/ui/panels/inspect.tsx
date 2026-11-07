@@ -969,7 +969,7 @@ export function Links() {
         {results.length ? (
           <>
             <div className="row small">
-              <span>
+              <span aria-live="polite">
                 {done}/{results.length} checked · <b className={bad.length ? "t-bad" : "t-good"}>{bad.length} broken</b>
               </span>
               <span className="grow" />

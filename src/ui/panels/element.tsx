@@ -248,6 +248,15 @@ export function ElementPicker({ params }: PanelProps) {
             : "Click an element of the page, then copy its component, source, selector and styles as Markdown for a coding agent."
         }
       >
+        <p className="sr-only" aria-live="polite">
+          {phase === "picking"
+            ? "Picking: click an element of the page."
+            : phase === "cancelled" && !info
+              ? "Pick cancelled."
+              : info
+                ? `Picked ${elementLabel(info)}${nearest ? ` in ${nearest.name}` : ""}.`
+                : ""}
+        </p>
         {phase === "picking" ? (
           <Notice kind="info">
             <span className="grow">
