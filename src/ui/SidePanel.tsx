@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { CATEGORIES, type Category } from "../lib/actions";
 import { PANEL_IDS, PANELS, PENDING_ROUTE_KEY, type Route } from "../lib/panels";
@@ -56,14 +56,33 @@ function TabLine() {
   );
 }
 
+const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
+
 function Shell() {
   const [route, setRoute] = useState<Route>({ panel: "cache-actions" });
   const [category, setCategory] = useState<Category>("cache");
+  // The view each tab showed last in this session, so coming back to a tab lands where you left it.
+  const lastOf = useRef<Partial<Record<Category, string>>>({});
+  const tabsRef = useRef<HTMLDivElement | null>(null);
   const go = (r: Route) => {
     if (!PANEL_IDS.has(r.panel)) return;
+    const c = PANELS.find((p) => p.id === r.panel)!.category;
+    lastOf.current[c] = r.panel;
     setRoute(r);
-    setCategory(PANELS.find((p) => p.id === r.panel)!.category);
+    setCategory(c);
     browser.storage.local.set({ [LAST_KEY]: { panel: r.panel } });
+  };
+  const openCategory = (c: Category) => go({ panel: lastOf.current[c] ?? DEFAULT_PANEL[c] });
+  // Tab bar keyboard model (WAI-ARIA tabs): arrows, Home and End move between tabs and open them.
+  const onTabKey = (e: React.KeyboardEvent) => {
+    const i = CATEGORY_KEYS.indexOf(category);
+    const n = CATEGORY_KEYS.length;
+    const next =
+      e.key === "ArrowRight" ? (i + 1) % n : e.key === "ArrowLeft" ? (i - 1 + n) % n : e.key === "Home" ? 0 : e.key === "End" ? n - 1 : -1;
+    if (next < 0) return;
+    e.preventDefault();
+    openCategory(CATEGORY_KEYS[next]!);
+    tabsRef.current?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: mount only
   useEffect(() => {
@@ -93,16 +112,17 @@ function Shell() {
     <div className="app">
       <div className="topbar">
         <TabLine />
-        <div className="tabbar" role="tablist">
-          {(Object.keys(CATEGORIES) as Category[]).map((c) => (
+        <div className="tabbar" role="tablist" aria-label="Tools" ref={tabsRef} onKeyDown={onTabKey}>
+          {CATEGORY_KEYS.map((c) => (
             <button
               key={c}
               type="button"
               role="tab"
+              id={`tab-${c}`}
               aria-selected={c === category}
-              onClick={() =>
-                go({ panel: route.panel && PANELS.find((p) => p.id === route.panel)?.category === c ? route.panel : DEFAULT_PANEL[c] })
-              }
+              aria-controls="panel-content"
+              tabIndex={c === category ? 0 : -1}
+              onClick={() => openCategory(c)}
               title={CATEGORIES[c]}
             >
               {SHORT[c]}
@@ -110,30 +130,32 @@ function Shell() {
           ))}
         </div>
       </div>
-      <nav className="subnav" aria-label={CATEGORIES[category]}>
-        {panels.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            aria-pressed={p.id === route.panel}
-            onClick={() => go({ panel: p.id })}
-            title={`${p.title} · ${p.description}`}
-          >
-            {p.short ?? p.title}
-          </button>
-        ))}
-      </nav>
-      <main className="content">
-        <Suspense fallback={<p className="muted">Loading…</p>}>
-          {Panel ? (
-            <PanelBoundary key={route.panel + JSON.stringify(route.params ?? {})}>
-              <NavContext.Provider value={go}>
-                <Panel params={route.params} />
-              </NavContext.Provider>
-            </PanelBoundary>
-          ) : null}
-        </Suspense>
-      </main>
+      <div className="view" id="panel-content" role="tabpanel" aria-labelledby={`tab-${category}`}>
+        <nav className="subnav" aria-label={CATEGORIES[category]}>
+          {panels.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              aria-pressed={p.id === route.panel}
+              onClick={() => go({ panel: p.id })}
+              title={`${p.title} · ${p.description}`}
+            >
+              {p.short ?? p.title}
+            </button>
+          ))}
+        </nav>
+        <main className="content">
+          <Suspense fallback={<p className="muted">Loading…</p>}>
+            {Panel ? (
+              <PanelBoundary key={route.panel + JSON.stringify(route.params ?? {})}>
+                <NavContext.Provider value={go}>
+                  <Panel params={route.params} />
+                </NavContext.Provider>
+              </PanelBoundary>
+            ) : null}
+          </Suspense>
+        </main>
+      </div>
     </div>
   );
 }

@@ -126,6 +126,11 @@ textarea {
   color: var(--fg);
   border-bottom-color: var(--accent);
 }
+.view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
 .subnav {
   display: flex;
   flex-wrap: wrap;
