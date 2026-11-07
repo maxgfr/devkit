@@ -6,17 +6,17 @@ Web Vitals, errors, links…), rewrite requests, a dozen utilities, and **AI ana
 with your own model** through [llm-connect](https://www.npmjs.com/package/llm-connect) and
 [llm-models](https://www.npmjs.com/package/llm-models).
 
-Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`) · [Privacy policy](https://maxgfr.github.io/devkit/privacy.html).
+[Chrome Web Store](https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba) · Site: <https://maxgfr.github.io/devkit/> (sources in `site/`, deployed by `.github/workflows/pages.yml`) · [Privacy policy](https://maxgfr.github.io/devkit/privacy.html).
 
 ## Install
+
+**From the [Chrome Web Store](https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba)** (recommended): click *Add to Chrome*. Chrome updates devkit on its own.
 
 **From a release** (no build needed):
 
 1. Download `devkit-<version>-chrome.zip` from the [latest release](https://github.com/maxgfr/devkit/releases/latest) and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and pick the unzipped folder.
 3. To update, unzip the new release over the same folder and click the reload icon on devkit's card.
-
-**From the Chrome Web Store**: the listing is not live yet. Once it is, Chrome updates devkit on its own.
 
 **From source**:
 
@@ -94,6 +94,6 @@ since the last `v*` tag:
 | only `docs:`, `ci:`, `chore:`, `test:`, `refactor:`, `style:` | none |
 
 A release builds the zip with that version, publishes it as a GitHub release with generated notes,
-and, once the Chrome Web Store secrets are set, uploads it to the store and submits it for review.
+and, once the Chrome Web Store variables and secrets are set, uploads it to the store and submits it for review.
 The version lives in the git tags; `package.json` is not bumped. Store listing texts, images and
 the API setup are in [`store/`](store/README.md).

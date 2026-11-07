@@ -34,7 +34,7 @@ jobs:
           path: .output/*.zip
 
   # Every push to main with a `feat`, `fix` or `perf` commit since the last tag ships a release:
-  # GitHub release with the zip, then the Chrome Web Store when its secrets are set.
+  # GitHub release with the zip, then the Chrome Web Store once its variables and secrets are set.
   release:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -44,6 +44,9 @@ jobs:
     concurrency:
       group: release
       cancel-in-progress: false
+    env:
+      # Secrets cannot be read in `if:`, so the store step checks this instead.
+      CWS_READY: ${{ vars.CWS_EXTENSION_ID != '' && vars.CWS_PUBLISHER_ID != '' && secrets.CWS_CLIENT_ID != '' && secrets.CWS_CLIENT_SECRET != '' && secrets.CWS_REFRESH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,8 +76,11 @@ jobs:
         run: |
           gh release create "v$VERSION" ".output/devkit-$VERSION-chrome.zip" \
             --target "$GITHUB_SHA" --title "devkit $VERSION" --notes-file release-notes.md
+      - name: Chrome Web Store not configured
+        if: steps.version.outputs.version != '' && env.CWS_READY != 'true'
+        run: echo "::warning::v${{ steps.version.outputs.version }} stops at GitHub. Set the CWS_* variables and secrets (store/README.md) to publish it to the Chrome Web Store."
       - name: Chrome Web Store
-        if: steps.version.outputs.version != '' && vars.CWS_EXTENSION_ID != ''
+        if: steps.version.outputs.version != '' && env.CWS_READY == 'true'
         env:
           CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
           CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}

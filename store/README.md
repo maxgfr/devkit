@@ -1,6 +1,8 @@
 # Chrome Web Store
 
-Everything the store listing needs, and how releases reach the store once it exists.
+Everything the store listing needs, and how releases reach the store.
+
+Listing: https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba (item ID `jbiemmlhdehncfkapmhlnkcimpfihnba`).
 
 - `screenshots/`: five 1280×800 screenshots, in upload order.
 - `promo-small-440x280.png`: small promo tile.
@@ -9,7 +11,7 @@ Everything the store listing needs, and how releases reach the store once it exi
 
 Regenerate the images with `pnpm store-assets` after updating the screenshots in `site/img/`.
 
-## 1. First submission (by hand, once)
+## 1. First submission (by hand, once — done)
 
 Chrome does not let an extension or a script create a store item, so the first version goes through the
 [developer dashboard](https://chrome.google.com/webstore/devconsole):
@@ -109,18 +111,20 @@ It needs, in the repository's **Settings → Secrets and variables → Actions**
 | Name | Kind | Value |
 |---|---|---|
 | `CWS_PUBLISHER_ID` | variable | the ID in the dashboard URL (`/devconsole/<publisher id>`) |
-| `CWS_EXTENSION_ID` | variable | the item's ID, shown in the dashboard after the first upload |
+| `CWS_EXTENSION_ID` | variable | the item's ID: `jbiemmlhdehncfkapmhlnkcimpfihnba` |
 | `CWS_CLIENT_ID` | secret | OAuth client ID |
 | `CWS_CLIENT_SECRET` | secret | OAuth client secret |
 | `CWS_REFRESH_TOKEN` | secret | refresh token for that client |
 
-Until `CWS_EXTENSION_ID` is set, the store step is skipped and releases stop at GitHub.
+Until all five are set, the store step is skipped with a warning and releases stop at GitHub.
 
 To get the OAuth values ([Google's guide](https://developer.chrome.com/docs/webstore/using-api)):
 
 1. In the [Google Cloud console](https://console.cloud.google.com/), create a project and enable the **Chrome Web Store API**.
-2. Configure the OAuth consent screen (External, add yourself as a test user), then create an **OAuth client ID** of type *Web application* with `https://developers.google.com/oauthplayground` as redirect URI.
+2. Configure the OAuth consent screen (External, add yourself as a test user) and **publish the app** (Audience → *Publish app*, status *In production*): while it stays in *Testing*, Google expires the refresh token after 7 days and the store step starts failing with `400 Token has been expired or revoked`. No verification is needed for your own account. Then create an **OAuth client ID** of type *Web application* with `https://developers.google.com/oauthplayground` as redirect URI.
 3. In the [OAuth Playground](https://developers.google.com/oauthplayground), open the settings, tick *Use your own OAuth credentials*, paste the client ID and secret, authorize the scope `https://www.googleapis.com/auth/chromewebstore`, then exchange the code for tokens and copy the refresh token.
-4. Save the three values as secrets: `gh secret set CWS_CLIENT_ID`, `gh secret set CWS_CLIENT_SECRET`, `gh secret set CWS_REFRESH_TOKEN` (each prompts for the value), and the item ID with `gh variable set CWS_EXTENSION_ID --body <id>`.
+4. Save the three values as secrets: `gh secret set CWS_CLIENT_ID`, `gh secret set CWS_CLIENT_SECRET`, `gh secret set CWS_REFRESH_TOKEN` (each prompts for the value), and the item ID with `gh variable set CWS_EXTENSION_ID --body jbiemmlhdehncfkapmhlnkcimpfihnba`.
+
+A new version cannot be uploaded while the previous one is still in review: that release's store step fails, and the next release (which contains the same changes) goes through once the review is over. To send a release to the store afterwards, run the **Chrome Web Store** workflow from the Actions tab (`gh workflow run store.yml`, or `-f version=0.2.0` for a given one): it uploads that GitHub release's zip.
 
 To publish one zip by hand with the same values in the environment: `node scripts/publish-cws.ts .output/devkit-<version>-chrome.zip`.

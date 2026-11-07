@@ -44,6 +44,9 @@ async function main() {
     method: "POST",
     headers: { ...auth, "x-goog-upload-protocol": "raw", "x-goog-upload-file-name": "extension.zip" },
     body: readFileSync(zip),
+  }).catch((e: unknown) => {
+    const hint = "the previous version may still be in review, or this version is not above the store's";
+    throw new Error(`upload refused (${hint}): ${e instanceof Error ? e.message : String(e)}`);
   });
   let state = upload.uploadState;
   for (let i = 0; state === "IN_PROGRESS" && i < 30; i++) {

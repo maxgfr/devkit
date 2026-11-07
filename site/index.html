@@ -37,8 +37,8 @@
             Chrome extension instead of a toolbar full of them.
           </p>
           <div class="actions">
-            <a class="btn primary" href="https://github.com/maxgfr/devkit/releases/latest">Download the latest build</a>
-            <a class="btn" href="#install">How to install</a>
+            <a class="btn primary" href="https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba">Add to Chrome</a>
+            <a class="btn" href="https://github.com/maxgfr/devkit/releases/latest">Download the latest build</a>
           </div>
           <div class="cmd" data-copy="git clone https://github.com/maxgfr/devkit && cd devkit && pnpm install && pnpm build">
             <code><span class="prompt">$</span> git clone https://github.com/maxgfr/devkit &amp;&amp; cd devkit &amp;&amp; pnpm install &amp;&amp; pnpm build</code>
@@ -180,23 +180,23 @@
         <h2 id="install-title">Install in a minute.</h2>
         <ol class="steps">
           <li>
-            <h3>Get the build</h3>
-            <p>Download the zip from the <a href="https://github.com/maxgfr/devkit/releases/latest">latest release</a> and unzip it, or build it yourself:</p>
-            <div class="cmd" data-copy="git clone https://github.com/maxgfr/devkit && cd devkit && pnpm install && pnpm build">
-              <code><span class="prompt">$</span> pnpm install &amp;&amp; pnpm build</code>
-              <button type="button" class="copy">Copy</button>
-            </div>
-          </li>
-          <li>
-            <h3>Load it in Chrome</h3>
-            <p>Open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the folder (<code>.output/chrome-mv3</code> when you built it).</p>
+            <h3>Add it to Chrome</h3>
+            <p>Install devkit from the <a href="https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba">Chrome Web Store</a>. Chrome keeps it up to date on its own.</p>
           </li>
           <li>
             <h3>Press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>D</kbd></h3>
             <p>Type <code>json-ld</code> on any page. For AI, open the AI tab, pick a provider or a local server, paste a key, test, save.</p>
           </li>
+          <li>
+            <h3>Or load a build yourself</h3>
+            <p>Download the zip from the <a href="https://github.com/maxgfr/devkit/releases/latest">latest release</a>, or build it. Then open <code>chrome://extensions</code>, turn on <b>Developer mode</b>, click <b>Load unpacked</b> and pick the folder (<code>.output/chrome-mv3</code> when you built it).</p>
+            <div class="cmd" data-copy="git clone https://github.com/maxgfr/devkit && cd devkit && pnpm install && pnpm build">
+              <code><span class="prompt">$</span> pnpm install &amp;&amp; pnpm build</code>
+              <button type="button" class="copy">Copy</button>
+            </div>
+          </li>
         </ol>
-        <p class="note">Chrome 116 or later. Each fix or feature merged on main ships as a new release, built and tested automatically. Not on the Chrome Web Store yet.</p>
+        <p class="note">Chrome 116 or later. Each fix or feature merged on main ships as a new release, built and tested automatically, then submitted to the Chrome Web Store.</p>
       </section>
     </main>
 

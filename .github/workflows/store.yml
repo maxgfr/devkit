@@ -1,0 +1,42 @@
+name: Chrome Web Store
+
+# Sends an existing GitHub release to the store by hand, e.g. when the automatic upload of the
+# `release` job failed because the previous version was still in review.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release to publish, without the v (empty = latest)
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Download the release zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="${VERSION:+v$VERSION}"
+          tag="${tag:-$(gh release view --json tagName --jq .tagName)}"
+          gh release download "$tag" --pattern 'devkit-*-chrome.zip' --dir dist
+          ls dist
+      - name: Upload and submit for review
+        env:
+          CWS_PUBLISHER_ID: ${{ vars.CWS_PUBLISHER_ID }}
+          CWS_EXTENSION_ID: ${{ vars.CWS_EXTENSION_ID }}
+          CWS_CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CWS_CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          CWS_REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+        run: node scripts/publish-cws.ts dist/devkit-*-chrome.zip

@@ -22,14 +22,14 @@ devkit is one Chrome extension that replaces the handful of single-purpose exten
 
 ## Operating Context
 
-Chrome 116+, side panel next to the page, DevTools open on the side, localhost / staging / production tabs side by side. Installed today as an unpacked extension built from source (`pnpm build`); a Chrome Web Store listing is possible later but does not exist.
+Chrome 116+, side panel next to the page, DevTools open on the side, localhost / staging / production tabs side by side. Published on the [Chrome Web Store](https://chromewebstore.google.com/detail/devkit/jbiemmlhdehncfkapmhlnkcimpfihnba); also installable unpacked from a GitHub release or from source (`pnpm build`).
 
 ## Capabilities and Constraints
 
 - Tabs: Cache, Inspect, Page, Network, AI, Utils, plus a DevTools panel. Full list in README.md.
 - Install-time permissions: activeTab, scripting, storage, sidePanel, contextMenus, declarativeNetRequest, debugger (the last two cannot be optional in Chrome). browsingData, cookies, contentSettings and site access are optional and asked on first use.
 - AI cost is the user's own provider bill; devkit shows token counts and a cost estimate from llm-models prices.
-- Open decisions: Chrome Web Store release, license. The repository is public on GitHub, with the site on GitHub Pages.
+- Open decisions: license. The repository is public on GitHub, with the site on GitHub Pages.
 
 ## Brand Commitments
 
