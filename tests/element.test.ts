@@ -27,6 +27,10 @@ import {
 } from "../src/lib/page/element";
 
 const ELEMENT = Symbol.for("react.transitional.element");
+// Stand-ins for React components, named like the real thing.
+function Toolbar() {}
+function SaveButton() {}
+function Greeting() {}
 
 describe("serializeValue", () => {
   it("keeps plain data and names what JSON cannot hold", () => {
@@ -347,8 +351,6 @@ describe("collectElement (in page)", () => {
   const setup = () => {
     document.body.innerHTML = `<div id="root"><section class="toolbar"><button id="save" class="btn" aria-label="Save changes">Save</button></section></div>`;
     const button = document.querySelector("#save")!;
-    function Toolbar() {}
-    function SaveButton() {}
     const root = { tag: 3, type: null, return: null };
     const toolbar = { tag: 0, type: Toolbar, elementType: Toolbar, return: root, memoizedProps: {}, _debugOwner: null };
     const inner = {
@@ -392,7 +394,6 @@ describe("collectElement (in page)", () => {
 
   it("parses React 19's _debugStack", () => {
     document.body.innerHTML = `<p>Hello</p>`;
-    function Greeting() {}
     const comp = { tag: 0, type: Greeting, return: null, memoizedProps: { who: "you" }, _debugStack: new Error("x") };
     comp._debugStack.stack = "Error: react-stack-top-frame\n    at Root (http://localhost:5173/src/main.tsx:5:3)";
     const stack =

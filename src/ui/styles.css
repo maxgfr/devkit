@@ -1395,7 +1395,7 @@ kbd {
   flex-wrap: wrap;
   gap: 2px 8px;
 }
-.el-source code {
+.el-source-path {
   font-weight: 600;
   color: var(--fg);
 }
@@ -1477,10 +1477,10 @@ kbd {
   color: var(--fg-3);
   font-size: 11.5px;
 }
-.el-props > summary {
+.el-props-summary {
   cursor: pointer;
   color: var(--fg-2);
 }
-.el-props .tree {
+.el-props-tree {
   margin-top: 4px;
 }

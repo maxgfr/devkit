@@ -280,7 +280,7 @@ export function ElementPicker({ params }: PanelProps) {
             </div>
             {info.source ? (
               <div className="el-source">
-                <code className="break">{formatSource(info.source)}</code>
+                <code className="el-source-path break">{formatSource(info.source)}</code>
                 <span className="muted small">from {info.source.via}</span>
               </div>
             ) : (
@@ -386,7 +386,12 @@ export function ElementPicker({ params }: PanelProps) {
                     <li key={i}>
                       <code className="el-stack-name">{c.name}</code>
                       {c.kind ? <span className="pill">{c.kind}</span> : null}
-                      {c.source ? <span className="el-stack-src mono break">{formatSource(c.source)}</span> : null}
+                      {c.source ? (
+                        <span className="el-stack-src mono break">
+                          {fw.name === "React" ? "rendered at " : ""}
+                          {formatSource(c.source)}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
@@ -403,11 +408,19 @@ export function ElementPicker({ params }: PanelProps) {
             ) : null}
             {fw?.props !== undefined ? (
               <details className="el-props">
-                <summary className="small">
+                <summary className="small el-props-summary">
                   Props of <code>{fw.propsOf}</code>
                 </summary>
-                <div className="tree">
-                  <JsonTree value={fw.props} open={1} />
+                <div className="tree el-props-tree">
+                  {fw.props && typeof fw.props === "object" && !Array.isArray(fw.props) ? (
+                    Object.keys(fw.props).length ? (
+                      Object.entries(fw.props).map(([k, v]) => <JsonTree key={k} name={k} value={v} open={0} />)
+                    ) : (
+                      <span className="muted">No props.</span>
+                    )
+                  ) : (
+                    <JsonTree value={fw.props} open={1} />
+                  )}
                 </div>
               </details>
             ) : null}

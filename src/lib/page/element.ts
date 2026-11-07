@@ -26,7 +26,7 @@ export type CollectResult =
 export interface CollectOptions {
   /** Select an ancestor this many levels up first. */
   up?: number;
-  /** Scroll the element into view when it is off screen (before a screenshot). */
+  /** Before a screenshot: scroll the element into view when it is off screen, and wait for a paint. */
   scroll?: boolean;
 }
 
@@ -748,7 +748,12 @@ export function collectElement(el: Element): ElementInfo {
   };
 }
 
-const frame = () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+/** Waits until the page has painted (the overlay gone, the scroll applied). rAF stalls in hidden tabs: cap the wait. */
+const painted = () =>
+  new Promise<void>((done) => {
+    setTimeout(done, 150);
+    requestAnimationFrame(() => requestAnimationFrame(() => done()));
+  });
 
 export async function collectPicked(options: CollectOptions = {}): Promise<CollectResult> {
   const w = win();
@@ -772,8 +777,8 @@ export async function collectPicked(options: CollectOptions = {}): Promise<Colle
     const r = el.getBoundingClientRect();
     if (r.top < 0 || r.left < 0 || r.bottom > innerHeight || r.right > innerWidth) {
       el.scrollIntoView({ block: r.height > innerHeight ? "start" : "center", inline: "nearest", behavior: "instant" as ScrollBehavior });
-      await frame();
     }
+    await painted();
   }
   const info = collectElement(el);
   if (info.selectorUnique && !info.shadowHost) w.__devkitPickedSelector = info.selector;
