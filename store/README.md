@@ -58,6 +58,7 @@ SECURITY
 • CSP analyzer, directive by directive, and a starter policy built from what the page loads
 
 PAGE
+• Element picker for coding agents: click an element of the page and copy, as Markdown, its React, Vue, Svelte or Angular component stack with file and line (dev builds), props, a unique selector, a Playwright locator, trimmed HTML, the computed styles that matter and your note on what is wrong; plus a cropped screenshot of the element
 • Design mode, element outlines, CSS off, JavaScript off for a site
 • Emulate dark/light, reduced motion, contrast, print, CPU and network throttling, vision deficiencies
 • Responsive window sizes, full-page screenshots, a form filler with plausible fake data

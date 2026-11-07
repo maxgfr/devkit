@@ -88,6 +88,14 @@
     "keywords": "disable javascript noscript"
   },
   {
+    "id": "pick-element",
+    "kind": "action",
+    "category": "page",
+    "title": "Pick an element",
+    "description": "Click an element of the page, copy its component, source and styles for a coding agent",
+    "keywords": "inspect select element react component props source file line selector agent claude cursor"
+  },
+  {
     "id": "copy-markdown-link",
     "kind": "action",
     "category": "utils",
@@ -246,6 +254,14 @@
     "title": "CSP analyzer",
     "description": "Content-Security-Policy directive by directive, and a starter policy",
     "keywords": "content security policy csp nonce strict-dynamic unsafe-inline report-only"
+  },
+  {
+    "id": "element",
+    "kind": "panel",
+    "category": "page",
+    "title": "Element picker",
+    "description": "Pick an element, copy its component, source and styles for a coding agent",
+    "keywords": "inspect element react vue svelte angular component props source selector locator agent claude cursor"
   },
   {
     "id": "page-tools",
