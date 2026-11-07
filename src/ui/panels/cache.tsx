@@ -473,7 +473,9 @@ export function Storage() {
             {shown.map((i) => (
               <li key={i.key}>
                 <div className="row">
-                  <b className="mono grow ellipsis">{i.key}</b>
+                  <b className="mono grow ellipsis" title={i.key}>
+                    {i.key}
+                  </b>
                   <span className="muted small">{i.value.length} chars</span>
                   <Button size="small" onClick={() => setEditing({ key: i.key, value: i.value })}>
                     Edit

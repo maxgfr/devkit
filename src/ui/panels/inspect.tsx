@@ -545,7 +545,9 @@ function VitalRow({ name, value }: { name: VitalName; value: number | null }) {
     <li className="vital">
       <div className="vital-head">
         <b>{t.label}</b>
-        <span className="vital-name">{name === "inp" ? `${t.name}, slowest so far` : t.name}</span>
+        <span className="vital-name" title={name === "inp" ? `${t.name}, slowest so far` : t.name}>
+          {name === "inp" ? `${t.name}, slowest so far` : t.name}
+        </span>
         {rating ? <span className="vital-value">{text}</span> : null}
         <span className="vital-rating">
           <StatusIcon level={rating ? RATING_LEVEL[rating] : "none"} />
@@ -986,11 +988,17 @@ export function Links() {
                   >
                     {r.status === "pending" ? "…" : r.status}
                   </span>
-                  <a className="grow ellipsis mono" href={r.href} target="_blank" rel="noreferrer" title={r.text}>
+                  <a
+                    className="grow ellipsis mono"
+                    href={r.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={r.text ? `${r.href}\n${r.text}` : r.href}
+                  >
                     {r.href}
                   </a>
                   {r.detail ? (
-                    <span className="muted ellipsis" style={{ maxWidth: 140 }}>
+                    <span className="muted ellipsis" style={{ maxWidth: 140 }} title={r.detail}>
                       {r.detail}
                     </span>
                   ) : null}
@@ -1305,7 +1313,7 @@ export function SiteFiles() {
                         Open
                       </button>
                     ) : null}
-                    <a className="grow ellipsis mono" href={u.loc} target="_blank" rel="noreferrer">
+                    <a className="grow ellipsis mono" href={u.loc} target="_blank" rel="noreferrer" title={u.loc}>
                       {u.loc}
                     </a>
                     {u.lastmod ? <span className="muted">{u.lastmod.slice(0, 10)}</span> : null}

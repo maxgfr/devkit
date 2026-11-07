@@ -391,6 +391,9 @@ export function Ask({ params }: { params?: Record<string, string> }) {
     );
 
   const cost = capabilities?.cost;
+  const modelLine = settings.customEndpoint
+    ? `${settings.customModel} @ ${new URL(settings.customEndpoint).host}`
+    : `${settings.model} · ${settings.providerName ?? settings.providerId}`;
   const estimate = (chars: number) => {
     const tokens = Math.min(Math.ceil(chars / 4), Math.ceil(budget / 4));
     return `≈${(tokens / 1000).toFixed(1)}k tokens in · ${formatUsd(estimateCost(cost, tokens, 1500))}`;
@@ -400,10 +403,8 @@ export function Ask({ params }: { params?: Record<string, string> }) {
     <>
       <div className="card stack">
         <div className="row small">
-          <b className="grow ellipsis">
-            {settings.customEndpoint
-              ? `${settings.customModel} @ ${new URL(settings.customEndpoint).host}`
-              : `${settings.model} · ${settings.providerName ?? settings.providerId}`}
+          <b className="grow ellipsis" title={modelLine}>
+            {modelLine}
           </b>
           {capabilities ? (
             <>
