@@ -9,6 +9,8 @@ export interface AiAction {
   /** Asks the user for extra input (shown as a text field). */
   input?: { label: string; placeholder: string };
   needsVision?: boolean;
+  /** Started from another panel (e.g. the element picker), not listed with the analyses. */
+  hidden?: boolean;
 }
 
 export const SYSTEM_PROMPT = `You are devkit, an assistant for web developers built into their browser.
@@ -121,5 +123,14 @@ export const AI_ACTIONS: AiAction[] = [
     needsVision: true,
     prompt:
       "Critique the UI in this screenshot like a senior product designer: visual hierarchy, layout and spacing, typography, color and contrast, clarity of calls to action, and mobile risks. List the top fixes by impact.",
+  },
+  {
+    id: "element",
+    title: "Fix the picked element",
+    description: "From the element picker: component, source, markup and styles",
+    parts: ["element"],
+    hidden: true,
+    prompt:
+      "The developer picked this element in the page and described what is wrong. Find the most likely cause from the component stack, props, markup and computed styles (and the screenshot, if attached), then give the fix as a code change to the source file named in the data. If no source file is known, say which component or selector to look for. Keep it short: cause, fix, how to check it.",
   },
 ];

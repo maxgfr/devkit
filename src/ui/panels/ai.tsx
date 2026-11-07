@@ -317,7 +317,7 @@ export function Ask({ params }: { params?: Record<string, string> }) {
     if (firstTurn && ctxParts.length && page.canScript) {
       const ctx = await gatherContext(page.tab, ctxParts, { selection });
       contextText = renderContext(ctx, ctxParts, budget);
-      screenshot = ctx.screenshot;
+      screenshot = ctx.screenshot ?? (capabilities.vision ? ctx.elementImage : undefined);
     } else if (selection) {
       contextText = `## Selected text\n\`\`\`\n${selection}\n\`\`\``;
     }
@@ -452,7 +452,7 @@ export function Ask({ params }: { params?: Record<string, string> }) {
       {turns.length === 0 ? (
         <Section title="Analyze this page" hint={`Each analysis sends the listed page data to ${settings.providerName ?? "your model"}.`}>
           <div className="grid2">
-            {AI_ACTIONS.filter((a) => !a.needsVision || capabilities?.vision).map((a) => (
+            {AI_ACTIONS.filter((a) => !a.hidden && (!a.needsVision || capabilities?.vision)).map((a) => (
               <button
                 key={a.id}
                 type="button"

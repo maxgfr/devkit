@@ -35,7 +35,8 @@ export type ContextPart =
   | "errors"
   | "jsonld"
   | "a11y"
-  | "screenshot";
+  | "screenshot"
+  | "element";
 
 export const PART_LABELS: Record<ContextPart, string> = {
   text: "Page text",
@@ -50,6 +51,7 @@ export const PART_LABELS: Record<ContextPart, string> = {
   jsonld: "Structured data",
   a11y: "A11y hints",
   screenshot: "Screenshot",
+  element: "Picked element",
 };
 
 export interface PageContext {
@@ -67,6 +69,9 @@ export interface PageContext {
   jsonld?: JsonLdReport;
   a11y?: A11yHint[];
   screenshot?: string;
+  /** The element picker's Markdown, and its crop (sent as the image when the model has vision). */
+  element?: string;
+  elementImage?: string;
 }
 
 /** A rough token count: about 4 characters per token for English and code. */
@@ -84,6 +89,7 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
   const has = (p: ContextPart) => parts.includes(p);
   const out: string[] = [`# Page\nURL: ${ctx.url}\nTitle: ${ctx.title}\n`];
   if (has("selection") && ctx.selection) out.push(section("Selected text", "```\n" + ctx.selection + "\n```"));
+  if (has("element") && ctx.element) out.push(ctx.element.trim() + "\n");
   if (has("meta") && ctx.meta) {
     const m = ctx.meta;
     out.push(

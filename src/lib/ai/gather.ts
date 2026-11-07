@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import { fetchHeaders, securityReport } from "../headers";
 import { runInTab } from "../inject";
+import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
 import { collectA11yHints, collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
 import { readErrors } from "../page/errors";
@@ -55,6 +56,14 @@ export async function gatherContext(
   if (errors) ctx.errors = errors.errors as CapturedError[];
   if (a11y) ctx.a11y = a11y;
   if (screenshot) ctx.screenshot = screenshot;
+  if (want("element")) {
+    const stored = await safe(() => browser.storage.session.get(ELEMENT_HANDOFF_KEY));
+    const handoff = stored?.[ELEMENT_HANDOFF_KEY] as ElementHandoff | undefined;
+    if (handoff?.tabId === tabId) {
+      ctx.element = handoff.markdown;
+      ctx.elementImage = handoff.image;
+    }
+  }
   return ctx;
 }
 
