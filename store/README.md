@@ -67,6 +67,7 @@ PAGE
 
 NETWORK
 • Request rules: add or remove headers, redirect (prod assets to localhost), block, CORS for localhost
+• Mock API responses: fake the body, status, headers or delay of matching fetch and XHR calls, or make them fail like a network error, only on the tabs you turn it on for; start a mock from a request the page made or from a URL's real response
 • Environment groups: jump between local, staging and prod on the same path, with a red ribbon on prod
 
 AI, WITH YOUR OWN MODEL
@@ -100,7 +101,7 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | sidePanel | The extension's main interface is a side panel next to the page. |
 | contextMenus | Right-click entries: ask the AI about a selection or the page, open the JSON-LD and headers tools. |
 | declarativeNetRequest | Applies the request rules the developer writes (add/remove headers, redirects, blocks, CORS for localhost) and the per-tab "disable cache" rule. |
-| debugger | Uses the Chrome DevTools Protocol, only when the developer turns emulation on or takes a full-page screenshot: emulates color scheme, reduced motion, contrast, print media, CPU and network throttling and vision deficiencies, and captures the full page. It detaches when they stop. |
+| debugger | Uses the Chrome DevTools Protocol, only when the developer turns emulation or API mocks on, or takes a full-page screenshot: emulates color scheme, reduced motion, contrast, print media, CPU and network throttling and vision deficiencies, answers the tab's matching fetch/XHR calls with the developer's mock responses, and captures the full page. It detaches when they stop. |
 | browsingData (optional) | Clears the cache, cookies and storage of the current site only, when asked. |
 | cookies (optional) | The cookie editor: list, edit, delete, export and import the current site's cookies. |
 | contentSettings (optional) | The "JavaScript off for this site" toggle. |
