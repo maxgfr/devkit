@@ -3,7 +3,8 @@ import { browser, type Browser } from "wxt/browser";
 import { ACTIONS, isNoCacheOn } from "../../lib/actions";
 import { runInTab } from "../../lib/inject";
 import { ensurePermission } from "../../lib/permissions";
-import { Button, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
+import { auditCookies } from "../../lib/security/cookies";
+import { Button, Checks, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
 import { useAsync } from "../hooks";
 import { AccessGate, useInPage, usePage, useRunAction } from "../page";
 
@@ -137,6 +138,12 @@ export function Cookies() {
     () => list.filter((c) => `${c.name} ${c.value} ${c.domain}`.toLowerCase().includes(filter.toLowerCase())),
     [list, filter],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: list derives from cookies.data
+  const audit = useMemo(() => {
+    const a = auditCookies(list, page.url);
+    const flags = new Map(list.map((c, i) => [`${c.domain}${c.path}${c.name}`, a.perCookie[i]!]));
+    return { ...a, flags, bad: a.perCookie.flat().filter((f) => f.level === "bad").length };
+  }, [cookies.data, page.url]);
 
   if (!page.origin) return <Empty>Open a web page to see its cookies.</Empty>;
   if (cookies.data === "no-permission")
@@ -230,6 +237,14 @@ export function Cookies() {
       {editing ? (
         <CookieForm cookie={editing} onCancel={() => setEditing(null)} onSave={(c) => save(c, editing.name ? editing : undefined)} />
       ) : null}
+      {list.length ? (
+        <details className="cookie-audit" open={audit.bad > 0}>
+          <summary className="small">
+            Flag audit: {audit.bad ? <b className="t-bad">{audit.bad} risky</b> : <span className="muted">nothing risky</span>}
+          </summary>
+          <Checks checks={audit.summary} />
+        </details>
+      ) : null}
       <input type="search" placeholder="Filter cookies" value={filter} onChange={(e) => setFilter(e.target.value)} />
       {shown.length ? (
         <ul className="list">
@@ -263,6 +278,15 @@ export function Cookies() {
                 {c.domain}
                 {c.path} · {c.session ? "session" : `expires ${new Date((c.expirationDate ?? 0) * 1000).toLocaleString()}`}
               </div>
+              {audit.flags.get(`${c.domain}${c.path}${c.name}`)?.length ? (
+                <div className="row cookie-flags">
+                  {audit.flags.get(`${c.domain}${c.path}${c.name}`)!.map((f) => (
+                    <span key={f.id} className={`pill${f.level === "info" ? "" : ` t-${f.level}`}`} title={f.detail}>
+                      {f.label}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
