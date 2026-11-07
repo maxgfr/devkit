@@ -40,6 +40,11 @@
         <li>Your settings, request rules, environment groups and the last tool you opened, in Chrome's extension storage.</li>
         <li>Your AI provider key, encrypted with a key kept in the extension's IndexedDB. It is never written to sync storage and never sent anywhere except to the provider it belongs to.</li>
         <li>Console errors captured from a page, kept in that page's memory and gone when it reloads or closes.</li>
+        <li>
+          Steps recorded for a bug report, only after you start the recorder: kept in Chrome's session storage for that tab, gone when the tab
+          closes or the browser quits. Typed values are masked unless you turn them on; passwords, card numbers and hidden fields are never
+          recorded.
+        </li>
       </ul>
 
       <h2>What leaves your device, and when</h2>

@@ -96,6 +96,14 @@
     "keywords": "inspect select element react component props source file line selector agent claude cursor"
   },
   {
+    "id": "copy-bug-report",
+    "kind": "action",
+    "category": "ai",
+    "title": "Copy a bug report",
+    "description": "Steps, console errors, failed requests and environment as Markdown for a coding agent",
+    "keywords": "bug report issue repro reproduce steps jam ticket agent claude cursor playwright failed requests errors clipboard"
+  },
+  {
     "id": "copy-markdown-link",
     "kind": "action",
     "category": "utils",
@@ -358,6 +366,14 @@
     "title": "Ask AI about the page",
     "description": "Analyses and chat with your own model",
     "keywords": "llm gpt claude gemini summarize chat"
+  },
+  {
+    "id": "report",
+    "kind": "panel",
+    "category": "ai",
+    "title": "Bug report",
+    "description": "Steps, errors, failed requests and environment as Markdown for a coding agent",
+    "keywords": "bug issue repro reproduce steps recorder jam ticket agent claude cursor playwright failed requests errors"
   },
   {
     "id": "models",

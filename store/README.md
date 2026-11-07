@@ -65,6 +65,7 @@ SECURITY
 
 PAGE
 • Element picker for coding agents: click an element of the page and copy, as Markdown, its React, Vue, Svelte or Angular component stack with file and line (dev builds), props, a unique selector, a Playwright locator, trimmed HTML, the computed styles that matter and your note on what is wrong; plus a cropped screenshot of the element
+• Bug reports for coding agents and teammates, in one click: what happened, the steps you recorded (clicks, typing with values masked, Enter and Escape, navigations) and a Playwright test that replays them, console errors, failed and slow requests, browser and viewport, Web Vitals and the picked element, as Markdown or JSON. Keys and tokens are redacted, and nothing leaves your browser until you copy it
 • Design mode, element outlines, CSS off, JavaScript off for a site
 • Emulate dark/light, reduced motion, contrast, print, CPU and network throttling, vision deficiencies
 • Responsive window sizes, full-page screenshots, a form filler with plausible fake data
@@ -100,10 +101,10 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | Permission | Justification |
 |---|---|
 | activeTab | Runs the tool the developer picks (from the popup, a shortcut or the context menu) on the tab they are on. |
-| scripting | Injects devkit's own bundled scripts into the current page to read its metadata, JSON-LD, performance entries and storage, and to apply page tools (design mode, outlines, CSS off, form filler), and to run the accessibility audit (axe-core, bundled). No remote code. |
+| scripting | Injects devkit's own bundled scripts into the current page to read its metadata, JSON-LD, performance entries and storage, to apply page tools (design mode, outlines, CSS off, form filler), to run the accessibility audit (axe-core, bundled) and, once the developer starts it, to record the steps of a bug report. No remote code. |
 | storage | Keeps settings, request rules, environment groups and the last opened tool on the device. |
 | sidePanel | The extension's main interface is a side panel next to the page. |
-| contextMenus | Right-click entries: ask the AI about a selection or the page, open the JSON-LD and headers tools. |
+| contextMenus | Right-click entries: ask the AI about a selection or the page, open the JSON-LD and headers tools, pick an element, write a bug report. |
 | declarativeNetRequest | Applies the request rules the developer writes (add/remove headers, redirects, blocks, CORS for localhost) and the per-tab "disable cache" rule. |
 | debugger | Uses the Chrome DevTools Protocol, only when the developer turns emulation or API mocks on, or takes a full-page screenshot: emulates color scheme, reduced motion, contrast, print media, CPU and network throttling and vision deficiencies, answers the tab's matching fetch/XHR calls with the developer's mock responses, and captures the full page. It detaches when they stop. |
 | browsingData (optional) | Clears the cache, cookies and storage of the current site only, when asked. |
@@ -113,7 +114,7 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 
 **Remote code**: No, I am not using remote code. All JavaScript is bundled in the package.
 
-**Data usage**: tick **Website content** (page text, metadata and errors are sent to the AI provider the user configured, only when they run an AI action) and **Authentication information** (the user's own AI provider key, stored encrypted on the device and sent only to that provider). Then certify the three statements: data is not sold, not used for unrelated purposes, not used for creditworthiness.
+**Data usage**: tick **Website content** (page text, metadata and errors are sent to the AI provider the user configured, only when they run an AI action), **User activity** (the bug report's recorded steps, clicks and keys pressed in the page, stay on the device unless the user sends the report to their AI provider) and **Authentication information** (the user's own AI provider key, stored encrypted on the device and sent only to that provider). Then certify the three statements: data is not sold, not used for unrelated purposes, not used for creditworthiness.
 
 **Privacy policy URL**: https://maxgfr.github.io/devkit/privacy.html
 
