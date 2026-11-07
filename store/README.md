@@ -44,10 +44,11 @@ CACHE & STORAGE
 • Storage usage: quota, IndexedDB databases and record counts, Cache Storage sizes, OPFS, the largest Web Storage keys, service workers
 
 INSPECT
+• A page report: security grade, SEO, structured data, console errors, accessibility hints and Web Vitals in one list, each opening its tool
 • Tech stack detection (frameworks, CMS, analytics, CDN, server)
 • SEO and meta: title and description lengths, canonical, robots, hreflang, Open Graph and Twitter cards, heading outline
 • Structured data (JSON-LD) analyzer: invalid JSON with its line and column, wrong prices, relative URLs, missing recommended fields
-• Web Vitals and the heaviest resources
+• Web Vitals on their good / poor scales, the navigation timeline, bytes by resource type and a request waterfall
 • Console errors captured from page load, with a count on the toolbar badge
 • Link checker, robots.txt, sitemap and web app manifest checks, fonts and colors, quick accessibility hints
 
