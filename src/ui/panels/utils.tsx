@@ -166,10 +166,10 @@ export function Encode() {
     >
       <textarea rows={5} value={text} onChange={(e) => setText(e.target.value)} placeholder="Text to encode or decode" />
       <h3>Encoded</h3>
-      <Code text={enc.value} />
+      <Code text={enc.value} empty="Type or paste text above." />
       <h3>Decoded</h3>
       {dec.ok ? (
-        <Code text={dec.value} />
+        <Code text={dec.value} empty="Type or paste encoded text above." />
       ) : (
         <span className="small muted">
           Not valid {codec}: {dec.value}
@@ -657,10 +657,10 @@ export function Qr() {
           />
           <div className="row" style={{ justifyContent: "center" }}>
             <Button size="small" onClick={() => download("qr.svg", svg, "image/svg+xml")}>
-              SVG
+              Download SVG
             </Button>
             <a className="btn small" href={png} download="qr.png">
-              PNG
+              Download PNG
             </a>
           </div>
         </>

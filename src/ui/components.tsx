@@ -133,7 +133,8 @@ export function CopyButton({ text, label = "Copy", className }: { text: string; 
   );
 }
 
-export function Code({ text, maxHeight }: { text: string; maxHeight?: number }) {
+export function Code({ text, maxHeight, empty = "Nothing yet." }: { text: string; maxHeight?: number; empty?: string }) {
+  if (!text) return <p className="code-empty">{empty}</p>;
   return (
     <div className="code-wrap">
       <pre className="code" style={maxHeight ? { maxHeight } : undefined}>
@@ -245,26 +246,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export const useToast = () => useContext(ToastContext);
-
-export function SubNav<T extends string>({
-  items,
-  value,
-  onChange,
-}: {
-  items: { id: T; label: string }[];
-  value: T;
-  onChange: (id: T) => void;
-}) {
-  return (
-    <nav className="subnav" aria-label="Sections">
-      {items.map((i) => (
-        <button key={i.id} type="button" aria-pressed={i.id === value} onClick={() => onChange(i.id)}>
-          {i.label}
-        </button>
-      ))}
-    </nav>
-  );
-}
 
 /** Keeps one broken tool from blanking the whole panel: shows its error and a way back. */
 export class PanelBoundary extends Component<{ children: ReactNode }, { error: unknown }> {

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { ACTIONS, CATEGORIES } from "../lib/actions";
 import { PANELS, PENDING_ROUTE_KEY, type Route } from "../lib/panels";
@@ -53,8 +53,11 @@ function PaletteInner() {
   const runAction = useRunAction();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
-  const listRef = useRef<HTMLUListElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const results = useMemo(() => searchItems(q), [q]);
+  useEffect(() => {
+    listRef.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [sel]);
 
   const openPanel = async (route: Route) => {
     if (page.tab) await browser.sidePanel.open({ windowId: page.tab.windowId });
@@ -92,35 +95,37 @@ function PaletteInner() {
             e.preventDefault();
             choose(results[sel]);
           }
-          listRef.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: "nearest" });
         }}
         aria-label="Search commands"
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="palette-results"
+        aria-activedescendant={results[sel] ? `palette-item-${sel}` : undefined}
       />
-      <ul ref={listRef}>
+      <div ref={listRef} id="palette-results" className="results" role="listbox" aria-label="Commands">
         {results.map((item, i) => (
-          <li key={`${item.kind}:${item.id}`}>
-            <button
-              type="button"
-              data-i={i}
-              role="option"
-              aria-selected={i === sel}
-              onMouseEnter={() => setSel(i)}
-              onClick={() => choose(item)}
-            >
-              <span>{item.title}</span>
-              <span className="desc">{item.description}</span>
-              <span className={`pill cat ${item.kind === "action" ? "accent" : ""}`}>
-                {item.kind === "action" ? "run" : CATEGORIES[item.category]}
-              </span>
-            </button>
-          </li>
+          <button
+            key={`${item.kind}:${item.id}`}
+            type="button"
+            id={`palette-item-${i}`}
+            tabIndex={-1}
+            data-i={i}
+            role="option"
+            aria-selected={i === sel}
+            onMouseEnter={() => setSel(i)}
+            onClick={() => choose(item)}
+          >
+            <span>{item.title}</span>
+            <span className="desc">{item.description}</span>
+            <span className={`pill cat ${item.kind === "action" ? "accent" : ""}`}>
+              {item.kind === "action" ? "run" : CATEGORIES[item.category]}
+            </span>
+          </button>
         ))}
         {results.length === 0 ? (
-          <li className="muted" style={{ padding: 10 }}>
-            Nothing matches.
-          </li>
+          <p className="muted empty">Nothing matches “{q}”. Try a tool name such as cookies, headers or jwt.</p>
         ) : null}
-      </ul>
+      </div>
       <footer>
         <span>↑↓ to move · Enter to run</span>
         <button type="button" className="btn small ghost" onClick={() => openPanel({ panel: "cache-actions" })}>

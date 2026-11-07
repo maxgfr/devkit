@@ -241,7 +241,9 @@ export function Cookies() {
                 </b>
                 {c.httpOnly ? <span className="pill">HttpOnly</span> : null}
                 {c.secure ? <span className="pill">Secure</span> : null}
-                <span className="pill">{c.sameSite}</span>
+                <span className="pill" title="SameSite attribute">
+                  SameSite: {c.sameSite}
+                </span>
                 <Button size="small" onClick={() => setEditing(c)}>
                   Edit
                 </Button>

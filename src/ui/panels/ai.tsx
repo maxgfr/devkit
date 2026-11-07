@@ -149,6 +149,7 @@ export function AiSettings({ onSaved }: { onSaved?: () => void }) {
           <input type="checkbox" checked={d.rememberKey} onChange={(e) => store.setRememberKey(e.target.checked)} /> Remember the key on
           this device
         </label>
+        <span className="grow" />
         <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
           Answers in
           <select value={d.language} onChange={(e) => store.setLanguage(e.target.value)} style={{ width: "auto" }}>
@@ -194,14 +195,16 @@ export function AiSettings({ onSaved }: { onSaved?: () => void }) {
         >
           Save
         </Button>
+        <span className="grow" />
         <Button
-          variant="ghost"
+          variant="danger"
+          title="Forget the provider, model and key stored on this device"
           onClick={async () => {
             await store.clear();
-            toast("AI settings cleared.");
+            toast("AI settings and key cleared.");
           }}
         >
-          Clear
+          Clear settings
         </Button>
       </div>
       {state.testResult ? (
@@ -630,29 +633,30 @@ export function Models() {
         </select>
       </div>
       {models.loading ? <Empty>Loading the catalog (a few MB, cached for an hour)…</Empty> : null}
-      <table className="kv">
-        <tbody>
-          {rows.map((m) => (
-            <tr key={`${m.provider}/${m.id}`}>
-              <th>
-                <div>{m.name}</div>
-                <div className="muted mono small">
-                  {m.provider}/{m.id}
-                </div>
-              </th>
-              <td>
+      {models.data && !rows.length ? <Empty>No model matches these filters.</Empty> : null}
+      <ul className="list models">
+        {rows.map((m) => (
+          <li key={`${m.provider}/${m.id}`}>
+            <div className="row">
+              <b className="grow ellipsis" title={m.name}>
+                {m.name}
+              </b>
+              <span className="mono price" title="USD per million tokens, input / output">
                 {m.cost ? `$${m.cost.input} / $${m.cost.output}` : "–"}
-                <div className="muted">
-                  {Math.round(m.context_length / 1000)}k ctx{m.output_limit ? ` · ${Math.round(m.output_limit / 1000)}k out` : ""}
-                  {m.modalities.input.includes("image") ? " · vision" : ""}
-                  {m.capabilities.reasoning ? " · reasoning" : ""}
-                  {m.knowledge_cutoff ? ` · cutoff ${m.knowledge_cutoff}` : ""}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              </span>
+            </div>
+            <div className="mono small muted ellipsis" title={`${m.provider}/${m.id}`}>
+              {m.provider}/{m.id}
+            </div>
+            <div className="small muted">
+              {Math.round(m.context_length / 1000)}k context{m.output_limit ? ` · ${Math.round(m.output_limit / 1000)}k out` : ""}
+              {m.modalities.input.includes("image") ? " · vision" : ""}
+              {m.capabilities.reasoning ? " · reasoning" : ""}
+              {m.knowledge_cutoff ? ` · cutoff ${m.knowledge_cutoff}` : ""}
+            </div>
+          </li>
+        ))}
+      </ul>
     </Section>
   );
 }

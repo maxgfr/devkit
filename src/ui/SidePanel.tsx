@@ -102,8 +102,14 @@ function Shell() {
       </div>
       <nav className="subnav" aria-label={CATEGORIES[category]}>
         {panels.map((p) => (
-          <button key={p.id} type="button" aria-pressed={p.id === route.panel} onClick={() => go({ panel: p.id })} title={p.description}>
-            {p.title}
+          <button
+            key={p.id}
+            type="button"
+            aria-pressed={p.id === route.panel}
+            onClick={() => go({ panel: p.id })}
+            title={`${p.title} · ${p.description}`}
+          >
+            {p.short ?? p.title}
           </button>
         ))}
       </nav>

@@ -196,11 +196,11 @@ function Backup() {
 export function OptionsApp() {
   return (
     <ToastProvider>
-      <div style={{ maxWidth: 760, margin: "0 auto", padding: 20 }} className="stack">
-        <header className="row" style={{ gap: 10 }}>
+      <div className="options">
+        <header className="row options-head">
           <img src="/icon/48.png" alt="" width={32} height={32} />
           <div>
-            <h1 style={{ margin: 0, fontSize: 18 }}>devkit</h1>
+            <h1>devkit</h1>
             <span className="muted small">Settings</span>
           </div>
         </header>

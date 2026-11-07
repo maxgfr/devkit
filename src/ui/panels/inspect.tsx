@@ -120,6 +120,13 @@ export function Overview() {
   );
 }
 
+/** og:image of the social card; says so instead of showing a broken image when it is missing or does not load. */
+function SocialImage({ src }: { src: string | undefined }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  if (!src || failed === src) return <div className="social-noimg">{src ? `og:image does not load: ${src}` : "No og:image set."}</div>;
+  return <img src={src} alt="" onError={() => setFailed(src)} />;
+}
+
 export function Seo() {
   const meta = useInPage(collectMeta);
   const snap = meta.data;
@@ -143,13 +150,7 @@ export function Seo() {
           {social ? (
             <Section title="Social preview">
               <div className="social">
-                {social.image ? (
-                  <img src={social.image} alt="" />
-                ) : (
-                  <div className="muted small" style={{ padding: 10 }}>
-                    No og:image
-                  </div>
-                )}
+                <SocialImage src={social.image} />
                 <div className="body">
                   <div className="site">{social.site}</div>
                   <b>{social.title}</b>

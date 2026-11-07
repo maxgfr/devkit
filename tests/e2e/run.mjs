@@ -75,7 +75,8 @@ try {
   const text = () => panel.locator("main").innerText();
   const open = async (tab, sub) => {
     await panel.getByRole("tab", { name: tab }).click();
-    if (sub) await panel.locator(".subnav button", { hasText: sub }).first().click();
+    // Sub-navigation pills show short labels; their tooltip starts with the full title.
+    if (sub) await panel.locator(`.subnav button[title^="${sub}"]`).first().click();
     await panel.waitForTimeout(600);
   };
   const shot = async (name) => {
@@ -319,7 +320,7 @@ try {
   await popup.setViewportSize({ width: 400, height: 560 });
   await popup.goto(`chrome-extension://${id}/popup.html`);
   await popup.getByLabel("Search commands").fill("json-ld");
-  const first = await popup.locator(".palette li button").first().innerText();
+  const first = await popup.getByRole("option").first().innerText();
   check("palette finds the JSON-LD analyzer", /Structured data/.test(first), first.split("\n")[0]);
 
   // Options
