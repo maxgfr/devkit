@@ -282,12 +282,12 @@ try {
   });
   await panel.locator(".rs-card").getByRole("button", { name: "Copy for agent" }).click();
   await panel.waitForTimeout(300);
-  const md = await panel.evaluate(() => window.__copied ?? "");
+  const slowMd = await panel.evaluate(() => window.__copied ?? "");
   check(
     "responsiveness: Markdown for an agent with the script, position and suggestions",
-    md.includes("# Slow interaction on") &&
-      /`onSlowClick` in http:\/\/127\.0\.0\.1:\d+\/slow\.js at line 5, column \d+/.test(md) &&
-      md.includes("## Suggestions (heuristics"),
+    slowMd.includes("# Slow interaction on") &&
+      /`onSlowClick` in http:\/\/127\.0\.0\.1:\d+\/slow\.js at line 5, column \d+/.test(slowMd) &&
+      slowMd.includes("## Suggestions (heuristics"),
   );
   await shot("inspect-responsiveness");
 
@@ -383,7 +383,7 @@ try {
     "a11y: Copy for agent gives Markdown with the rule, WCAG refs, selector and snippet",
     copied[0]?.includes("## `image-alt`: Images must have alternative text") &&
       copied[0]?.includes("WCAG 1.1.1 Non-text Content (A)") &&
-      copied[0]?.includes("1. `img`") &&
+      /1\. `img[^`]*`/.test(copied[0] ?? "") &&
       copied[0]?.includes('<img src="/mug.jpg">') &&
       copied[1]?.includes("# Accessibility audit") &&
       copied[1]?.includes('`input[name="email"]`'),

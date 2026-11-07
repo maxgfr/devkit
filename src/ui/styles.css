@@ -1973,7 +1973,6 @@ textarea.mock-body.invalid {
 .lib-where .muted {
   flex: none;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the mock list rule above */
 .lib-where .mono {
   min-width: 0;
 }
@@ -2136,7 +2135,6 @@ textarea.mock-body.invalid {
   align-items: baseline;
   gap: 8px;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the checks list rule above */
 .ax-rule-head .status-icon {
   align-self: flex-start;
   margin-top: 3px;
@@ -2468,7 +2466,6 @@ textarea.mock-body.invalid {
   align-items: baseline;
   gap: 8px;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the severity pill rule above */
 .rs-phases .viz-key {
   align-self: center;
 }
@@ -2637,7 +2634,6 @@ button.rs-grow-row[aria-pressed="true"] .rs-glabel {
   font-size: 12px;
 }
 table.rs-fns th,
-/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the prose table rule above */
 table.rs-fns td {
   padding: 3px 4px;
   border-bottom: 1px solid var(--line);
@@ -2707,7 +2703,6 @@ table.rs-fns td:first-child {
   gap: 8px;
   align-items: start;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the checks list rule above */
 .rs-reasons .status-icon {
   margin-top: 2px;
 }
