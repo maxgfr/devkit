@@ -9,6 +9,7 @@ const MENU = {
   selection: "devkit-ask-selection",
   jsonld: "devkit-jsonld",
   headers: "devkit-headers",
+  element: "devkit-pick-element",
 } as const;
 
 function createMenus() {
@@ -17,6 +18,7 @@ function createMenus() {
     browser.contextMenus.create({ id: MENU.page, title: "Summarize this page with devkit AI", contexts: ["page"] });
     browser.contextMenus.create({ id: MENU.jsonld, title: "Inspect structured data (JSON-LD)", contexts: ["page"] });
     browser.contextMenus.create({ id: MENU.headers, title: "Inspect headers & security", contexts: ["page"] });
+    browser.contextMenus.create({ id: MENU.element, title: "Pick an element for a coding agent", contexts: ["page", "link", "image"] });
   });
 }
 
@@ -68,6 +70,7 @@ export default defineBackground(() => {
       openPanel(tab.windowId, { panel: "ask", params: { action: "summarize", at: String(Date.now()) } });
     else if (info.menuItemId === MENU.jsonld) openPanel(tab.windowId, { panel: "jsonld" });
     else if (info.menuItemId === MENU.headers) openPanel(tab.windowId, { panel: "headers" });
+    else if (info.menuItemId === MENU.element) openPanel(tab.windowId, { panel: "element", params: { pick: "1", at: String(Date.now()) } });
   });
 
   browser.commands.onCommand.addListener(async (command, tab) => {

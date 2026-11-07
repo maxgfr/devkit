@@ -1,5 +1,6 @@
 import { browser } from "wxt/browser";
 import { runInTab } from "./inject";
+import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
 import { ALL_SITES, type PermissionNeed } from "./permissions";
 import { originOf, originPattern, type Tab } from "./tab";
@@ -221,6 +222,20 @@ export const ACTIONS: ActionDef[] = [
       await browser.contentSettings.javascript.set({ primaryPattern: originPattern(origin), setting: next });
       await browser.tabs.reload(tabId);
       return { message: next === "block" ? `JavaScript blocked on ${origin}.` : `JavaScript allowed on ${origin}.` };
+    },
+  },
+  {
+    id: "pick-element",
+    title: "Pick an element",
+    description: "Click an element of the page, copy its component, source and styles for a coding agent",
+    category: "page",
+    keywords: "inspect select element react component props source file line selector agent claude cursor",
+    needsPage: true,
+    run: async ({ tab }) => {
+      // Opening the side panel needs the user gesture: call it before anything is awaited.
+      browser.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
+      await browser.storage.session.set({ [PENDING_ROUTE_KEY]: { panel: "element", params: { pick: "1", at: String(Date.now()) } } });
+      return { message: "Click an element in the page (Esc cancels)." };
     },
   },
   {
