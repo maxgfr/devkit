@@ -1,4 +1,4 @@
 {
-  "prompt": "Origin: real screenshot of the devkit extension (built from this repo, commit e8f0935), captured with Playwright in Chromium at 2x, dark scheme, on a synthetic demo product page served locally. Not generated.",
-  "createdAt": "2026-11-05T15:39:04.342Z"
+  "prompt": "Origin: real screenshot of the devkit extension (built from this repo, commit d4b7945), captured with Playwright in Chromium at 2x, dark scheme, on a synthetic demo product page served locally, answered by a real model, by scripts/site-shots.mjs. Not generated.",
+  "createdAt": "2026-11-07T18:50:35.067Z"
 }
