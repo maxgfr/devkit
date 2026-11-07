@@ -25,6 +25,18 @@ const page = (base, port) => `<!doctype html>
 <img src="/mug.jpg">
 <a href="/ok">ok link</a> <a href="/missing">broken link</a>
 <form><input name="email"><input name="first_name" placeholder="First name"><textarea name="message"></textarea><select name="country"><option value="">-</option><option value="fr">France</option></select></form>
+<div id="app"><section class="toolbar"><button id="save-btn" class="btn" type="button" onclick="window.__saveClicks = (window.__saveClicks || 0) + 1">Save changes</button></section></div>
+<script>
+// A React 18 dev-build fiber on the button, as react-dom attaches it: the element picker reads it.
+(function () {
+  function Toolbar() {}
+  function SaveButton() {}
+  var root = { tag: 3, type: null, return: null };
+  var toolbar = { tag: 0, type: Toolbar, elementType: Toolbar, return: root, memoizedProps: {}, _debugOwner: null, _debugSource: { fileName: "/app/src/App.tsx", lineNumber: 21, columnNumber: 5 } };
+  var save = { tag: 0, type: SaveButton, elementType: SaveButton, return: toolbar, memoizedProps: { label: "Save changes", onSave: function handleSave() {} }, _debugOwner: toolbar, _debugSource: { fileName: "/app/src/Toolbar.tsx", lineNumber: 12, columnNumber: 7 } };
+  document.getElementById("save-btn").__reactFiber$e2e = { tag: 5, type: "button", return: save, _debugOwner: save, _debugSource: { fileName: "/app/src/components/SaveButton.tsx", lineNumber: 14, columnNumber: 9 } };
+})();
+</script>
 </body></html>`;
 
 const sse = (res, text) => {
@@ -101,7 +113,11 @@ const server = http.createServer((req, res) => {
       const content = typeof user.content === "string" ? user.content : user.content.map((p) => p.text ?? "").join("");
       const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
       const hasText = content.includes("best mug");
-      sse(res, `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Context length: ${content.length} chars.`);
+      const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
+      sse(
+        res,
+        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Context length: ${content.length} chars.`,
+      );
     });
     return;
   }

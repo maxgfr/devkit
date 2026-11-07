@@ -251,6 +251,47 @@ try {
   check("clear site data empties localStorage and reloads", (await site.evaluate(() => localStorage.getItem("devkit-test"))) === null);
 
   // Page
+  await open("Page");
+  check(
+    "element picker: default panel of the Page tab",
+    (await panel.locator(".subnav button[aria-pressed=true]").innerText()) === "Element",
+  );
+  const overlayOn = () => site.evaluate(() => Boolean(document.querySelector("devkit-picker")));
+  const waitOverlay = () =>
+    site.waitForFunction(() => Boolean(document.querySelector("devkit-picker")), null, { timeout: 5000 }).catch(() => undefined);
+  await panel.getByRole("button", { name: "Pick an element" }).click();
+  await waitOverlay();
+  check("element picker: overlay injected", await overlayOn());
+  await site.keyboard.press("Escape");
+  await panel.waitForTimeout(400);
+  check("element picker: Esc cancels and removes the overlay", (await text()).includes("Pick cancelled") && !(await overlayOn()));
+  await panel.getByRole("button", { name: "Pick an element" }).click();
+  await waitOverlay();
+  await site.click("#save-btn");
+  await panel.waitForSelector(".el-card", { timeout: 8000 }).catch(() => undefined);
+  await panel.waitForTimeout(500);
+  t = await text();
+  check(
+    "element picker: React component and file:line",
+    t.includes("<SaveButton>") && t.includes("/app/src/components/SaveButton.tsx:14:9") && t.includes("/app/src/Toolbar.tsx:12:7"),
+    t.match(/[^\n]*SaveButton\.tsx[^\n]*/)?.[0],
+  );
+  check("element picker: the page never saw the click", (await site.evaluate(() => window.__saveClicks ?? 0)) === 0);
+  check("element picker: overlay removed after the pick", !(await overlayOn()));
+  await panel.getByLabel("What's wrong / what should change?").fill("The button should be full width on mobile.");
+  t = await text();
+  check(
+    "element picker: Markdown with selector, locator, props and note",
+    t.includes("Selector: `#save-btn`") &&
+      t.includes("page.getByRole('button', { name: 'Save changes' })") &&
+      t.includes('"onSave": "ƒ handleSave"') &&
+      t.includes("The button should be full width on mobile."),
+  );
+  await shot("page-element");
+  await panel.locator(".el-crumb", { hasText: "section.toolbar" }).click();
+  await panel.waitForTimeout(600);
+  check("element picker: breadcrumb selects the parent", (await panel.locator(".el-tag").innerText()) === "section.toolbar");
+
   await open("Page", "Page tools");
   await action("Toggle element outlines");
   await panel.waitForTimeout(300);
@@ -337,6 +378,18 @@ try {
   check("AI: usage shown", /1234 in · 20 out/.test(t));
   await shot("ai-ask");
 
+  // Element picker → Ask AI: the picked element travels as a context part.
+  await open("Page", "Element picker");
+  await panel.getByRole("button", { name: /^Pick (an element|another)$/ }).click();
+  await waitOverlay();
+  await site.click("#save-btn");
+  await panel.waitForSelector(".el-card", { timeout: 8000 }).catch(() => undefined);
+  await panel.getByRole("button", { name: "Ask AI about it" }).click();
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check("element picker: Ask AI sends the picked element", t.includes("Fix the picked element") && t.includes("Picked element: button"));
+
   await open("AI", "Model browser");
   await panel.waitForTimeout(1500);
   check("AI: model browser lists the catalog", /Model browser \(\d{3,}\)/.test(await text()));
@@ -392,6 +445,9 @@ try {
   await popup.getByLabel("Search commands").fill("json-ld");
   const first = await popup.getByRole("option").first().innerText();
   check("palette finds the JSON-LD analyzer", /Structured data/.test(first), first.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("pick");
+  const pickFirst = await popup.getByRole("option").first().innerText();
+  check("palette finds the element picker", /Pick an element/.test(pickFirst), pickFirst.split("\n")[0]);
 
   // Options
   const options = await context.newPage();
