@@ -830,3 +830,504 @@ table.kv td {
   padding: 18px 0;
   border-top: 1px solid var(--line);
 }
+
+/* Charts (src/ui/charts.tsx) ----------------------------------------------
+   Resource kinds use a categorical order checked for color-vision deficiency
+   (adjacent pairs ΔE ≥ 13 in OKLab×100 under protan/deutan simulation, every
+   mark ≥ 3:1 on the surface) in both themes: cyan, orange, violet, magenta,
+   blue; "other" is neutral. States reuse --good / --warn / --bad and always
+   come with a shape and a word. Text stays in the --fg tokens. */
+:root {
+  --viz-1: #0891b2;
+  --viz-2: #eb6834;
+  --viz-3: #6250d6;
+  --viz-4: #d55181;
+  --viz-5: #2a78d6;
+  --viz-other: #8a91a0;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --viz-1: #0e9fbd;
+    --viz-2: #d95926;
+    --viz-3: #9085e9;
+    --viz-4: #d55181;
+    --viz-5: #3987e5;
+    --viz-other: #6b7280;
+  }
+}
+.viz-num {
+  font-variant-numeric: tabular-nums;
+}
+.status-icon {
+  flex: none;
+  display: inline-block;
+  vertical-align: -1px;
+}
+.viz-key {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+  display: inline-block;
+}
+.viz-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.viz-legend > li,
+.viz-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.viz-legend .viz-num {
+  color: var(--fg);
+}
+
+/* Thin part-to-whole bar: 2px surface gaps, rounded ends. */
+.viz-seg {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.viz-seg:empty {
+  background: var(--bg-3);
+}
+.viz-seg > span {
+  flex-basis: 0;
+  min-width: 3px;
+}
+
+/* Web Vitals */
+.vitals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.vital {
+  padding: 8px 10px 4px;
+}
+.vital + .vital {
+  border-top: 1px solid var(--line);
+}
+.vital-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.vital-head > b {
+  font-weight: 650;
+  min-width: 36px;
+}
+.vital-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vital-value {
+  font-weight: 650;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.vital-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.vital-why {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--fg-3);
+}
+.viz-threshold {
+  padding-top: 7px;
+}
+.viz-threshold .zones,
+.viz-meter .bands {
+  position: relative;
+  display: flex;
+  gap: 2px;
+}
+.viz-threshold .zones {
+  height: 6px;
+}
+.viz-threshold .zones > span:not(.marker),
+.viz-meter .band {
+  flex-basis: 0;
+  background: color-mix(in srgb, var(--c) 30%, var(--bg));
+}
+.viz-threshold .zones > span:first-child,
+.viz-meter .band:first-child {
+  border-radius: 3px 0 0 3px;
+}
+.viz-threshold .zones > span:nth-child(3),
+.viz-meter .band:nth-child(6) {
+  border-radius: 0 3px 3px 0;
+}
+.z-good,
+.band.good {
+  --c: var(--good);
+}
+.z-warn,
+.band.warn {
+  --c: var(--warn);
+}
+.z-bad,
+.band.bad {
+  --c: var(--bad);
+}
+.viz-threshold .marker,
+.viz-meter .marker {
+  position: absolute;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--fg);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.viz-threshold .marker {
+  top: -4px;
+  height: 14px;
+}
+.viz-axis {
+  position: relative;
+  height: 15px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+.viz-axis > span {
+  position: absolute;
+  top: 2px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.viz-axis > .first {
+  transform: none;
+}
+.viz-axis > .last {
+  transform: translateX(-100%);
+}
+
+/* Security score */
+.score-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.viz-meter .bands {
+  height: 16px;
+}
+.viz-meter .band {
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.viz-meter .band.current {
+  background: color-mix(in srgb, var(--c) 55%, var(--bg));
+  color: var(--fg);
+}
+.viz-meter .marker {
+  top: -3px;
+  bottom: -3px;
+}
+
+/* Gantt-style timeline and waterfall: one time axis, hairline gridlines. */
+.viz-timeline,
+.viz-waterfall {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.viz-timeline .rows {
+  display: flex;
+  flex-direction: column;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: minmax(88px, 30%) 1fr 54px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.tl-label {
+  color: var(--fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tl-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tl-track,
+.wf-track {
+  position: relative;
+}
+.tl-track {
+  height: 22px;
+}
+.tl-track .grid,
+.wf-grid .grid {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.tl-bar {
+  position: absolute;
+  top: 7px;
+  height: 8px;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.tl-bar.zero {
+  min-width: 2px;
+  background: var(--fg-3);
+}
+.tl-track .mark,
+.mark-key {
+  border-left: 1px solid var(--fg-3);
+}
+.tl-track .mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+.tl-track .mark.m-load,
+.mark-key.m-load {
+  border-left: 2px solid var(--fg-2);
+}
+.mark-key {
+  display: inline-block;
+  height: 12px;
+}
+.axis-row {
+  align-items: start;
+}
+.viz-waterfall ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.viz-waterfall > .viz-axis {
+  margin: 0 6px;
+}
+.viz-waterfall li {
+  position: relative;
+  padding: 3px 6px 5px;
+  border-radius: 4px;
+}
+.viz-waterfall li:hover,
+.viz-waterfall li:focus {
+  background: color-mix(in srgb, var(--bg-3) 70%, transparent);
+}
+.viz-waterfall li:focus-visible {
+  outline-offset: -2px;
+}
+.wf-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.wf-kind {
+  flex: none;
+  width: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-3);
+  font-size: 11px;
+}
+.wf-kind .viz-key {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.wf-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.wf-meta {
+  flex: none;
+  color: var(--fg-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.wf-track {
+  height: 6px;
+  margin-top: 2px;
+}
+.wf-body {
+  position: relative;
+}
+.wf-grid {
+  position: absolute;
+  inset: 0 6px;
+  pointer-events: none;
+}
+.wf-bar {
+  position: absolute;
+  top: 0;
+  height: 6px;
+  min-width: 3px;
+  border-radius: 3px;
+}
+.wf-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  z-index: 3;
+  padding: 5px 8px;
+  border-radius: var(--radius);
+  background: var(--fg);
+  color: var(--bg);
+  font: 11.5px / 1.4 var(--mono);
+  overflow-wrap: anywhere;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.22);
+  pointer-events: none;
+}
+.viz-waterfall li:hover .wf-tip,
+.viz-waterfall li:focus .wf-tip {
+  display: block;
+}
+.viz-waterfall > .btn {
+  align-self: flex-start;
+}
+
+/* One series of horizontal bars, value at the tip. */
+.viz-bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+}
+.viz-bars li {
+  display: grid;
+  grid-template-columns: minmax(80px, 38%) 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.bl-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bl-bar {
+  display: block;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+}
+
+/* The page's colors, widths by use. */
+.viz-swatches {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+}
+.viz-swatches > span {
+  flex-basis: 0;
+  min-width: 6px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 14%, transparent);
+}
+
+/* Report card: one verdict per row, each opening its panel. */
+.report {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--line);
+}
+.report > li {
+  background: var(--bg-2);
+}
+.report-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 12px auto 1fr 12px;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: var(--fg);
+}
+div.report-row {
+  grid-template-columns: 12px auto 1fr;
+}
+button.report-row {
+  cursor: pointer;
+}
+button.report-row:hover {
+  background: var(--bg-3);
+}
+button.report-row:focus-visible {
+  outline-offset: -2px;
+}
+.rr-label {
+  font-weight: 550;
+  white-space: nowrap;
+}
+.rr-value {
+  text-align: right;
+  color: var(--fg-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.report-row .chevron {
+  color: var(--fg-3);
+}
+button.report-row:hover .chevron {
+  color: var(--fg);
+}
+[id^="jsonld-block-"] {
+  scroll-margin-top: 96px;
+}

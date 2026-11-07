@@ -4,6 +4,7 @@ import { CATEGORIES, type Category } from "../lib/actions";
 import { PANEL_IDS, PANELS, PENDING_ROUTE_KEY, type Route } from "../lib/panels";
 import { PanelBoundary, ToastProvider } from "./components";
 import { pinnedTabId } from "./hooks";
+import { NavContext } from "./nav";
 import { PageProvider, usePage } from "./page";
 import { PANEL_COMPONENTS } from "./panels";
 
@@ -117,7 +118,9 @@ function Shell() {
         <Suspense fallback={<p className="muted">Loading…</p>}>
           {Panel ? (
             <PanelBoundary key={route.panel + JSON.stringify(route.params ?? {})}>
-              <Panel params={route.params} />
+              <NavContext.Provider value={go}>
+                <Panel params={route.params} />
+              </NavContext.Provider>
             </PanelBoundary>
           ) : null}
         </Suspense>
