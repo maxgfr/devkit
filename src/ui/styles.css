@@ -1933,7 +1933,7 @@ textarea.mock-body.invalid {
   gap: 6px;
   min-width: 0;
 }
-.lib-head .status-icon {
+.lib-head > svg.status-icon {
   flex: none;
   align-self: center;
 }
@@ -1973,6 +1973,7 @@ textarea.mock-body.invalid {
 .lib-where .muted {
   flex: none;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: unrelated to the mock list rule above */
 .lib-where .mono {
   min-width: 0;
 }
