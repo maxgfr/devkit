@@ -160,12 +160,9 @@ export function ScoreMeter({ score, grade }: { score: number; grade: string }) {
         <span className="marker" style={{ left: onSegments(score / 100, n, band) }} />
       </div>
       <div className="viz-axis" aria-hidden="true">
-        {[0, ...GRADE_BANDS.map((b) => b.to)].map((t, i) => (
-          <span
-            key={t}
-            className={i === 0 ? "first" : i === n ? "last" : undefined}
-            style={{ left: onSegments(t / 100, n, Math.min(i, n - 1), i > 0 && i < n) }}
-          >
+        {/* Band boundaries; 100 is left out, the last band runs to the end. */}
+        {GRADE_BANDS.map((b) => b.from).map((t, i) => (
+          <span key={t} className={i === 0 ? "first" : undefined} style={{ left: onSegments(t / 100, n, i, i > 0) }}>
             {t}
           </span>
         ))}

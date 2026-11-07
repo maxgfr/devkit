@@ -580,7 +580,7 @@ export function Perf() {
   const [all, setAll] = useState(false);
   const p = perf.data;
   const nav = useMemo(() => (p?.navigation ? navigationPhases(p.navigation) : null), [p]);
-  const navAxis = nav ? niceTicks(nav.end, 3) : null;
+  const navAxis = nav ? niceTicks(nav.end, 2) : null;
   const breakdown = useMemo(() => resourceBreakdown(p?.resources ?? []), [p]);
   const waterfall = useMemo(
     () =>
