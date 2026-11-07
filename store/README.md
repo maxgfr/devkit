@@ -57,6 +57,7 @@ SECURITY
 • Secrets scanner: API keys, tokens and private keys shipped to the browser (AWS, Stripe, GitHub, Slack, OpenAI, Anthropic, SendGrid, JWTs…), masked until you reveal them, with where each was found
 • Source maps anyone can download, and an opt-in check of your own site for exposed .git, .env and similar files
 • Third parties: requests and bytes per site, scripts without subresource integrity, mixed content, iframes without sandbox
+• Vulnerable libraries: outdated jQuery, AngularJS, Bootstrap, Lodash, Moment and more, with their CVEs, the version to upgrade to and end-of-life notes, from a bundled Retire.js database (nothing is sent anywhere)
 • CSP analyzer, directive by directive, and a starter policy built from what the page loads
 
 PAGE
@@ -105,7 +106,7 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | browsingData (optional) | Clears the cache, cookies and storage of the current site only, when asked. |
 | cookies (optional) | The cookie editor: list, edit, delete, export and import the current site's cookies. |
 | contentSettings (optional) | The "JavaScript off for this site" toggle. |
-| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, its own scripts and source maps (secrets and source map checks), check its links, capture console errors from page load, and show environment ribbons. |
+| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, its own scripts and source maps (secrets, source map and vulnerable library checks), check its links, capture console errors from page load, and show environment ribbons. |
 
 **Remote code**: No, I am not using remote code. All JavaScript is bundled in the package.
 
