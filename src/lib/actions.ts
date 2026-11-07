@@ -4,11 +4,12 @@ import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregister
 import { ALL_SITES, type PermissionNeed } from "./permissions";
 import { originOf, originPattern, type Tab } from "./tab";
 
-export type Category = "cache" | "inspect" | "page" | "network" | "ai" | "utils";
+export type Category = "cache" | "inspect" | "security" | "page" | "network" | "ai" | "utils";
 
 export const CATEGORIES: Record<Category, string> = {
   cache: "Cache & storage",
   inspect: "Inspect",
+  security: "Security",
   page: "Page",
   network: "Network",
   ai: "AI",

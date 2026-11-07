@@ -3,6 +3,7 @@ import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { A11y, Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { Csp, Exposed, Secrets, ThirdParties } from "./security";
 import { Color, Cron, Diff, Encode, Hash, Ids, Json, Jwt, Qr, Regex, Time, UrlTool } from "./utils";
 
 const Ask = lazy(() => import("./ai").then((m) => ({ default: m.Ask })));
@@ -27,6 +28,10 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   a11y: A11y,
   "site-files": SiteFiles,
   external: External,
+  secrets: Secrets,
+  exposed: Exposed,
+  "third-parties": ThirdParties,
+  csp: Csp,
   "page-tools": PageTools,
   emulation: Emulation,
   viewport: Viewport,

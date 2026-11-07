@@ -8,10 +8,19 @@ import { NavContext } from "./nav";
 import { PageProvider, usePage } from "./page";
 import { PANEL_COMPONENTS } from "./panels";
 
-const SHORT: Record<Category, string> = { cache: "Cache", inspect: "Inspect", page: "Page", network: "Network", ai: "AI", utils: "Utils" };
+const SHORT: Record<Category, string> = {
+  cache: "Cache",
+  inspect: "Inspect",
+  security: "Security",
+  page: "Page",
+  network: "Network",
+  ai: "AI",
+  utils: "Utils",
+};
 const DEFAULT_PANEL: Record<Category, string> = {
   cache: "cache-actions",
   inspect: "overview",
+  security: "headers",
   page: "page-tools",
   network: "rules",
   ai: "ask",

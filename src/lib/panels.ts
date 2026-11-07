@@ -70,7 +70,7 @@ export const PANELS: PanelDef[] = [
   },
   {
     id: "headers",
-    category: "inspect",
+    category: "security",
     title: "Headers & security",
     short: "Headers",
     description: "Security grade, caching, raw response headers",
@@ -130,6 +130,39 @@ export const PANELS: PanelDef[] = [
     short: "External",
     description: "PageSpeed, validators, SSL Labs, Wayback…",
     keywords: "pagespeed lighthouse validator w3c ssl",
+  },
+
+  {
+    id: "secrets",
+    category: "security",
+    title: "Secrets scanner",
+    short: "Secrets",
+    description: "API keys, tokens and private keys shipped to the browser",
+    keywords: "secret leak api key token credential aws stripe github jwt supabase firebase",
+  },
+  {
+    id: "exposed",
+    category: "security",
+    title: "Source maps & exposed files",
+    short: "Exposed files",
+    description: "Reachable source maps, .git, .env and other files that should not be served",
+    keywords: "sourcemap source map .git .env ds_store phpinfo security.txt",
+  },
+  {
+    id: "third-parties",
+    category: "security",
+    title: "Third parties & SRI",
+    short: "Third parties",
+    description: "Who the page loads from, integrity, mixed content, iframe sandbox",
+    keywords: "third party sri subresource integrity crossorigin mixed content iframe sandbox domains",
+  },
+  {
+    id: "csp",
+    category: "security",
+    title: "CSP analyzer",
+    short: "CSP",
+    description: "Content-Security-Policy directive by directive, and a starter policy",
+    keywords: "content security policy csp nonce strict-dynamic unsafe-inline report-only",
   },
 
   {

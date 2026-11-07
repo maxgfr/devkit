@@ -2,7 +2,7 @@
 const root = document.documentElement;
 root.classList.add("js", "pre");
 
-const CATEGORY = { cache: "Cache", inspect: "Inspect", page: "Page", network: "Network", ai: "AI", utils: "Utils" };
+const CATEGORY = { cache: "Cache", inspect: "Inspect", security: "Security", page: "Page", network: "Network", ai: "AI", utils: "Utils" };
 
 /* Fig. 1: draw the leaders once, when the figure is on screen. */
 const fig = document.querySelector(".fig1");
