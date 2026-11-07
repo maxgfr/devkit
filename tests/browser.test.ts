@@ -43,4 +43,20 @@ describe("actions & registry", () => {
     expect(searchItems("structured data").some((i) => i.id === "jsonld")).toBe(true);
     expect(searchItems("zzzz")).toEqual([]);
   });
+  it("palette finds each tool by what its view shows", () => {
+    const finds = (q: string, id: string) =>
+      expect(
+        searchItems(q).map((i) => i.id),
+        q,
+      ).toContain(id);
+    finds("secret", "secrets");
+    finds("csp", "csp");
+    finds("sri", "third-parties");
+    finds("source map", "exposed");
+    finds("element", "element");
+    finds("react", "element");
+    finds("waterfall", "perf");
+    finds("page report", "overview");
+    finds("cookie audit", "cookies");
+  });
 });
