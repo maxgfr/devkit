@@ -59,9 +59,10 @@ function PaletteInner() {
     listRef.current?.querySelector(`[data-i="${sel}"]`)?.scrollIntoView({ block: "nearest" });
   }, [sel]);
 
-  const openPanel = async (route: Route) => {
+  /** Opens the side panel, on `route` when given, else on the view it showed last. */
+  const openPanel = async (route?: Route) => {
     if (page.tab) await browser.sidePanel.open({ windowId: page.tab.windowId });
-    await browser.storage.session.set({ [PENDING_ROUTE_KEY]: route });
+    if (route) await browser.storage.session.set({ [PENDING_ROUTE_KEY]: route });
     window.close();
   };
 
@@ -128,7 +129,7 @@ function PaletteInner() {
       </div>
       <footer>
         <span>↑↓ to move · Enter to run</span>
-        <button type="button" className="btn small ghost" onClick={() => openPanel({ panel: "cache-actions" })}>
+        <button type="button" className="btn small ghost" onClick={() => openPanel()}>
           Open side panel
         </button>
       </footer>

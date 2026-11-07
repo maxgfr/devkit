@@ -132,8 +132,8 @@
     "kind": "panel",
     "category": "cache",
     "title": "Cookies",
-    "description": "View, edit, delete, export and import cookies",
-    "keywords": "cookie editor session"
+    "description": "View, edit, export and import cookies, and audit their flags",
+    "keywords": "cookie editor session audit flags httponly secure samesite"
   },
   {
     "id": "storage",
@@ -148,8 +148,8 @@
     "kind": "panel",
     "category": "inspect",
     "title": "Overview & tech stack",
-    "description": "Frameworks, hosting, analytics, DOM stats",
-    "keywords": "wappalyzer technology framework detect"
+    "description": "Page report, tech stack, DOM stats",
+    "keywords": "page report summary score wappalyzer technology framework detect"
   },
   {
     "id": "seo",
@@ -180,8 +180,8 @@
     "kind": "panel",
     "category": "inspect",
     "title": "Performance",
-    "description": "Web Vitals, timings, heaviest resources",
-    "keywords": "lcp cls inp ttfb web vitals speed"
+    "description": "Web Vitals, navigation timeline, resource waterfall",
+    "keywords": "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources"
   },
   {
     "id": "errors",
