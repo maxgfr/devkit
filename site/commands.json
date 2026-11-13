@@ -173,7 +173,15 @@
     "category": "inspect",
     "title": "SEO & meta",
     "description": "Title, description, canonical, Open Graph, headings",
-    "keywords": "meta tags og twitter card headings"
+    "keywords": "meta tags og twitter card"
+  },
+  {
+    "id": "headings",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Headings outline",
+    "description": "h1–h6 as a tree: skipped levels, missing h1, hidden headings, badges in the page, table of contents, AI rewrite",
+    "keywords": "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles"
   },
   {
     "id": "jsonld",
@@ -205,7 +213,7 @@
     "category": "inspect",
     "title": "Responsiveness",
     "description": "Slow interactions and the scripts behind them, back/forward cache, speculation rules",
-    "keywords": ""
+    "keywords": "inp interaction to next paint long animation frames loaf jank main thread blocking script slow click why slow bfcache back forward cache not restored reasons unload speculation rules prefetch prerender"
   },
   {
     "id": "errors",
@@ -285,7 +293,7 @@
     "category": "security",
     "title": "Vulnerable libraries",
     "description": "Outdated jQuery, AngularJS, Bootstrap, lodash… with known CVEs, from the Retire.js database",
-    "keywords": ""
+    "keywords": "retire retire.js cve ghsa vulnerable outdated library libraries dependency jquery angularjs angular bootstrap lodash moment vue react handlebars dompurify end of life eol"
   },
   {
     "id": "csp",

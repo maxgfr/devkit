@@ -3,7 +3,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
-const field = (block, name) => new RegExp(`${name}: "((?:[^"\\\\]|\\\\.)*)"`).exec(block)?.[1];
+// `\s*`: the formatter moves long values to the next line.
+const field = (block, name) => new RegExp(`${name}:\\s*"((?:[^"\\\\]|\\\\.)*)"`).exec(block)?.[1];
 
 const panelsSrc = read("src/lib/panels.ts");
 const panels = [
