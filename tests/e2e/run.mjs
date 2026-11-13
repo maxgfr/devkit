@@ -48,9 +48,9 @@ const context = await chromium.launchPersistentContext(profile, {
 context.setDefaultTimeout(8000);
 const extErrors = [];
 const watchdog = setTimeout(() => {
-  console.log("WATCHDOG: aborting after 240 s");
+  console.log("WATCHDOG: aborting after 300 s");
   process.exit(2);
-}, 240_000);
+}, 300_000);
 
 try {
   const sw = context.serviceWorkers()[0] ?? (await context.waitForEvent("serviceworker", { timeout: 15_000 }));
@@ -109,6 +109,7 @@ try {
       /Accessibility\s*\d+ violations \(\d+ critical\)/.test(t),
     t.match(/Security headers[^\n]*\n?[^\n]*/)?.[0],
   );
+  check("report card: headings row flags the skipped level", /Headings\s*1 to review/.test(t), t.match(/Headings[^\n]*\n?[^\n]*/)?.[0]);
   await shot("inspect-overview");
   await panel.locator(".report-row", { hasText: "Structured data" }).click();
   await panel.waitForTimeout(600);
@@ -117,7 +118,11 @@ try {
   await open("Inspect", "SEO");
   t = await text();
   check("SEO: short description flagged", /Meta description[\s\S]*5 chars/.test(t));
-  check("SEO: headings listed", t.includes("Skipped level"));
+  check("SEO: headings summarized", t.includes("h1 ×1 · h2 ×1 · h4 ×1"), t.match(/h1 ×[^\n]*/)?.[0]);
+  await panel.getByRole("button", { name: "Open the outline" }).click();
+  await panel.waitForTimeout(800);
+  t = await text();
+  check("SEO: Open the outline goes to the Headings panel", t.includes("Skipped level: h2 → h4") && t.includes("Page map"));
 
   await open("Inspect", "Structured data");
   t = await text();
@@ -411,7 +416,10 @@ try {
       fixList.includes("## Content-Security-Policy") &&
       !fixList.includes("1. Content-Security-Policy: Weak") &&
       fixList.includes("#### `image-alt`") &&
-      fixList.includes("`#1.offers.price`"),
+      fixList.includes("`#1.offers.price`") &&
+      fixList.includes("| Headings | 1 warning | Inspect › Headings |") &&
+      fixList.includes("## Headings outline") &&
+      fixList.includes("Skipped level: h2 → h4"),
     fixList.split("\n")[2],
   );
   await open("Security", "Headers");
@@ -972,6 +980,138 @@ try {
   check("utils: cron explained with next runs", t.includes("Next runs") && /15 minutes/.test(t));
   await shot("utils");
 
+  // Headings: a page with every heading problem.
+  await site.goto(`${base}/headings`);
+  await panel.waitForTimeout(800);
+  await open("Inspect", "Headings outline");
+  await panel
+    .locator(".hd-tree")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "headings: issues found (before h1, skipped, empty, role without level, duplicate, aria-hidden)",
+    [
+      "Headings before the h1",
+      "Skipped level: h2 → h4",
+      "Empty h2",
+      'role="heading" without aria-level',
+      "Same h2 2 times",
+      "Visible h2 hidden from screen readers",
+    ].every((s) => t.includes(s)),
+    t.match(/\d+ to fix[^\n]*/)?.[0],
+  );
+  check(
+    "headings: verdict and per-level counts",
+    t.includes("1 to fix, 5 to review") && t.includes("announced by screen readers"),
+    t.match(/\d+ to fix[^\n]*/)?.[0],
+  );
+  check("headings: the tree shows the skipped level as a gap", t.includes("h3 missing"));
+  check(
+    "headings: hidden ones left out until asked, sr-only shown",
+    !t.includes("Hidden heading") && t.includes("Screen reader heading") && t.includes("screen readers only"),
+  );
+  await panel.getByLabel("Hidden ones").check();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check("headings: hidden ones on demand", t.includes("Hidden heading") && t.includes("Decorative heading"));
+  await panel.getByLabel("Hidden ones").uncheck();
+  await panel.getByLabel("Issues only").check();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check("headings: issues only filter", t.includes("Skipped level") && !/\bh2\s*Details\b/.test(t));
+  await panel.getByLabel("Issues only").uncheck();
+
+  await panel.locator(".hd-main", { hasText: "Bottom of the page" }).click();
+  await panel.waitForTimeout(400);
+  const focused = await site.evaluate(() => {
+    const host = document.querySelector("devkit-headings-focus");
+    const r = [...document.querySelectorAll("h2")].find((x) => x.textContent === "Bottom of the page").getBoundingClientRect();
+    return Boolean(host) && r.top >= 0 && r.bottom <= innerHeight;
+  });
+  check("headings: clicking a heading scrolls to it and outlines it", focused);
+  await site.keyboard.press("Escape");
+  await panel.waitForTimeout(200);
+  check(
+    "headings: the outline goes away on the next key",
+    !(await site.evaluate(() => Boolean(document.querySelector("devkit-headings-focus")))),
+  );
+
+  await panel.getByRole("button", { name: "Badges in page" }).click();
+  await panel.waitForTimeout(500);
+  check("headings: badges drawn in the page", await site.evaluate(() => Boolean(document.querySelector("devkit-headings"))));
+  await shot("inspect-headings");
+  await panel.getByRole("button", { name: "Hide badges" }).click();
+  await panel.waitForTimeout(400);
+  check("headings: badges removed", !(await site.evaluate(() => Boolean(document.querySelector("devkit-headings")))));
+  await panel.getByRole("button", { name: "Badges in page" }).click();
+  await panel.waitForTimeout(400);
+  await open("Inspect", "Overview");
+  await panel.waitForTimeout(400);
+  check("headings: leaving the panel removes the badges", !(await site.evaluate(() => Boolean(document.querySelector("devkit-headings")))));
+
+  await open("Inspect", "Headings outline");
+  await panel
+    .locator(".hd-tree")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  check("headings: page map has a tick per visible heading", (await panel.locator(".hd-tick").count()) >= 8);
+  await panel.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__copied.push(s);
+    };
+  });
+  const tocMd = await lastCopy(panel.getByRole("button", { name: "Copy Markdown" }));
+  check(
+    "headings: table of contents as Markdown, ids kept and proposed",
+    tocMd.startsWith("- [Acme shop](#acme-shop)\n- [Acme Mug guide](#top)\n  - [Details](#details)") &&
+      tocMd.includes("(#faq-2)") &&
+      !tocMd.includes("Hidden heading"),
+    tocMd.split("\n").slice(0, 3).join(" | "),
+  );
+  const tocHtmlCopy = await lastCopy(panel.getByRole("button", { name: "Copy HTML" }));
+  check(
+    "headings: table of contents as HTML",
+    tocHtmlCopy.startsWith('<nav aria-label="Table of contents">') && tocHtmlCopy.includes('<a href="#top">'),
+  );
+  const headingsMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "headings: Copy for agent with selectors and fixes",
+    headingsMd.startsWith("## Headings outline") &&
+      headingsMd.includes("Result: 1 problem, 5 warnings") &&
+      headingsMd.includes("Fix: Change it to an `<h3>`") &&
+      headingsMd.includes("### Outline"),
+    headingsMd.split("\n")[2],
+  );
+
+  await panel.getByRole("button", { name: "Review the outline" }).click();
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check(
+    "headings: Ask AI sends the outline with section text",
+    t.includes("Review the heading outline") && t.includes("Headings section: true") && t.includes("Section text sent: true"),
+    t.match(/Headings section[^\n]*/)?.[0],
+  );
+  await open("Inspect", "Headings outline");
+  await panel
+    .locator(".hd-tree")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await panel.getByRole("button", { name: "Ask AI about Skipped level" }).click();
+  await panel.waitForSelector(".msg.assistant .markdown", { timeout: 15_000 }).catch(() => undefined);
+  await panel.waitForTimeout(1200);
+  t = await text();
+  check(
+    "headings: per-heading Ask AI sends the heading in focus",
+    t.includes("Fix this heading") && t.includes("Heading in focus: Skipped level"),
+  );
+  await site.goto(`${base}/`);
+
   // Popup palette
   const popup = await context.newPage();
   popup.on("pageerror", (e) => extErrors.push(`popup pageerror: ${e.message}`));
@@ -993,6 +1133,16 @@ try {
   await popup.getByLabel("Search commands").fill("measure");
   const measureFirst = await popup.getByRole("option").first().innerText();
   check("palette finds the spacing ruler", /Measure distances/.test(measureFirst), measureFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("hn");
+  const hnItems = await popup.getByRole("option").allInnerTexts();
+  check(
+    "palette finds the headings outline",
+    hnItems.some((r) => r.startsWith("Headings outline")),
+    hnItems
+      .slice(0, 3)
+      .map((r) => r.split("\n")[0])
+      .join(" | "),
+  );
 
   // Options
   const options = await context.newPage();

@@ -66,7 +66,16 @@ export const PANELS: PanelDef[] = [
     title: "SEO & meta",
     short: "SEO",
     description: "Title, description, canonical, Open Graph, headings",
-    keywords: "meta tags og twitter card headings",
+    keywords: "meta tags og twitter card",
+  },
+  {
+    id: "headings",
+    category: "inspect",
+    title: "Headings outline",
+    short: "Headings",
+    description: "h1–h6 as a tree: skipped levels, missing h1, hidden headings, badges in the page, table of contents, AI rewrite",
+    keywords:
+      "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles",
   },
   {
     id: "jsonld",

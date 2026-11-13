@@ -5,8 +5,10 @@ import { agentDoc, clip, code, fence, plural } from "../agent-md";
 import { createRedactor, type ReportError } from "../bug-report";
 import { sourcePath } from "../element";
 import { cachingReport, type Check, type HeaderFetch, securityReport } from "../headers";
+import { type HeadingIssue, headingIssues, headingText, isExposed, levelCounts, outlineLines } from "../headings";
 import { type Finding, type JsonLdBlock, type JsonLdReport, richResultsTestUrl } from "../jsonld";
 import type { FontsColors, MetaSnapshot, PerfSnapshot } from "../page/collect";
+import type { HeadingsSnapshot, RawHeading } from "../page/headings";
 import { jsonLdVerdict } from "../report";
 import { linkHref, metaValue, seoReport } from "../seo";
 import { EXTERNAL_TOOLS, isAllowed, manifestChecks, type Robots, type Sitemap } from "../site-files";
@@ -174,6 +176,92 @@ export function seoMarkdown(snap: MetaSnapshot, ctx: AgentCtx): string {
       { title: "Worth checking", body: list(warn.map(item)) },
     ],
     verify: bad.length || warn.length ? "Reload the page and refresh devkit's SEO & meta panel." : undefined,
+  });
+}
+
+/* Headings */
+
+function headingFix(issue: HeadingIssue, snap: HeadingsSnapshot): string {
+  const h = snap.headings[issue.at[0] ?? -1];
+  switch (issue.id) {
+    case "none":
+      return "Mark up the page's titles as headings: one `<h1>` for the main topic, `<h2>` for each section, `<h3>` inside them.";
+    case "no-h1":
+      return h
+        ? `Make the h1 visible to everyone (remove the CSS or \`aria-hidden\` that hides ${code(h.selector)}), or add a visible \`<h1>\` naming the page's main topic.`
+        : "Add one `<h1>` naming the page's main topic (often the visible page title), before the section headings.";
+    case "multiple-h1":
+      return "Keep one `<h1>` for the page's main topic and turn the others into `<h2>`; style them with a class if they must look the same.";
+    case "first-not-h1":
+      return "Put the `<h1>` first in the main content, or turn the headings above it (logos, banners, navigation titles) into plain text or lower-level headings.";
+    case "skipped-level":
+      return `Change it to an \`<h${issue.expected}>\` and keep its look with a CSS class, or add the missing \`<h${issue.expected}>\` section heading above it.`;
+    case "empty":
+      return "Give it text, or remove it if it is only a spacer; an icon-only heading needs an `aria-label` or the image's `alt`.";
+    case "aria-level-missing":
+      return h
+        ? `Add the level: ${code(`aria-level="${h.level}"`)} (screen readers assume 2), or use a real \`<h${h.level}>\`.`
+        : "Add `aria-level`, or use a real `<hN>`.";
+    case "aria-hidden":
+      return 'Remove `aria-hidden="true"` from it or its ancestor, so screen reader users get the structure sighted users see.';
+    case "too-long":
+      return "Shorten it to a phrase (under about 70 characters) and move the rest into a paragraph below.";
+    case "duplicate":
+      return 'Make each one unique (add the subject: "Pricing for teams" rather than "Pricing"), so the outline and a screen reader\'s headings list tell them apart.';
+    case "empty-section":
+      return "Add the section's content, or merge the heading with the next one.";
+    case "title-mismatch":
+      return "Check that the `<h1>` and the `<title>` name the same topic.";
+  }
+}
+
+const headingWhere = (h: RawHeading) => `${code(h.selector)}: ${code(clip(h.html, 160))}`;
+
+/** Headings panel: the problems of `headingIssues` and the outline they sit in. */
+export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string {
+  const issues = headingIssues(snap);
+  const item = (i: HeadingIssue): Item => {
+    const at = i.at.map((n) => snap.headings[n]).filter((h): h is RawHeading => Boolean(h));
+    return {
+      text: `${i.label}: ${clip(i.detail, 240)}`,
+      details: [
+        ...at.slice(0, 6).map((h) => `Where: ${headingWhere(h)}`),
+        at.length > 6 ? `… and ${at.length - 6} more` : "",
+        `Fix: ${headingFix(i, snap)}`,
+      ],
+    };
+  };
+  const bad = issues.filter((i) => i.level === "bad");
+  const warn = issues.filter((i) => i.level === "warn");
+  const notes = issues.filter((i) => i.level === "info");
+  const exposed = snap.headings.filter(isExposed);
+  const counts = levelCounts(exposed)
+    .map((n, l) => (n ? `h${l + 1} ×${n}` : ""))
+    .filter(Boolean)
+    .join(", ");
+  const noId = snap.headings.filter((h) => h.visibility === "visible" && !h.id && headingText(h)).length;
+  return agentDoc({
+    title: "Headings outline",
+    url: ctx.url,
+    heading: ctx.heading,
+    result: counted(bad.length, warn.length),
+    context: [
+      `${plural(snap.headings.length, "heading")}${snap.capped ? " (capped)" : ""}, ${exposed.length} announced by screen readers${counts ? ` (${counts})` : ""}.`,
+      noId ? `${plural(noId, "visible heading")} without an \`id\`: no link can point to ${noId === 1 ? "it" : "them"}.` : "",
+    ],
+    sections: [
+      { title: "To fix", body: list(bad.map(item)) },
+      { title: "Worth checking", body: list(warn.map(item)) },
+      {
+        title: "Notes",
+        body: list(
+          notes.map((i) => ({ text: `${i.label}: ${clip(i.detail, 200)}` })),
+          10,
+        ),
+      },
+      { title: "Outline", body: outlineLines(snap, issues, { max: 80 }) },
+    ],
+    verify: bad.length || warn.length ? "Reload the page and refresh devkit's Headings panel (Inspect › Headings)." : undefined,
   });
 }
 

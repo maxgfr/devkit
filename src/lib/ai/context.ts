@@ -1,7 +1,9 @@
 import { type Audit, auditContext } from "../a11y";
 import type { Check } from "../headers";
 import type { JsonLdReport } from "../jsonld";
+import { headingIssues, headingText, isExposed, outlineLines } from "../headings";
 import type { MetaSnapshot, PerfSnapshot } from "../page/collect";
+import type { HeadingsSnapshot } from "../page/headings";
 import type { Tech } from "../tech";
 
 export interface CapturedError {
@@ -40,7 +42,8 @@ export type ContextPart =
   | "element"
   | "report"
   | "secrets"
-  | "libraries";
+  | "libraries"
+  | "headings";
 
 export const PART_LABELS: Record<ContextPart, string> = {
   text: "Page text",
@@ -59,6 +62,7 @@ export const PART_LABELS: Record<ContextPart, string> = {
   report: "Bug report",
   secrets: "Secrets (masked)",
   libraries: "Vulnerable libraries",
+  headings: "Headings outline",
 };
 
 export interface PageContext {
@@ -87,6 +91,8 @@ export interface PageContext {
   secrets?: string;
   /** The Libraries panel's report of what the page tells (no file fetched): flagged libraries only. */
   libraries?: string;
+  /** The Headings panel's snapshot, and the heading the developer asked about. */
+  headings?: { snapshot: HeadingsSnapshot; focus?: number };
 }
 
 /** A rough token count: about 4 characters per token for English and code. */
@@ -106,7 +112,32 @@ const PANEL: Record<string, string> = {
   "Console errors": "Inspect › Errors",
   "Structured data (JSON-LD)": "Inspect › JSON-LD",
   "Accessibility (axe-core audit)": "Inspect › A11y",
+  "Headings outline": "Inspect › Headings",
 };
+
+/** The outline with each section's opening (shorter when there are many headings), the issues, and the heading in focus. */
+export function headingsContext(h: NonNullable<PageContext["headings"]>): string {
+  const snap = h.snapshot;
+  const issues = headingIssues(snap);
+  const exposed = snap.headings.filter(isExposed).length;
+  const excerpt = snap.headings.length > 120 ? 0 : snap.headings.length > 40 ? 100 : 240;
+  const lines = [
+    `${snap.headings.length} headings${snap.capped ? " (capped)" : ""}, ${exposed} announced by screen readers. ${snap.introWords} words before the first heading.`,
+    `Outline (level, text, CSS selector, flags, words in the section${excerpt ? ", then the section's opening after >" : ""}):`,
+    ...outlineLines(snap, issues, { max: 200, excerpt }),
+    "Issues found by devkit:",
+    ...(issues.length ? issues.slice(0, 60).map((i) => `- [${i.level}] ${i.label}: ${i.detail}`) : ["- none"]),
+  ];
+  const f = h.focus === undefined ? undefined : snap.headings[h.focus];
+  if (f)
+    lines.push(
+      "",
+      `In focus: the developer asked about the h${f.level} "${headingText(f) || "(empty)"}" at \`${f.selector}\`.`,
+      `HTML: ${f.html}`,
+      `Section text (${f.words} words): ${f.section || "(none)"}`,
+    );
+  return lines.join("\n");
+}
 
 function section(title: string, body: string) {
   return `## ${title}${PANEL[title] ? ` (devkit panel: ${PANEL[title]})` : ""}\n${body.trim()}\n`;
@@ -131,8 +162,10 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
             .filter((l) => /canonical|alternate|manifest|icon|preload|preconnect/.test(l.rel))
             .slice(0, 30)
             .map((l) => `- link[${l.rel}${l.hreflang ? ` ${l.hreflang}` : ""}]: ${l.href}`),
-          "Headings:",
-          ...m.headings.slice(0, 80).map((h) => `${"  ".repeat(h.level - 1)}- h${h.level} ${h.text}`),
+          // The headings part has the full outline: no need to repeat it here.
+          ...(has("headings") && ctx.headings
+            ? []
+            : ["Headings:", ...m.headings.slice(0, 80).map((h) => `${"  ".repeat(h.level - 1)}- h${h.level} ${h.text}`)]),
           `DOM: ${m.stats.elements} elements, depth ${m.stats.domDepth}, ${m.stats.scripts} scripts, ${m.stats.stylesheets} stylesheets, ${m.stats.images} images, ${kb(m.stats.htmlBytes)} of HTML`,
         ].join("\n"),
       ),
@@ -199,6 +232,7 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
       ),
     );
   }
+  if (has("headings") && ctx.headings) out.push(section("Headings outline", headingsContext(ctx.headings)));
   if (has("a11y") && ctx.a11y) out.push(section("Accessibility (axe-core audit)", auditContext(ctx.a11y.audit, ctx.a11y.focus)));
   if (has("secrets") && ctx.secrets)
     out.push(`${ctx.secrets.replace(/^## Secrets/, "## Secrets (devkit panel: Security › Secrets)").trim()}\n`);

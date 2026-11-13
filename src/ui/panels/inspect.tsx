@@ -4,6 +4,7 @@ import {
   errorsMarkdown,
   fontsMarkdown,
   headersMarkdown,
+  headingsMarkdown,
   jsonLdMarkdown,
   linksMarkdown,
   perfMarkdown,
@@ -17,7 +18,9 @@ import { collectSecretSources, collectSurface } from "../../lib/page/security";
 import { parseCsp, starterCsp } from "../../lib/security/csp";
 import { scanSecrets } from "../../lib/security/secrets";
 import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
+import { headingIssues, headingsVerdict } from "../../lib/headings";
 import { runInTab } from "../../lib/inject";
+import { collectHeadings } from "../../lib/page/headings";
 import { analyzeJsonLd, type JsonLdBlock, richResultsTestUrl, schemaValidatorUrl } from "../../lib/jsonld";
 import { collectFontsColors, collectLinks, collectMeta, collectPerf, collectTechSignals, type MetaSnapshot } from "../../lib/page/collect";
 import { clearErrors, ERROR_SCRIPT_IDS, installErrorCapture, readErrors } from "../../lib/page/errors";
@@ -156,6 +159,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const go = useNav();
   const perf = useInPage(collectPerf);
   const errors = useInPage(readErrors, [], "MAIN");
+  const headings = useInPage(collectHeadings);
   const a11y = useA11yReport(meta.data?.stats.elements);
   const page = usePage();
   const toast = useToast();
@@ -236,6 +240,12 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
         },
         { area: "SEO", panel: "Inspect › SEO", md: meta.data ? seoMarkdown(meta.data, ctx) : null, missing: notRead(meta) },
         {
+          area: "Headings",
+          panel: "Inspect › Headings",
+          md: headings.data ? headingsMarkdown(headings.data, ctx) : null,
+          missing: notRead(headings),
+        },
+        {
           area: "Structured data",
           panel: "Inspect › JSON-LD",
           md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd), ctx) : null,
@@ -270,6 +280,12 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
     },
     { panel: "seo", label: "SEO", state: meta, verdict: meta.data ? seoVerdict(seoReport(meta.data)) : null },
     {
+      panel: "headings",
+      label: "Headings",
+      state: headings,
+      verdict: headings.data ? headingsVerdict(headingIssues(headings.data), headings.data.headings.length) : null,
+    },
+    {
       panel: "jsonld",
       label: "Structured data",
       state: meta,
@@ -290,7 +306,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           <Button
             size="small"
             onClick={() => {
-              for (const s of [meta, headers, perf, errors]) s.run();
+              for (const s of [meta, headers, perf, errors, headings]) s.run();
               a11y.run();
             }}
           >
@@ -405,6 +421,7 @@ function SocialImage({ src }: { src: string | undefined }) {
 }
 
 export function Seo() {
+  const go = useNav();
   const meta = useInPage(collectMeta);
   const snap = meta.data;
   const checks = useMemo(() => (snap ? seoReport(snap) : []), [snap]);
@@ -440,16 +457,30 @@ export function Seo() {
               </div>
             </Section>
           ) : null}
-          <Section title={`Headings (${snap.headings.length})`}>
+          <Section
+            title={`Headings (${snap.headings.length})`}
+            actions={
+              go ? (
+                <Button size="small" onClick={() => go({ panel: "headings" })}>
+                  Open the outline
+                </Button>
+              ) : null
+            }
+          >
             {snap.headings.length ? (
-              <ul className="list">
-                {snap.headings.map((h, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: document order
-                  <li key={i} style={{ paddingLeft: (h.level - 1) * 12 }}>
-                    <span className="pill">h{h.level}</span> {h.text || <i className="muted">(empty)</i>}
-                  </li>
-                ))}
-              </ul>
+              <p className="small" style={{ margin: 0 }}>
+                {[1, 2, 3, 4, 5, 6]
+                  .map((l) => [l, snap.headings.filter((h) => h.level === l).length] as const)
+                  .filter(([, n]) => n)
+                  .map(([l, n]) => `h${l} ×${n}`)
+                  .join(" · ")}
+                {snap.headings[0] ? (
+                  <span className="muted">
+                    {" "}
+                    · first: h{snap.headings[0].level} "{snap.headings[0].text.slice(0, 60) || "(empty)"}"
+                  </span>
+                ) : null}
+              </p>
             ) : (
               <Empty>No heading.</Empty>
             )}

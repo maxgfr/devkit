@@ -25,7 +25,7 @@ export const AI_ACTIONS: AiAction[] = [
     id: "fix-plan",
     title: "Fix plan for the whole page",
     description: "Every problem devkit found, ranked, each with its fix",
-    parts: ["secrets", "libraries", "headers", "security", "a11y", "errors", "perf", "seo", "jsonld", "tech", "meta"],
+    parts: ["secrets", "libraries", "headers", "security", "a11y", "errors", "perf", "seo", "headings", "jsonld", "tech", "meta"],
     prompt:
       "Turn everything devkit measured on this page into one fix plan. Rank the problems by impact on users and on the business (broken features and security first, then accessibility, performance, SEO and structured data). For each: what is wrong and the evidence from the data, where to fix it (file, component, header, server config, selector), and the exact fix (code, header value or config). Group duplicates under one root cause. Skip what passes. Secrets are masked on purpose: never ask for the full value, say to revoke and rotate it. End with a short checklist the developer can tick, with the devkit panel to re-run for each item, using the panel names given in the section headings (e.g. Security › Headers).",
   },
@@ -48,9 +48,41 @@ export const AI_ACTIONS: AiAction[] = [
     id: "seo-audit",
     title: "SEO audit",
     description: "Prioritized fixes for meta, headings and content",
-    parts: ["meta", "seo", "jsonld", "text"],
+    parts: ["meta", "seo", "headings", "jsonld", "text"],
     prompt:
       "Do an SEO audit of this page. List the issues by impact, each with the exact fix (HTML to paste). Then propose a better title (≤60 chars) and meta description (≤160 chars).",
+  },
+  {
+    id: "headings-review",
+    title: "Review the heading outline",
+    description: "Structure against the content, with the corrected outline",
+    parts: ["headings", "meta", "text"],
+    prompt:
+      "Review this page's heading outline as a screen reader user and a search engine would read it: does it give the page's real structure, one h1 for the main topic, levels nested without gaps, sections in a logical order? Explain each problem with the heading and its selector, then give the corrected outline as an indented list (level and text) and the HTML change for each heading to modify (selector, current tag → new tag or text). Keep visual styling out of it: say to keep the look with a CSS class when a level changes.",
+  },
+  {
+    id: "headings-rewrite",
+    title: "Rewrite the headings",
+    description: "Clearer, more specific headings that keep their meaning",
+    parts: ["headings", "meta", "text"],
+    prompt:
+      "Rewrite this page's headings so each one says what its section is about: specific rather than vague (no 'Overview', 'More', 'Learn more' alone), front-loaded with the words a reader would search for, under 70 characters, consistent in style, and true to the section's content (use the section openings given). Keep the page's language. Answer with a Markdown table: selector, level, current heading, proposed heading, why. Leave out headings that are already good, and do not change levels here.",
+  },
+  {
+    id: "headings-match",
+    title: "Do headings match their sections?",
+    description: "Misleading or vague headings, from each section's text",
+    parts: ["headings", "meta"],
+    prompt:
+      "For each heading, compare it with the opening of its section given in the outline. Flag the headings whose section talks about something else, the vague ones that do not tell what follows, and sections that cover several topics and should be split under their own headings. For each: the selector, what the section is actually about, and a better heading. End with the headings that match well, in one line.",
+  },
+  {
+    id: "headings-gaps",
+    title: "Find missing sections",
+    description: "What the page should cover for its topic, and where",
+    parts: ["headings", "meta", "seo", "text"],
+    prompt:
+      "From the page's topic and purpose, work out what a visitor (and a search engine) expects it to cover, and compare with its outline. List the sections that are missing or too thin (use the word counts), each with a proposed heading, its level, where it goes in the outline (after which heading), and two or three lines on what it should say, based only on what the page already states or clearly implies. Do not invent facts, prices or claims: mark what the site owner must supply. Then show the outline with the new sections in place.",
   },
   {
     id: "jsonld-audit",
@@ -149,6 +181,15 @@ export const AI_ACTIONS: AiAction[] = [
     hidden: true,
     prompt:
       "Explain the accessibility rule marked 'In focus' in the audit: who it affects and which WCAG criterion it fails. Then give the fix for each failing element as corrected HTML (or the CSS / ARIA change), using the selectors and snippets given, and how to verify it (keyboard, screen reader, contrast). Keep it short.",
+  },
+  {
+    id: "headings-one",
+    title: "Fix this heading",
+    description: "From the Headings panel: one heading, its section and its issues",
+    parts: ["headings", "meta"],
+    hidden: true,
+    prompt:
+      "Look at the heading marked 'In focus' in the outline: its level among its neighbours, its text against its section's content, and the issues devkit found on it. Say what is wrong (or that it is fine), then give the corrected HTML for it (one ```html block) and, if its level changes, what happens to the headings under it. Keep it short.",
   },
   {
     id: "report",

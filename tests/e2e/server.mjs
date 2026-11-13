@@ -114,6 +114,26 @@ const sse = (res, text) => {
   tick();
 };
 
+// Every heading problem the Headings panel knows, on one page tall enough for the page map.
+const HEADINGS_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme Mug guide</title></head><body>
+<header><h3>Acme shop</h3></header>
+<main>
+<h1 id="top">Acme Mug guide</h1><p>Everything about the Acme mug, the best mug there is.</p>
+<h2 id="details">Details</h2><p>Ceramic, 350 ml, dishwasher safe.</p>
+<h4>Skipped level</h4><p>Made in a small workshop.</p>
+<h2></h2>
+<h2 style="display:none">Hidden heading</h2>
+<h2 style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Screen reader heading</h2><p>Only for screen readers.</p>
+<div role="heading">Fake heading</div><p>Styled like a heading.</p>
+<h2>FAQ</h2><p>Questions.</p>
+<h2>FAQ</h2><p>More questions.</p>
+<div aria-hidden="true"><h2>Decorative heading</h2></div>
+<div style="height:2400px"></div>
+<h2>Bottom of the page</h2><p>The end.</p>
+</main>
+</body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -131,6 +151,7 @@ const server = http.createServer((req, res) => {
   }
   // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
   // back/forward cache: the Responsiveness panel must name both.
+  if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
   if (url.pathname === "/slow.js")
     return res
       .writeHead(200, { "content-type": "text/javascript" })
@@ -212,9 +233,12 @@ const server = http.createServer((req, res) => {
       const secrets = content.includes("## Secrets (devkit panel: Security › Secrets)");
       const leaked = /sk_live_[A-Za-z0-9]{8,}/.test(content);
       const cve = /CVE-\d{4}-\d+/.exec(content)?.[0] ?? "none";
+      const headings = content.includes("## Headings outline (devkit panel: Inspect › Headings)");
+      const sectionText = content.includes("> Ceramic, 350 ml, dishwasher safe.");
+      const focus = /In focus: the developer asked about the h\d "([^"]*)"/.exec(content)?.[1] ?? "none";
       sse(
         res,
-        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Secrets section: ${secrets}. Raw secret sent: ${leaked}. First CVE: ${cve}. Context length: ${content.length} chars.`,
+        `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Secrets section: ${secrets}. Raw secret sent: ${leaked}. First CVE: ${cve}. Headings section: ${headings}. Section text sent: ${sectionText}. Heading in focus: ${focus}. Context length: ${content.length} chars.`,
       );
     });
     return;

@@ -1,5 +1,7 @@
 import { browser } from "wxt/browser";
-import { type AuditOptions, DEFAULT_AUDIT_OPTIONS } from "../a11y";
+import { type AuditOptions, DEFAULT_AUDIT_OPTIONS, sameDocument } from "../a11y";
+import { HEADINGS_FOCUS_KEY, type HeadingsFocus } from "../headings";
+import { collectHeadings } from "../page/headings";
 import { loadAudit, runAxeAudit, saveAudit } from "../axe";
 import { fetchHeaders, securityReport } from "../headers";
 import { REPORT_HANDOFF_KEY, type ReportHandoff } from "../bug-report";
@@ -36,7 +38,7 @@ export async function gatherContext(
   };
   const needsMeta = want("meta") || want("seo") || want("jsonld");
   const needsHeaders = want("headers") || want("security") || want("tech");
-  const [page, selection, meta, signals, headers, perf, errors, a11y, screenshot, secrets, libraries] = await Promise.all([
+  const [page, selection, meta, signals, headers, perf, errors, a11y, screenshot, secrets, libraries, headings] = await Promise.all([
     want("text") ? safe(() => readPage(tabId)) : undefined,
     want("selection") ? (extra.selection ? Promise.resolve(extra.selection) : safe(() => runInTab(tabId, collectSelection))) : undefined,
     needsMeta ? safe(() => runInTab(tabId, collectMeta)) : undefined,
@@ -48,7 +50,9 @@ export async function gatherContext(
     want("screenshot") ? safe(() => browser.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 75 })) : undefined,
     want("secrets") ? safe(() => readSecrets(tabId, url)) : undefined,
     want("libraries") ? safe(() => readLibraries(tabId, url)) : undefined,
+    want("headings") ? safe(() => readHeadings(tabId, url)) : undefined,
   ]);
+  if (headings) ctx.headings = headings;
   if (secrets) ctx.secrets = secrets;
   if (libraries) ctx.libraries = libraries;
   if (page) ctx.page = page;
@@ -110,6 +114,16 @@ async function readLibraries(tabId: number, url: string): Promise<string> {
         .replace(/^### Advisories/gm, "#### Advisories"),
     ),
   ].join("\n\n");
+}
+
+/** The page's headings, and the one the Headings panel asked about (read once). */
+async function readHeadings(tabId: number, url: string): Promise<PageContext["headings"]> {
+  const snapshot = await runInTab(tabId, collectHeadings);
+  const stored = await browser.storage.session.get(HEADINGS_FOCUS_KEY).catch(() => ({}) as Record<string, unknown>);
+  const focus = stored[HEADINGS_FOCUS_KEY] as HeadingsFocus | undefined;
+  if (focus) await browser.storage.session.remove(HEADINGS_FOCUS_KEY).catch(() => undefined);
+  const inFocus = focus && focus.tabId === tabId && sameDocument(focus.url, url) && snapshot.headings[focus.index];
+  return { snapshot, focus: inFocus ? focus.index : undefined };
 }
 
 /** The tab's last axe audit of this page, else a fresh one with the panel's options. A focused rule is read once. */

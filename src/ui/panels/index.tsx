@@ -3,6 +3,7 @@ import { A11yAudit } from "./a11y";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
+import { Headings } from "./headings";
 import { Mocks } from "./mocks";
 import { Assets } from "./assets";
 import { Measure } from "./measure";
@@ -29,6 +30,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   storage: Storage,
   overview: Overview,
   seo: Seo,
+  headings: Headings,
   jsonld: JsonLd,
   headers: Headers,
   perf: Perf,
