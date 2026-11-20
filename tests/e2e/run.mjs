@@ -2046,6 +2046,204 @@ try {
   }
   await site.goto(`${base}/`);
 
+  // IndexedDB and Cache Storage viewers (#26): a fixture database and cache, listed, edited and deleted from the panel.
+  {
+    await site.goto(`${base}/databases`);
+    await site.waitForFunction(() => window.__dbReady !== undefined, null, { timeout: 8000 });
+    const ready = await site.evaluate(() => window.__dbReady);
+    const idbGet = (store, key) =>
+      site.evaluate(
+        ([s, k]) =>
+          new Promise((done, fail) => {
+            const req = indexedDB.open("devkit-shop");
+            req.onerror = () => fail(req.error);
+            req.onsuccess = () => {
+              const db = req.result;
+              const r = db.transaction(s).objectStore(s).get(k);
+              r.onerror = () => fail(r.error);
+              r.onsuccess = () => {
+                db.close();
+                const v = r.result;
+                done(
+                  v === undefined
+                    ? null
+                    : {
+                        json: JSON.stringify(v),
+                        dates: Object.entries(v)
+                          .filter(([, x]) => x instanceof Date)
+                          .map(([n, x]) => `${n}=${x.toISOString()}`),
+                      },
+                );
+              };
+            };
+          }),
+        [store, key],
+      );
+
+    await open("Cache", "IndexedDB");
+    await panel.locator(".db-tree").waitFor();
+    t = await text();
+    check(
+      "indexeddb: lists the database, its version and its stores with counts",
+      ready === true && t.includes("devkit-shop") && t.includes("v3") && /users\s*3 records/.test(t) && /settings\s*2 records/.test(t),
+      String(ready),
+    );
+    await panel.locator("button.db-node", { hasText: "users" }).click();
+    await panel.locator(".db-table").waitFor();
+    t = await text();
+    check(
+      "indexeddb: store schema, and records with Date and Map previews",
+      t.includes("id · autoIncrement") &&
+        t.includes("by_email (email, unique)") &&
+        t.includes("by_tags (tags, multiEntry)") &&
+        t.includes("Date(1815-12-10T00:00:00.000Z)") &&
+        t.includes("Map(1)") &&
+        t.includes('{id: 1, name: "Ada", email: "ada@example.com"') &&
+        t.includes("1–3 of 3"),
+      t.match(/Indexes[^\n]*/)?.[0],
+    );
+    const query = async (index, mode, key) => {
+      await panel.getByLabel("Read through").selectOption(index);
+      await panel.getByLabel("Key filter").selectOption(mode);
+      if (mode !== "all") await panel.getByLabel("Key", { exact: true }).fill(key);
+      await panel.getByRole("button", { name: "Apply" }).click();
+      await panel.waitForTimeout(500);
+      return panel.locator(".db-table tbody tr").allInnerTexts();
+    };
+    let rows = await query("by_tags", "equals", "admin");
+    check(
+      "indexeddb: reads through a multiEntry index by key",
+      rows.length === 2 && rows.every((r) => r.includes("admin")),
+      rows.join(" | "),
+    );
+    rows = await query("by_email", "prefix", "gr");
+    check("indexeddb: key prefix on an index", rows.length === 1 && rows[0].includes("Grace"), rows.join(" | "));
+    rows = await query("", "all", "");
+    check("indexeddb: back to every record", rows.length === 3);
+
+    await panel.getByRole("button", { name: "Open record 1", exact: true }).click();
+    await panel.locator(".db-json").waitFor();
+    check("indexeddb: a record opens as a tree", (await panel.locator(".db-json").innerText()).includes("ada@example.com"));
+    await panel.getByRole("button", { name: "Edit", exact: true }).click();
+    const editor = panel.locator(".db-editor textarea");
+    const draft = (await editor.inputValue()).replace('"Ada"', '"Ada Lovelace"');
+    await editor.fill("{ not json");
+    const saveButton = panel.locator(".db-editor").getByRole("button", { name: "Save" });
+    check(
+      "indexeddb: the editor validates JSON before saving",
+      (await panel.locator(".db-editor").innerText()).includes("Invalid JSON") && (await saveButton.isDisabled()),
+    );
+    await editor.fill(draft);
+    await saveButton.click();
+    await panel.waitForTimeout(600);
+    const ada = await idbGet("users", 1);
+    check(
+      "indexeddb: edit a record, its tagged Date written back as a Date",
+      Boolean(ada?.json.includes('"Ada Lovelace"') && ada.dates.includes("born=1815-12-10T00:00:00.000Z")),
+      JSON.stringify(ada),
+    );
+    check(
+      "indexeddb: the table shows the saved record, its keys in their order",
+      (await panel.locator(".db-table").innerText()).includes('{id: 1, name: "Ada Lovelace", email:'),
+    );
+    await shot("cache-indexeddb");
+
+    await panel.locator("button.db-node", { hasText: "settings" }).click();
+    await panel.locator(".db-table").waitFor();
+    await panel.waitForTimeout(300);
+    t = await panel.locator(".db-table").innerText();
+    check(
+      "indexeddb: out-of-line keys, Set, Blob, typed array and BigInt previews",
+      t.includes('"prefs"') &&
+        t.includes("Set(2)") &&
+        t.includes("Blob(image/png, 3 B)") &&
+        t.includes("Uint8Array(3 B)") &&
+        t.includes("10n"),
+      t.replace(/\s+/g, " "),
+    );
+    await panel.getByRole("button", { name: "Add", exact: true }).click();
+    await panel.locator(".db-editor input").fill("lang");
+    await panel.locator(".db-editor textarea").fill('{"code": "fr", "since": {"$type": "Date", "value": "2024-05-01T00:00:00.000Z"}}');
+    await panel.locator(".db-editor").getByRole("button", { name: "Save" }).click();
+    await panel.waitForTimeout(600);
+    const lang = await idbGet("settings", "lang");
+    check(
+      "indexeddb: add a record with an out-of-line key",
+      lang?.json === '{"code":"fr","since":"2024-05-01T00:00:00.000Z"}' && lang.dates.includes("since=2024-05-01T00:00:00.000Z"),
+      JSON.stringify(lang),
+    );
+    await panel.getByRole("button", { name: 'Open record "theme"', exact: true }).click();
+    await panel.getByRole("button", { name: "Delete", exact: true }).click();
+    await panel.getByRole("button", { name: "Confirm delete" }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "indexeddb: delete a record, confirmed in the panel",
+      (await idbGet("settings", "theme")) === null && !(await panel.locator(".db-table").innerText()).includes('"theme"'),
+    );
+    const download = await Promise.all([
+      panel.waitForEvent("download", { timeout: 5000 }),
+      panel.getByRole("button", { name: "Export", exact: true }).click(),
+    ])
+      .then(([d]) => d)
+      .catch(() => null);
+    const exported = download ? JSON.parse(readFileSync(await download.path(), "utf8")) : null;
+    check(
+      "indexeddb: export a store as JSON",
+      download?.suggestedFilename() === "indexeddb-devkit-shop-settings.json" &&
+        exported?.format === "devkit-indexeddb" &&
+        exported.records.length === 2 &&
+        exported.records.some((r) => r.key === "lang" && r.value.since.$type === "Date"),
+      download?.suggestedFilename(),
+    );
+
+    await open("Cache", "Cache Storage");
+    await panel.locator("button.db-node", { hasText: "devkit-shop-v1" }).click();
+    await panel.locator(".db-table").waitFor();
+    await panel.waitForTimeout(300);
+    t = await text();
+    check(
+      "cache storage: lists the cache and its entries",
+      /devkit-shop-v1\s*3 entries/.test(t) &&
+        ["/api/products.json", "/offline.html", "/tile.png", "application/json", "image/png"].every((s) => t.includes(s)),
+      t.match(/devkit-shop-v1[^\n]*/)?.[0],
+    );
+    await panel.getByRole("button", { name: "/api/products.json" }).click();
+    await panel.locator(".db-json").waitFor();
+    t = await text();
+    check(
+      "cache storage: a JSON entry shows its status, headers and body as a tree",
+      (await panel.locator(".db-json").innerText()).includes("Mug") && /Status\s*200/.test(t) && t.includes("Headers (1)"),
+    );
+    await panel.getByRole("button", { name: "/tile.png" }).click();
+    await panel.locator("img.db-image").waitFor();
+    check(
+      "cache storage: an image entry is previewed",
+      ((await panel.locator("img.db-image").getAttribute("src")) ?? "").startsWith("data:image/png;base64,"),
+    );
+    await panel.getByRole("button", { name: "/offline.html" }).click();
+    await panel.waitForTimeout(500);
+    check("cache storage: a text entry shows its body", (await text()).includes("<h1>Offline</h1>"));
+    await panel.getByRole("button", { name: "Delete entry" }).click();
+    await panel.getByRole("button", { name: "Confirm delete" }).click();
+    await panel.waitForTimeout(600);
+    const left = await site.evaluate(async () => (await (await caches.open("devkit-shop-v1")).keys()).map((r) => new URL(r.url).pathname));
+    check(
+      "cache storage: delete an entry",
+      left.length === 2 && !left.includes("/offline.html") && !(await panel.locator(".db-table").innerText()).includes("/offline.html"),
+      left.join(", "),
+    );
+    await shot("cache-storage");
+
+    await site.evaluate(async () => {
+      await caches.delete("devkit-shop-v1");
+      await new Promise((done) => {
+        const r = indexedDB.deleteDatabase("devkit-shop");
+        r.onsuccess = r.onerror = r.onblocked = done;
+      });
+    });
+    await site.goto(`${base}/`);
+  }
+
   // Popup palette
   const popup = await context.newPage();
   popup.on("pageerror", (e) => extErrors.push(`popup pageerror: ${e.message}`));

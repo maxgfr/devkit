@@ -271,6 +271,47 @@ const seoPage = (base) => `<!doctype html>
 <img src="/tile.png" alt="Tile"><img src="/tile.png"><img src="/tile.png" alt="" title="Decor">
 <a href="/">Home</a> <a href="/ok">OK</a> <a href="/ok">OK again</a> <a href="https://example.com/" rel="nofollow">Elsewhere</a>
 </body></html>`;
+// IndexedDB and Cache Storage viewer: a database with an in-line key store and an out-of-line one, and a cache
+// with JSON, HTML and image entries. Starts from scratch on every load; window.__dbReady says when it is done.
+const DATABASES_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Databases – devkit test page</title></head>
+<body><h1>Databases</h1>
+<script>
+(async () => {
+  await new Promise((done, fail) => {
+    indexedDB.deleteDatabase("devkit-shop");
+    const req = indexedDB.open("devkit-shop", 3);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const users = db.createObjectStore("users", { keyPath: "id", autoIncrement: true });
+      users.createIndex("by_email", "email", { unique: true });
+      users.createIndex("by_tags", "tags", { multiEntry: true });
+      db.createObjectStore("settings");
+    };
+    req.onerror = () => fail(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction(["users", "settings"], "readwrite");
+      const users = tx.objectStore("users");
+      users.put({ id: 1, name: "Ada", email: "ada@example.com", tags: ["admin"], born: new Date("1815-12-10T00:00:00Z") });
+      users.put({ id: 2, name: "Grace", email: "grace@example.com", tags: ["dev", "admin"], prefs: new Map([["theme", "dark"]]) });
+      users.put({ id: 3, name: "Linus", email: "linus@example.com", tags: ["dev"] });
+      const settings = tx.objectStore("settings");
+      settings.put({ seen: new Set([1, 2]), avatar: new Blob(["png"], { type: "image/png" }), bytes: new Uint8Array([1, 2, 3]), big: 10n }, "prefs");
+      settings.put("dark", "theme");
+      tx.oncomplete = () => { db.close(); done(); };
+      tx.onerror = () => fail(tx.error);
+    };
+  });
+  await caches.delete("devkit-shop-v1");
+  const cache = await caches.open("devkit-shop-v1");
+  await cache.put("/api/products.json", new Response(JSON.stringify({ products: [{ id: 1, name: "Mug" }] }), { headers: { "content-type": "application/json" } }));
+  await cache.put("/offline.html", new Response("<h1>Offline</h1>", { headers: { "content-type": "text/html" } }));
+  await cache.put("/tile.png", await fetch("/tile.png"));
+  window.__dbReady = true;
+})().catch((e) => { window.__dbReady = String(e); });
+</script>
+</body></html>`;
 // Consent check: before any interaction the page sets `_ga`, loads a script and a GA-shaped hit from another local
 // origin (localhost vs 127.0.0.1) and sets Consent Mode's default to granted. "Accept" adds `_fbp` and a Meta-shaped hit.
 const consentPage = (port) => `<!doctype html>
@@ -437,6 +478,7 @@ const server = http.createServer((req, res) => {
       .end(
         `# Acme\n\n> Acme sells mugs.\n\n## Pages\n\n- [Store hours](${base}/agent): when the shop is open\n- [Mug](${base}/): the Acme mug\n`,
       );
+  if (url.pathname === "/databases") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(DATABASES_PAGE);
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
   if (url.pathname === "/rendered-source")
     return res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(RENDERED_SOURCE_PAGE);
