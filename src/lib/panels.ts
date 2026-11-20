@@ -86,6 +86,15 @@ export const PANELS: PanelDef[] = [
     keywords: "schema.org json-ld microdata rich results structured data",
   },
   {
+    id: "datalayer",
+    category: "inspect",
+    title: "dataLayer inspector",
+    short: "dataLayer",
+    description: "GA4 events, Consent Mode and GTM containers: validation, PII warnings, snapshots",
+    keywords:
+      "datalayer data layer gtm ga4 google analytics tag manager gtag consent mode events ecommerce purchase transaction_id pii snapshot",
+  },
+  {
     id: "headers",
     category: "security",
     title: "Headers & security",

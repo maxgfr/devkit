@@ -1,5 +1,6 @@
 import { lazy, type ComponentType } from "react";
 import { A11yAudit } from "./a11y";
+import { DataLayer } from "./datalayer";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
@@ -32,6 +33,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   seo: Seo,
   headings: Headings,
   jsonld: JsonLd,
+  datalayer: DataLayer,
   headers: Headers,
   perf: Perf,
   responsiveness: Responsiveness,

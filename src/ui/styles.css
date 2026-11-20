@@ -3592,3 +3592,129 @@ span.hd-fold {
 .linklike:hover {
   text-decoration: underline;
 }
+
+/* dataLayer inspector */
+.dl-counters {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.dl-note {
+  margin: 0;
+}
+.dl-events,
+.dl-consent,
+.dl-diff-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dl-events > li,
+.dl-consent > li {
+  border-bottom: 1px solid var(--line);
+}
+.dl-event > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 6px;
+  padding: 5px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  list-style: none;
+}
+.dl-event > summary::-webkit-details-marker {
+  display: none;
+}
+.dl-event > summary:hover {
+  background: var(--bg-2);
+}
+.dl-event[open] > summary {
+  background: var(--bg-2);
+}
+.dl-idx {
+  min-width: 2.2em;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--fg-3);
+  text-align: right;
+}
+.dl-name {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.dl-preview {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding-left: calc(2.2em + 6px);
+  overflow-wrap: anywhere;
+}
+.dl-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 8px calc(2.2em + 10px);
+}
+.dl-event-issues {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dl-consent > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 6px 4px;
+}
+.dl-snaps li {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.dl-snaps .grow {
+  overflow-wrap: anywhere;
+}
+.dl-compare {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.dl-compare select {
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 0;
+}
+.dl-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
+.dl-diff p {
+  margin: 0;
+}
+.dl-diff-title {
+  margin: 0 0 2px;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.dl-diff-list > li {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.dl-diff-list > li:last-child {
+  border-bottom: 0;
+}
+.dl-changes {
+  margin: 2px 0 0 calc(2.2em + 6px);
+  padding: 0;
+  list-style: none;
+  color: var(--fg-2);
+}
