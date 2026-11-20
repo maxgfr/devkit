@@ -9,6 +9,7 @@ import { Assets } from "./assets";
 import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { RepoDeps } from "./repo-deps";
 import { Responsiveness } from "./responsiveness";
 import { BugReport } from "./report";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -40,6 +41,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  "repo-deps": RepoDeps,
   external: External,
   secrets: Secrets,
   exposed: Exposed,

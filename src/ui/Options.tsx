@@ -8,6 +8,7 @@ import { Button, download, Notice, Section, ToastProvider, useToast } from "./co
 import { useAsync } from "./hooks";
 import { disableErrorCapture, enableErrorCapture } from "./panels/inspect";
 import { ERROR_SCRIPT_IDS } from "../lib/page/errors";
+import { disableRepoDepsBox, enableRepoDepsBox, repoDepsBoxEnabled } from "../lib/repo-deps-box";
 
 const AiSettings = lazy(() => import("./panels/ai").then((m) => ({ default: m.AiSettings })));
 
@@ -208,6 +209,38 @@ function JsonViewer() {
   );
 }
 
+function RepoDepsBox() {
+  const toast = useToast();
+  const state = useAsync(repoDepsBoxEnabled, []);
+  return (
+    <Section
+      title="Dependencies on GitHub / GitLab"
+      hint="Adds a Dependencies box below the README of github.com and gitlab.com repositories and folders, like npmhub: npm, PyPI, crates.io, Go, Packagist and RubyGems packages with their descriptions and links. Needs access to those two sites only."
+    >
+      <div className="row">
+        <span className="grow">{state.data ? "On" : "Off"}</span>
+        {state.data ? (
+          <Button
+            onClick={async () => {
+              await disableRepoDepsBox();
+              state.run();
+            }}
+          >
+            Turn off
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={async () => ((await enableRepoDepsBox()) ? state.run() : toast("Needs access to github.com and gitlab.com.", true))}
+          >
+            Turn on
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function Backup() {
   const toast = useToast();
   return (
@@ -265,6 +298,7 @@ export function OptionsApp() {
         <Permissions />
         <Capture />
         <JsonViewer />
+        <RepoDepsBox />
         <Backup />
         <Section title="Keyboard shortcuts">
           <Notice>

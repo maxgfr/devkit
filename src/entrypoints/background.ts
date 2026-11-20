@@ -5,6 +5,7 @@ import { installMockSession } from "../lib/mock-session";
 import { hasPermission } from "../lib/permissions";
 import { PENDING_ROUTE_KEY, type Route } from "../lib/panels";
 import { registerRecorder } from "../lib/recorder";
+import { loadPackageInfo, type PackageInfoMessage } from "../lib/repo-deps-info";
 
 const MENU = {
   page: "devkit-ask-page",
@@ -103,6 +104,14 @@ export default defineBackground(() => {
       errorCounts.set(sender.tab.id, message.count ?? 0);
       refreshBadge(sender.tab.id);
     }
+  });
+
+  // The Dependencies box on GitHub / GitLab pages asks here: the registries allow any origin, and the answers are
+  // cached in storage.session, which content scripts cannot read.
+  browser.runtime.onMessage.addListener((message: PackageInfoMessage, _sender, sendResponse) => {
+    if (message?.type !== "devkit:package-info" || !Array.isArray(message.deps)) return;
+    loadPackageInfo(message.deps).then(sendResponse, () => sendResponse({}));
+    return true;
   });
 
   browser.tabs.onUpdated.addListener((tabId, info, tab) => {
