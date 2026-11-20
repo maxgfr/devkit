@@ -3,7 +3,8 @@ import { quickReport } from "./bug-report-gather";
 import { readCookies } from "./cookie-jar";
 import { toNetscape } from "./cookies-export";
 import { runInTab } from "./inject";
-import { JSON_VIEWER_FILE, JSON_VIEWER_HOST_ID, jsonViewerMessage } from "./json-viewer";
+import { DATA_VIEWER_FILE, dataViewerMessage } from "./data-viewer";
+import { JSON_VIEWER_HOST_ID } from "./json-viewer";
 import { forceJsonViewer, jsonViewerState } from "./page/json-viewer";
 import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
@@ -295,17 +296,20 @@ export const ACTIONS: ActionDef[] = [
   },
   {
     id: "format-json",
-    title: "Format this JSON page",
-    description: "Collapsible tree, filter, copy paths and download for the JSON document in this tab",
+    // The id keeps its JSON name: the action now formats every data format.
+    title: "Format this data page",
+    description:
+      "JSON, XML / RSS / Atom, CSV / TSV, YAML or JSON Lines in this tab: collapsible tree or sortable table, filter, copy and download",
     category: "utils",
-    keywords: "json formatter pretty viewer beautify api response tree",
+    keywords:
+      "json formatter pretty viewer beautify api response tree xml rss atom feed csv tsv table yaml yml jsonl ndjson json lines data",
     needsPage: true,
     // No `scripts`: the palette's activeTab grant is enough, no site access is asked.
     run: async ({ tabId }) => {
       await runInTab(tabId, forceJsonViewer);
-      await browser.scripting.executeScript({ target: { tabId }, files: [`/${JSON_VIEWER_FILE}` as const] });
-      const { state, contentType } = await runInTab(tabId, jsonViewerState, [JSON_VIEWER_HOST_ID]);
-      return { message: jsonViewerMessage(state, contentType) };
+      await browser.scripting.executeScript({ target: { tabId }, files: [`/${DATA_VIEWER_FILE}` as const] });
+      const { state, format, contentType } = await runInTab(tabId, jsonViewerState, [JSON_VIEWER_HOST_ID]);
+      return { message: dataViewerMessage(state, format, contentType) };
     },
   },
   {

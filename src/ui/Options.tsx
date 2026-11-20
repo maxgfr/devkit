@@ -182,11 +182,11 @@ function JsonViewer() {
   const state = useAsync(async () => (await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS })).length > 0, []);
   return (
     <Section
-      title="JSON viewer"
-      hint="Formats JSON documents opened in a tab (API responses, .json files) as a collapsible tree with a filter, copyable paths and a download. Without it, the palette's “Format this JSON page” formats the current tab on demand, with no site access."
+      title="Data page viewer"
+      hint="Formats data documents opened in a tab: JSON (API responses, .json files) and YAML as a collapsible tree, XML, RSS and Atom as an element tree with a feed summary, CSV and TSV as a sortable table, JSON Lines as one tree per line; with a filter, copyable paths and a download. Without it, the palette's “Format this data page” formats the current tab on demand, with no site access."
     >
       <div className="row">
-        <span className="grow">Format JSON pages: {state.data ? "On" : "Off"}</span>
+        <span className="grow">Format data pages (JSON, XML, CSV, YAML): {state.data ? "On" : "Off"}</span>
         {state.data ? (
           <Button
             onClick={async () => {

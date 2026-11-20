@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACTIONS } from "../src/lib/actions";
+import { dataViewerMessage } from "../src/lib/data-viewer";
 import {
   CHUNK,
   childPath,
@@ -12,13 +13,12 @@ import {
   isHttpUrl,
   isJsonContentType,
   JSON_VIEWER_HOST_ID,
-  jsonViewerMessage,
   jsPath,
   kindOf,
   MAX_FORMAT_CHARS,
   rawJsonPre,
 } from "../src/lib/json-viewer";
-import { mountJsonViewer } from "../src/lib/json-viewer-view";
+import { mountDataViewer } from "../src/lib/json-viewer-view";
 import { forceJsonViewer, jsonViewerState } from "../src/lib/page/json-viewer";
 
 describe("json viewer: content type and page shape", () => {
@@ -128,16 +128,17 @@ describe("json viewer: values and paths", () => {
     expect(formatSize(MAX_FORMAT_CHARS + 1)).toBe("10.0 MB");
     expect(invalidMessage({ line: 3, column: 7 })).toBe("Invalid JSON at line 3, column 7");
     expect(invalidMessage({ error: "Unexpected token" })).toBe("Invalid JSON: Unexpected token");
-    expect(jsonViewerMessage("tree", "application/json")).toBe("JSON formatted.");
-    expect(jsonViewerMessage("invalid", "application/json")).toMatch(/Invalid JSON/);
-    expect(jsonViewerMessage("large", "application/json")).toMatch(/Format anyway/);
-    expect(jsonViewerMessage(null, "text/html")).toBe("This tab is not a JSON document (text/html).");
+    expect(dataViewerMessage("tree", "json", "application/json")).toBe("JSON formatted.");
+    expect(dataViewerMessage("invalid", "json", "application/json")).toMatch(/Invalid JSON/);
+    expect(dataViewerMessage("large", "json", "application/json")).toMatch(/Format anyway/);
+    expect(dataViewerMessage(null, null, "text/html")).toMatch(/^This tab is not a data document \(text\/html\)/);
   });
 
   it("is a palette action that does not need site access", () => {
     const action = ACTIONS.find((a) => a.id === "format-json")!;
-    expect(action.title).toBe("Format this JSON page");
+    expect(action.title).toBe("Format this data page");
     expect(action.keywords).toMatch(/json.*formatter.*pretty.*viewer/);
+    for (const word of ["xml", "rss", "csv", "yaml", "jsonl", "ndjson"]) expect(action.keywords).toContain(word);
     expect(action.scripts).toBeUndefined();
     expect(action.needs).toBeUndefined();
   });
@@ -148,7 +149,7 @@ describe("json viewer: rendering", () => {
   const mount = (text: string, opts: { contentType?: string; force?: boolean } = {}) => {
     document.body.innerHTML = `<pre></pre><div class="json-formatter-container"></div>`;
     document.querySelector("pre")!.textContent = text;
-    return mountJsonViewer(document, { contentType: JSON_TYPE, url: "https://api.test/posts/1", ...opts });
+    return mountDataViewer(document, { contentType: JSON_TYPE, url: "https://api.test/posts/1", ...opts });
   };
   const shadow = () => document.getElementById(JSON_VIEWER_HOST_ID)!.shadowRoot!;
   const $ = (sel: string) => shadow().querySelector(sel) as HTMLElement | null;
@@ -318,21 +319,21 @@ describe("json viewer: rendering", () => {
 
   it("is idempotent and leaves other pages alone", () => {
     expect(mount("[1,2]")).toBe("tree");
-    expect(mountJsonViewer(document, { contentType: JSON_TYPE })).toBe("already");
+    expect(mountDataViewer(document, { contentType: JSON_TYPE })).toBe("already");
     expect(document.querySelectorAll(`#${JSON_VIEWER_HOST_ID}`).length).toBe(1);
 
     document.body.innerHTML = "<pre>[1]</pre>";
-    expect(mountJsonViewer(document, { contentType: "text/html" })).toBe("not-json");
+    expect(mountDataViewer(document, { contentType: "text/html" })).toBe("not-data");
     document.body.innerHTML = "<pre>[1]</pre><p>text</p>";
-    expect(mountJsonViewer(document, { contentType: JSON_TYPE })).toBe("not-json");
+    expect(mountDataViewer(document, { contentType: JSON_TYPE })).toBe("not-data");
     document.body.innerHTML = "<pre>   </pre>";
-    expect(mountJsonViewer(document, { contentType: JSON_TYPE })).toBe("not-json");
+    expect(mountDataViewer(document, { contentType: JSON_TYPE })).toBe("not-data");
     expect(document.getElementById(JSON_VIEWER_HOST_ID)).toBeNull();
   });
 
   it("formats text/plain JSON only when asked, and only when it parses", () => {
-    expect(mount('{"a":1}', { contentType: "text/plain" })).toBe("not-json");
-    expect(mount("hello", { contentType: "text/plain", force: true })).toBe("not-json");
+    expect(mount('{"a":1}', { contentType: "text/plain" })).toBe("not-data");
+    expect(mount("hello", { contentType: "text/plain", force: true })).toBe("not-data");
     expect(mount('{"a":1}', { contentType: "text/plain; charset=utf-8", force: true })).toBe("tree");
   });
 

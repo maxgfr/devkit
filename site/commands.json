@@ -123,9 +123,9 @@
     "id": "format-json",
     "kind": "action",
     "category": "utils",
-    "title": "Format this JSON page",
-    "description": "Collapsible tree, filter, copy paths and download for the JSON document in this tab",
-    "keywords": "json formatter pretty viewer beautify api response tree"
+    "title": "Format this data page",
+    "description": "JSON, XML / RSS / Atom, CSV / TSV, YAML or JSON Lines in this tab: collapsible tree or sortable table, filter, copy and download",
+    "keywords": "json formatter pretty viewer beautify api response tree xml rss atom feed csv tsv table yaml yml jsonl ndjson json lines data"
   },
   {
     "id": "copy-markdown-link",

@@ -1,141 +1,364 @@
-// The JSON page viewer: vanilla DOM in a shadow root, so it stays light and the page's styles
-// cannot reach it. Mounted by src/entrypoints/json-viewer.content.ts; tested in happy-dom.
+// The data page viewer (JSON, XML / RSS / Atom, CSV / TSV, YAML, JSON Lines): vanilla DOM in a
+// shadow root, so it stays light and the page's styles cannot reach it. Mounted by
+// src/entrypoints/data-viewer.ts; tested in happy-dom.
+import { CHROME_XML_SOURCE_ID, type DataFormat, detectFormat, FORMAT_LABELS, formatFromContentType, formatFromUrl } from "./data-viewer";
+import { type CsvTable, csvTable } from "./formats/csv";
+import { invalidLinesMessage, parseJsonLines } from "./formats/jsonl";
 import {
-  CHUNK,
-  childPath,
-  countLabel,
-  downloadName,
-  entriesOf,
-  type FilterResult,
-  filterJson,
-  formatSize,
-  invalidMessage,
-  isContainer,
-  isHttpUrl,
-  isJsonContentType,
-  JSON_VIEWER_HOST_ID,
-  kindOf,
-  MAX_FORMAT_CHARS,
-  OPEN_DEPTH,
-  rawJsonPre,
-} from "./json-viewer";
-import { type JsonResult, parseJson } from "./utils/json";
+  type DomLike,
+  findParserError,
+  hasXmlStylesheet,
+  invalidXmlMessage,
+  looksLikeXml,
+  parserErrorMessage,
+  parseXml,
+  serializeXml,
+  type XmlParseResult,
+  xmlErrorPosition,
+} from "./formats/xml";
+import { parseYaml, yamlProblemMessage } from "./formats/yaml";
+import { downloadName, formatSize, invalidMessage, JSON_VIEWER_HOST_ID, MAX_FORMAT_CHARS, rawJsonPre } from "./json-viewer";
+import { parseJson } from "./utils/json";
+import { type Body, elementFactory, type ViewCtx, XHTML } from "./viewer/ctx";
+import { createCsvTable } from "./viewer/csv-table";
+import { CSS } from "./viewer/css";
+import { createJsonTree } from "./viewer/json-tree";
+import { createXmlTree } from "./viewer/xml-tree";
 
-export type MountStatus = "tree" | "raw" | "invalid" | "large" | "already" | "not-json";
+export type MountStatus = "tree" | "raw" | "invalid" | "unsupported" | "large" | "already" | "not-data";
 
 export interface MountOptions {
-  /** Explicit request (palette action): also format `text/plain` documents that parse as JSON. */
+  /** Explicit request (palette action): also format `text/plain` documents that sniff as JSON, JSON Lines or XML. */
   force?: boolean;
   /** Defaults to `document.contentType`. */
   contentType?: string;
-  /** Defaults to `location.href`; names the downloaded file. */
+  /** Defaults to `location.href`; names the downloaded file and hints the format by its extension. */
   url?: string;
 }
 
 const PAGE_STYLE_ID = `${JSON_VIEWER_HOST_ID}-style`;
-/** Nodes built by one "Expand all" before it stops, to keep the tab responsive. */
-const EXPAND_ALL_BUDGET = 20_000;
+
+/** The document's text, as the page holds it. */
+interface PageSource {
+  text: string;
+  /** An XML document (Chrome's XML viewer or a raw XML DOM). */
+  xml?: boolean;
+  /** The browser already failed to parse the XML document. */
+  xmlError?: XmlParseResult;
+}
+
+const serialize = (nodes: ArrayLike<Node>) => {
+  const s = new XMLSerializer();
+  return Array.from(nodes, (n) => s.serializeToString(n)).join("\n");
+};
 
 /**
- * Replaces the browser's view of a JSON document with the viewer. Does nothing (and says why)
- * when the page is not a raw JSON document or already has the viewer, so injecting it twice is safe.
+ * The text of a data document, or null when the page is not one: the single `<pre>` Chrome shows
+ * text and JSON in, or the source of an XML document (moved aside by Chrome's XML viewer, or the
+ * document itself). XML documents styled with `<?xml-stylesheet?>` are left alone.
  */
-export function mountJsonViewer(doc: Document = document, opts: MountOptions = {}): MountStatus {
+export function readPageSource(doc: Document, contentType: string): PageSource | null {
+  const chromeSource = doc.getElementById(CHROME_XML_SOURCE_ID);
+  if (chromeSource) {
+    const nodes = chromeSource.childNodes as unknown as ArrayLike<DomLike>;
+    if (hasXmlStylesheet(nodes)) return null;
+    return { text: serialize(chromeSource.childNodes), xml: true };
+  }
+  const root = doc.documentElement;
+  if (root && root.namespaceURI !== XHTML && formatFromContentType(contentType) === "xml") {
+    if (hasXmlStylesheet(doc.childNodes as unknown as ArrayLike<DomLike>)) return null;
+    const error = findParserError(doc);
+    if (!error) return { text: serialize(doc.childNodes), xml: true };
+    // Chrome keeps the document up to the first error, with a <parsererror> inside.
+    const message = parserErrorMessage(error);
+    const clone = root.cloneNode(true) as Element;
+    for (const e of Array.from(clone.getElementsByTagName("parsererror"))) e.remove();
+    return {
+      text: error === root ? "" : serialize([clone]),
+      xml: true,
+      xmlError: { ok: false, error: message, ...(xmlErrorPosition(message) ?? {}) },
+    };
+  }
+  const pre = rawJsonPre(doc.body);
+  return pre ? { text: pre.textContent ?? "" } : null;
+}
+
+/** What the viewer shows for one format: built from the text, before any DOM. */
+interface FormatModel {
+  format: DataFormat;
+  /** The parsed view is available. */
+  ok: boolean;
+  /** Why it is not. */
+  failure?: "invalid" | "unsupported";
+  banner?: { tone: "error" | "info"; title: string; detail?: string };
+  parsedLabel: string;
+  parsedTitle: string;
+  filterLabel: string;
+  tree: boolean;
+  copy: { title: string; done: string; text: () => string };
+  download: { name: string; type: string; text: () => string };
+  meta?: string;
+  body(ctx: ViewCtx): Body & { controls?: HTMLElement[] };
+}
+
+const pretty = (value: unknown) => JSON.stringify(value, null, 2) ?? "null";
+
+function buildModel(format: DataFormat, source: PageSource, url: string): FormatModel {
+  const text = source.text;
+  const tree = { parsedLabel: "Parsed", parsedTitle: "Collapsible tree", filterLabel: "Filter keys and values", tree: true };
+  const raw = { title: "Copy the raw text", done: "Copied the raw text.", text: () => text };
+  if (format === "json") {
+    const parsed = parseJson(text);
+    return {
+      format,
+      ...tree,
+      ok: parsed.ok,
+      ...(parsed.ok
+        ? {}
+        : {
+            failure: "invalid" as const,
+            banner: {
+              tone: "error" as const,
+              title: invalidMessage(parsed),
+              detail: parsed.line && parsed.error ? ` (${parsed.error})` : "",
+            },
+          }),
+      copy: parsed.ok ? { title: "Copy the JSON, indented", done: "Copied the JSON, indented.", text: () => pretty(parsed.value) } : raw,
+      download: { name: downloadName(url), type: "application/json", text: () => (parsed.ok ? pretty(parsed.value) : text) },
+      body: (ctx) => createJsonTree(ctx, parsed.value),
+    };
+  }
+  if (format === "yaml") {
+    const parsed = parseYaml(text);
+    const docs = parsed.documents ?? 0;
+    const asJson = { title: "Copy as JSON, indented", done: "Copied as JSON, indented.", text: () => pretty(parsed.value) };
+    return {
+      format,
+      ...tree,
+      ok: parsed.ok,
+      ...(parsed.ok
+        ? {}
+        : {
+            failure: parsed.unsupported ? ("unsupported" as const) : ("invalid" as const),
+            banner: { tone: parsed.unsupported ? ("info" as const) : ("error" as const), title: yamlProblemMessage(parsed) },
+          }),
+      meta: docs > 1 ? `${docs} documents` : undefined,
+      copy: parsed.ok ? asJson : raw,
+      download: parsed.ok
+        ? { name: downloadName(url, "json"), type: "application/json", text: () => pretty(parsed.value) }
+        : { name: downloadName(url, "yaml"), type: "text/yaml", text: () => text },
+      body: (ctx) =>
+        createJsonTree(ctx, parsed.value, docs > 1 ? { labels: Array.from({ length: docs }, (_, i) => `document ${i + 1}`) } : undefined),
+    };
+  }
+  if (format === "jsonl") {
+    const parsed = parseJsonLines(text);
+    const values = parsed.items.map((l) => (l.ok ? l.value : undefined));
+    const ok = parsed.valid > 0;
+    const first = parsed.items.find((l) => !l.ok);
+    return {
+      format,
+      ...tree,
+      ok,
+      ...(ok ? {} : { failure: "invalid" as const }),
+      ...(parsed.invalid
+        ? {
+            banner: {
+              tone: "error" as const,
+              title: invalidLinesMessage(parsed),
+              detail: first ? ` (line ${first.line}: ${first.error})` : "",
+            },
+          }
+        : {}),
+      meta: `${parsed.items.length.toLocaleString("en-US")} line${parsed.items.length === 1 ? "" : "s"}`,
+      copy: ok
+        ? {
+            title: "Copy the valid lines as a JSON array",
+            done: "Copied as a JSON array.",
+            text: () => pretty(values.filter((v) => v !== undefined)),
+          }
+        : raw,
+      download: {
+        name: downloadName(url, "json"),
+        type: "application/json",
+        text: () => (ok ? pretty(values.filter((v) => v !== undefined)) : text),
+      },
+      body: (ctx) =>
+        createJsonTree(ctx, values, {
+          labels: parsed.items.map((l) => `line ${l.line}`),
+          errors: parsed.items.map((l) => (l.ok ? undefined : l.error)),
+          texts: parsed.items.map((l) => l.text),
+        }),
+    };
+  }
+  if (format === "xml") {
+    const parsed = source.xmlError ?? parseXml(text, new DOMParser());
+    const doc = parsed.doc;
+    return {
+      format,
+      ok: parsed.ok,
+      parsedLabel: "Tree",
+      parsedTitle: "Collapsible element tree",
+      filterLabel: "Filter tags, attributes and text",
+      tree: true,
+      ...(parsed.ok
+        ? {}
+        : {
+            failure: "invalid" as const,
+            banner: {
+              tone: "error" as const,
+              title: invalidXmlMessage(parsed),
+              detail: source.xmlError && text ? " (the raw view shows the document up to that point)" : "",
+            },
+          }),
+      copy: doc ? { title: "Copy the XML, indented", done: "Copied the XML, indented.", text: () => serializeXml(doc) } : raw,
+      download: { name: downloadName(url, "xml"), type: "application/xml", text: () => (doc ? serializeXml(doc) : text) },
+      body: (ctx) => createXmlTree(ctx, doc!),
+    };
+  }
+  // CSV and TSV.
+  const table = csvTable(text, { preferTab: format === "tsv" });
+  let body: ReturnType<typeof createCsvTable> | null = null;
+  return {
+    format,
+    ok: true,
+    ...(csvProblem(table) ? { banner: csvProblem(table)! } : {}),
+    parsedLabel: "Table",
+    parsedTitle: "Table with sortable columns",
+    filterLabel: "Filter rows",
+    tree: false,
+    copy: { title: `Copy the ${FORMAT_LABELS[format]} as served`, done: `Copied the ${FORMAT_LABELS[format]}.`, text: () => text },
+    download: { name: downloadName(url, format), type: format === "tsv" ? "text/tab-separated-values" : "text/csv", text: () => text },
+    body: (ctx) => {
+      body ??= createCsvTable(ctx, text, { table });
+      return body;
+    },
+  };
+}
+
+/** A banner for a CSV that does not split cleanly: an unterminated quote, or rows with a different number of fields. */
+function csvProblem(table: CsvTable): FormatModel["banner"] | null {
+  const issue = table.issues[0];
+  if (issue)
+    return { tone: "error", title: `${issue.message} at line ${issue.line}`, detail: " (the rest of the file is read as that one field)" };
+  if (!table.ragged.length) return null;
+  const n = table.ragged.length;
+  const lines = table.ragged.slice(0, 10).join(", ") + (n > 10 ? "…" : "");
+  return {
+    tone: "info",
+    title: `${n.toLocaleString("en-US")} row${n === 1 ? " has" : "s have"} a different number of fields`,
+    detail: ` (line${n === 1 ? "" : "s"} ${lines})`,
+  };
+}
+
+/** For a large document the viewer does not parse up front: whether it is worth showing at all. */
+function plausible(format: DataFormat, text: string): boolean {
+  if (format === "json") return /^\s*[[{]/.test(text);
+  if (format === "xml") return looksLikeXml(text);
+  return true;
+}
+
+/**
+ * Replaces the browser's view of a data document with the viewer. Does nothing (and says why) when
+ * the page is not a data document or already has the viewer, so injecting it twice is safe.
+ */
+export function mountDataViewer(doc: Document = document, opts: MountOptions = {}): MountStatus {
   if (doc.getElementById(JSON_VIEWER_HOST_ID)) return "already";
   const contentType = opts.contentType ?? doc.contentType ?? "";
-  const json = isJsonContentType(contentType);
-  if (!json && !(opts.force && /^text\/plain\b/i.test(contentType))) return "not-json";
-  const pre = rawJsonPre(doc.body);
-  const text = pre?.textContent ?? "";
-  if (!pre || !text.trim()) return "not-json";
-  const large = text.length > MAX_FORMAT_CHARS;
-  const parsed = large ? null : parseJson(text);
-  // Plain text is formatted only when it is JSON.
-  if (!json && (large ? !/^\s*[[{]/.test(text) : !parsed?.ok)) return "not-json";
+  const url = opts.url ?? doc.location?.href ?? "";
+  const source = readPageSource(doc, contentType);
+  if (!source || (!source.text.trim() && !source.xmlError)) return "not-data";
+  const detection = source.xml
+    ? { format: "xml" as const, declared: true }
+    : detectFormat({ contentType, url, text: source.text, force: opts.force });
+  if (!detection) return "not-data";
+  const { format } = detection;
+  const large = source.text.length > MAX_FORMAT_CHARS;
+  const model = large ? null : buildModel(format, source, url);
+  if (!detection.declared) {
+    // Plain text is formatted only when it reads as the format, unless the user asked for a file whose extension names it.
+    const explicit = opts.force && formatFromUrl(url) === format;
+    if (large ? !plausible(format, source.text) : !model!.ok && !explicit) return "not-data";
+  }
 
-  const style = doc.createElement("style");
-  style.id = PAGE_STYLE_ID;
-  // Hides the raw <pre> (kept in the DOM, untouched) and Chrome's own "Pretty-print" control.
-  style.textContent = `:root{color-scheme:light dark}html,body{margin:0!important;padding:0!important}body>:not(#${JSON_VIEWER_HOST_ID}){display:none!important}`;
-  (doc.head ?? doc.documentElement).append(style);
-  const host = doc.createElement("div");
-  host.id = JSON_VIEWER_HOST_ID;
-  doc.body.append(host);
+  const host = takeOver(doc);
   const root = host.attachShadow({ mode: "open" });
-  createViewer(doc, root, host, { text, parsed, url: opts.url ?? doc.location?.href ?? "" });
+  host.dataset.format = format;
+  createViewer(doc, root, host, { text: source.text, format, url, model, build: () => buildModel(format, source, url) });
   return host.dataset.state as MountStatus;
 }
 
-interface Source {
+/** Hides the page (kept in the DOM, untouched) and adds the viewer's host. XML documents get an XHTML body first. */
+function takeOver(doc: Document): HTMLElement {
+  const { el } = elementFactory(doc);
+  let body = doc.body as HTMLElement | null;
+  if (!body) {
+    // An XML document shown as is (no XML viewer): move it into a hidden holder of a new XHTML root.
+    const html = doc.createElementNS(XHTML, "html");
+    html.append(el("head"));
+    body = el("body");
+    html.append(body);
+    const holder = el("div");
+    holder.id = `${JSON_VIEWER_HOST_ID}-source`;
+    const old = doc.documentElement;
+    if (old) doc.replaceChild(html, old);
+    else doc.append(html);
+    if (old) holder.append(old);
+    body.append(holder);
+  }
+  const style = el("style");
+  style.id = PAGE_STYLE_ID;
+  // Hides the raw <pre> or XML source and Chrome's own controls (its "Pretty-print" box, its XML tree).
+  style.textContent = `:root{color-scheme:light dark}html,body{margin:0!important;padding:0!important}body>:not(#${JSON_VIEWER_HOST_ID}){display:none!important}`;
+  (doc.head ?? doc.documentElement).append(style);
+  const host = el("div");
+  host.id = JSON_VIEWER_HOST_ID;
+  body.append(host);
+  return host;
+}
+
+interface ViewerInput {
   text: string;
-  /** Null when the document was too large to parse up front. */
-  parsed: JsonResult | null;
+  format: DataFormat;
   url: string;
+  /** Null when the document was too large to parse up front. */
+  model: FormatModel | null;
+  build: () => FormatModel;
 }
 
-interface NodeCtl {
-  el: HTMLElement;
-  value: unknown;
-  path: string;
-  depth: number;
-  /** Inside a container that matched the filter: its whole subtree shows. */
-  inMatch: boolean;
-  toggle?: HTMLButtonElement;
-  childrenEl?: HTMLElement;
-  /** Child entries to show (all of them, or the filtered ones). */
-  entries?: [string | number, unknown][];
-  rendered: number;
-  open: boolean;
-  children: NodeCtl[];
-}
-
-function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source: Source): void {
-  const { text, url } = source;
-  let parsed = source.parsed;
-  let mode: "tree" | "raw" = parsed?.ok ? "tree" : "raw";
-  let filter: FilterResult | null = null;
-  let budget = Number.POSITIVE_INFINITY;
-  let rootCtl: NodeCtl | null = null;
-  const ctls = new WeakMap<Element, NodeCtl>();
-
-  const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, content?: string): HTMLElementTagNameMap[K] => {
-    const e = doc.createElement(tag);
-    if (cls) e.className = cls;
-    if (content !== undefined) e.textContent = content;
-    return e;
-  };
-  const button = (label: string, cls?: string, title?: string): HTMLButtonElement => {
-    const b = el("button", cls, label);
-    b.type = "button";
-    if (title) b.title = title;
-    return b;
-  };
+function createViewer(doc: Document, shadow: ShadowRoot, host: HTMLElement, input: ViewerInput): void {
+  const { text, format } = input;
+  let model = input.model;
+  const label = FORMAT_LABELS[format];
+  const { el, button } = elementFactory(doc);
+  let mode: "parsed" | "raw" = model?.ok ? "parsed" : "raw";
+  let body: (Body & { controls?: HTMLElement[] }) | null = null;
 
   const style = el("style", undefined, CSS);
   const app = el("div", "app");
   const bar = el("div", "bar");
   bar.setAttribute("role", "toolbar");
-  bar.setAttribute("aria-label", "JSON viewer");
+  bar.setAttribute("aria-label", `${label} viewer`);
   const brand = el("span", "brand", "devkit");
   brand.title = "Formatted by devkit. Turn it off in devkit's options.";
   const seg = el("div", "seg");
-  const parsedBtn = button("Parsed", undefined, "Collapsible tree");
+  const parsedBtn = button("Parsed");
   const rawBtn = button("Raw", undefined, "The document as the server sent it");
   seg.append(parsedBtn, rawBtn);
   const expandBtn = button("Expand all", undefined, "Alt-click a toggle to expand one branch");
   const collapseBtn = button("Collapse all");
   const search = el("input");
   search.type = "search";
-  search.placeholder = "Filter keys and values";
-  search.setAttribute("aria-label", "Filter keys and values");
   const matches = el("span", "meta");
   matches.setAttribute("aria-live", "polite");
-  const wrapBtn = button("Wrap", undefined, "Wrap long lines");
+  const controls = el("span", "controls");
+  const meta = el("span", "meta");
+  const wrapBtn = button("Wrap", undefined, format === "csv" || format === "tsv" ? "Wrap long cells" : "Wrap long lines");
   wrapBtn.setAttribute("aria-pressed", "false");
-  const copyBtn = button("Copy", undefined, "Copy the JSON, indented");
-  const downloadBtn = button("Download", undefined, `Save as ${downloadName(url)}`);
+  const copyBtn = button("Copy");
+  const downloadBtn = button("Download");
   const size = el("span", "meta", formatSize(text.length));
-  bar.append(brand, seg, expandBtn, collapseBtn, search, matches, el("span", "grow"), size, wrapBtn, copyBtn, downloadBtn);
+  bar.append(brand, seg, expandBtn, collapseBtn, search, matches, controls, el("span", "grow"), meta, size, wrapBtn, copyBtn, downloadBtn);
 
   const banner = el("div", "banner");
   banner.setAttribute("role", "status");
@@ -145,7 +368,7 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
   toastEl.setAttribute("role", "status");
   toastEl.setAttribute("aria-live", "polite");
   app.append(bar, banner, view, toastEl);
-  root.append(style, app);
+  shadow.append(style, app);
 
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   const toast = (message: string) => {
@@ -178,164 +401,54 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
     }
   };
 
-  const pretty = () => (parsed?.ok ? JSON.stringify(parsed.value, null, 2) : text);
+  const ctx: ViewCtx = { doc, app, view, el, button, toast, copy };
 
-  /* Tree */
-
-  const valueEl = (value: unknown): HTMLElement => {
-    const kind = kindOf(value);
-    if (kind === "string") {
-      const s = el("span", "s");
-      const str = value as string;
-      if (isHttpUrl(str)) {
-        const a = el("a", undefined, JSON.stringify(str).slice(1, -1));
-        a.href = str;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        s.append('"', a, '"');
-      } else s.textContent = JSON.stringify(str);
-      return s;
-    }
-    if (kind === "number") return el("span", "n", String(value));
-    if (kind === "boolean") return el("span", "b", String(value));
-    return el("span", "null", "null");
-  };
-
-  const buildNode = (key: string | number | null, value: unknown, path: string, depth: number, inMatch: boolean): NodeCtl => {
-    budget--;
-    const node = el("div", "node");
-    node.dataset.path = path;
-    const line = el("div", "line");
-    line.title = path;
-    node.append(line);
-    const ctl: NodeCtl = { el: node, value, path, depth, inMatch, rendered: 0, open: false, children: [] };
-    ctls.set(node, ctl);
-    const matched = filter?.matched.has(path) ?? false;
-    if (matched) node.classList.add("hit");
-    const container = isContainer(value);
-    if (container) {
-      const toggle = button("▸", "tog");
-      toggle.setAttribute("aria-expanded", "false");
-      toggle.setAttribute("aria-label", `${key === null ? "Root" : String(key)} ${countLabel(value)}`);
-      line.append(toggle);
-      ctl.toggle = toggle;
-    } else line.append(el("span", "sp"));
-    if (key !== null) {
-      const k = button(typeof key === "number" ? String(key) : JSON.stringify(key), typeof key === "number" ? "key idx" : "key");
-      k.title = `${path} (click to copy the path)`;
-      line.append(k, el("span", "colon", ": "));
-    }
-    if (container) {
-      line.append(el("span", "count", countLabel(value)));
-      const childMatch = inMatch || matched;
-      ctl.entries = entriesOf(value).filter(([k]) => childMatch || !filter || filter.visible.has(childPath(path, k)));
-      if (!ctl.entries.length) ctl.toggle!.disabled = true;
-      else {
-        // Filtering opens the path to every match (and a matched container one level), nothing more.
-        const open = filter ? !inMatch && filter.visible.has(path) : depth < OPEN_DEPTH;
-        if (open && budget > 0) expand(ctl);
-      }
-    } else line.append(valueEl(value));
-    return ctl;
-  };
-
-  const renderMore = (ctl: NodeCtl) => {
-    const entries = ctl.entries ?? [];
-    const list = ctl.childrenEl!;
-    list.querySelector(":scope > .more")?.remove();
-    const end = Math.min(entries.length, ctl.rendered + CHUNK);
-    const inMatch = ctl.inMatch || (filter?.matched.has(ctl.path) ?? false);
-    for (let i = ctl.rendered; i < end; i++) {
-      const [k, v] = entries[i]!;
-      const child = buildNode(k, v, childPath(ctl.path, k), ctl.depth + 1, inMatch);
-      ctl.children.push(child);
-      list.append(child.el);
-    }
-    ctl.rendered = end;
-    if (end < entries.length) {
-      const left = entries.length - end;
-      list.append(button(`Show ${Math.min(CHUNK, left).toLocaleString("en-US")} more (${left.toLocaleString("en-US")} left)`, "more"));
-    }
-  };
-
-  function expand(ctl: NodeCtl) {
-    if (!ctl.toggle || ctl.toggle.disabled) return;
-    if (!ctl.childrenEl) {
-      ctl.childrenEl = el("div", "children");
-      ctl.el.append(ctl.childrenEl);
-      renderMore(ctl);
-    }
-    ctl.childrenEl.hidden = false;
-    ctl.open = true;
-    ctl.toggle.textContent = "▾";
-    ctl.toggle.setAttribute("aria-expanded", "true");
-  }
-
-  const collapse = (ctl: NodeCtl) => {
-    if (!ctl.toggle || !ctl.childrenEl) return;
-    ctl.childrenEl.hidden = true;
-    ctl.open = false;
-    ctl.toggle.textContent = "▸";
-    ctl.toggle.setAttribute("aria-expanded", "false");
-  };
-
-  /** Expands `ctl` and every built or buildable descendant, within the node budget. */
-  const expandDeep = (ctl: NodeCtl): boolean => {
-    if (budget <= 0) return false;
-    expand(ctl);
-    for (const child of ctl.children) if (child.toggle && !expandDeep(child)) return false;
-    return true;
-  };
-  /** Expand all, for the toolbar and Alt-click: stops after EXPAND_ALL_BUDGET new nodes. */
-  const expandAll = (ctl: NodeCtl) => {
-    budget = EXPAND_ALL_BUDGET;
-    const done = expandDeep(ctl);
-    budget = Number.POSITIVE_INFINITY;
-    if (!done) toast(`Expanded the first ${EXPAND_ALL_BUDGET.toLocaleString("en-US")} nodes.`);
-  };
-  const collapseDeep = (ctl: NodeCtl) => {
-    for (const child of ctl.children) collapseDeep(child);
-    collapse(ctl);
-  };
-
-  const renderTree = () => {
-    view.replaceChildren();
-    if (!parsed?.ok) return;
-    budget = Number.POSITIVE_INFINITY;
-    const tree = el("div", "tree");
-    rootCtl = buildNode(null, parsed.value, "$", 0, false);
-    tree.append(rootCtl.el);
-    view.append(tree);
-    if (filter && !filter.count) view.append(el("p", "empty", "No key or value matches the filter."));
+  /** Applies the model to the toolbar (again after "Format anyway"). */
+  const setup = () => {
+    parsedBtn.textContent = model?.parsedLabel ?? "Parsed";
+    parsedBtn.title = model?.parsedTitle ?? "Collapsible tree";
+    const filterLabel = model?.filterLabel ?? "Filter keys and values";
+    search.placeholder = filterLabel;
+    search.setAttribute("aria-label", filterLabel);
+    expandBtn.hidden = collapseBtn.hidden = model ? !model.tree : false;
+    meta.textContent = model?.meta ?? "";
+    copyBtn.title = model?.copy.title ?? "Copy the raw text";
+    downloadBtn.title = `Save as ${model?.download.name ?? downloadName(input.url, format)}`;
+    body = model?.ok ? model.body(ctx) : null;
+    controls.replaceChildren(...(body?.controls ?? []));
   };
 
   const renderRaw = () => {
-    const pre = el("pre", "raw", text);
-    view.replaceChildren(pre);
+    view.replaceChildren(el("pre", "raw", text));
   };
 
   const render = () => {
-    host.dataset.state = mode === "tree" ? "tree" : !parsed ? "large" : parsed.ok ? "raw" : "invalid";
-    parsedBtn.setAttribute("aria-pressed", String(mode === "tree"));
+    host.dataset.state = mode === "parsed" ? "tree" : !model ? "large" : model.ok ? "raw" : (model.failure ?? "invalid");
+    parsedBtn.setAttribute("aria-pressed", String(mode === "parsed"));
     rawBtn.setAttribute("aria-pressed", String(mode === "raw"));
-    parsedBtn.disabled = !parsed?.ok;
-    for (const b of [expandBtn, collapseBtn]) b.disabled = mode !== "tree";
-    search.disabled = mode !== "tree";
-    if (mode === "tree") renderTree();
-    else renderRaw();
+    parsedBtn.disabled = !body;
+    for (const b of [expandBtn, collapseBtn]) b.disabled = mode !== "parsed";
+    search.disabled = mode !== "parsed";
+    for (const c of Array.from(controls.querySelectorAll("button"))) c.disabled = mode !== "parsed";
+    if (mode === "parsed" && body) {
+      app.style.setProperty("--bar-h", `${bar.offsetHeight || 48}px`);
+      body.render();
+    } else renderRaw();
   };
 
   const showBanner = () => {
     banner.replaceChildren();
     banner.className = "banner";
     banner.hidden = true;
-    if (!parsed) {
+    banner.setAttribute("role", "status");
+    if (!model) {
       banner.classList.add("info");
       banner.hidden = false;
       const formatBtn = button("Format anyway");
       formatBtn.addEventListener("click", () => {
-        parsed = parseJson(text);
-        mode = parsed.ok ? "tree" : "raw";
+        model = input.build();
+        mode = model.ok ? "parsed" : "raw";
+        setup();
         showBanner();
         render();
       });
@@ -343,41 +456,19 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
         el("span", "grow", `This document is ${formatSize(text.length)}: shown as raw text so the tab stays responsive.`),
         formatBtn,
       );
-    } else if (!parsed.ok) {
-      banner.classList.add("error");
+    } else if (model.banner) {
+      banner.classList.add(model.banner.tone);
       banner.hidden = false;
-      banner.setAttribute("role", "alert");
-      const detail = parsed.line && parsed.error ? ` (${parsed.error})` : "";
-      banner.append(el("strong", undefined, invalidMessage(parsed)), el("span", "detail", detail));
+      if (model.banner.tone === "error") banner.setAttribute("role", "alert");
+      banner.append(el("strong", undefined, model.banner.title), el("span", "detail", model.banner.detail ?? ""));
     }
   };
 
   /* Events */
 
-  view.addEventListener("click", async (event) => {
-    const target = (event.target as Element).closest("button");
-    if (!target) return;
-    const node = target.closest(".node");
-    const ctl = node ? ctls.get(node) : undefined;
-    if (target.classList.contains("more")) {
-      const owner = target.parentElement?.closest(".node");
-      const parent = owner ? ctls.get(owner) : undefined;
-      if (parent) renderMore(parent);
-      return;
-    }
-    if (!ctl) return;
-    if (target.classList.contains("tog")) {
-      if (ctl.open) (event as MouseEvent).altKey ? collapseDeep(ctl) : collapse(ctl);
-      else if ((event as MouseEvent).altKey) expandAll(ctl);
-      else expand(ctl);
-    } else if (target.classList.contains("key")) {
-      toast((await copy(ctl.path)) ? `Copied ${ctl.path}` : "Could not copy the path.");
-    }
-  });
-
   parsedBtn.addEventListener("click", () => {
-    if (mode === "tree" || !parsed?.ok) return;
-    mode = "tree";
+    if (mode === "parsed" || !body) return;
+    mode = "parsed";
     render();
   });
   rawBtn.addEventListener("click", () => {
@@ -385,27 +476,24 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
     mode = "raw";
     render();
   });
-  expandBtn.addEventListener("click", () => {
-    if (rootCtl) expandAll(rootCtl);
-  });
-  collapseBtn.addEventListener("click", () => {
-    if (!rootCtl) return;
-    for (const child of rootCtl.children) collapseDeep(child);
-  });
+  expandBtn.addEventListener("click", () => body?.expandAll?.());
+  collapseBtn.addEventListener("click", () => body?.collapseAll?.());
   wrapBtn.addEventListener("click", () => {
     const on = !app.classList.contains("wrap");
     app.classList.toggle("wrap", on);
     wrapBtn.setAttribute("aria-pressed", String(on));
   });
   copyBtn.addEventListener("click", async () => {
-    toast((await copy(pretty())) ? (parsed?.ok ? "Copied the JSON, indented." : "Copied the raw text.") : "Could not copy.");
+    const c = model?.copy;
+    toast((await copy(c ? c.text() : text)) ? (c?.done ?? "Copied the raw text.") : "Could not copy.");
   });
   downloadBtn.addEventListener("click", () => {
-    const blob = new Blob([pretty()], { type: "application/json" });
+    const d = model?.download;
+    const blob = new Blob([d ? d.text() : text], { type: d?.type ?? "text/plain" });
     const href = URL.createObjectURL(blob);
     const a = el("a");
     a.href = href;
-    a.download = downloadName(url);
+    a.download = d?.name ?? downloadName(input.url, format);
     app.append(a);
     a.click();
     a.remove();
@@ -413,10 +501,10 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
   });
   let filterTimer: ReturnType<typeof setTimeout> | undefined;
   const applyFilter = () => {
-    if (!parsed?.ok) return;
-    filter = filterJson(parsed.value, search.value);
-    matches.textContent = filter ? `${filter.count.toLocaleString("en-US")} match${filter.count === 1 ? "" : "es"}` : "";
-    renderTree();
+    if (!body || mode !== "parsed") return;
+    const count = body.filter(search.value);
+    matches.textContent =
+      count === null ? "" : body.countLabel ? body.countLabel(count) : `${count.toLocaleString("en-US")} match${count === 1 ? "" : "es"}`;
   };
   search.addEventListener("input", () => {
     clearTimeout(filterTimer);
@@ -432,92 +520,7 @@ function createViewer(doc: Document, root: ShadowRoot, host: HTMLElement, source
     }
   });
 
+  setup();
   showBanner();
   render();
 }
-
-const CSS = `
-:host { all: initial; display: block; }
-.app {
-  --bg: #ffffff; --bg-2: #f6f7f9; --fg: #14171f; --fg-3: #646b7a; --line: #e2e5eb;
-  --accent: #0e7490; --accent-fg: #ffffff; --hit: #e0f4f8; --bad: #b91c1c;
-  --key: #0e7490; --str: #15803d; --num: #b45309; --bool: #7c3aed; --null: #646b7a;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  color-scheme: light dark;
-  min-height: 100vh;
-  background: var(--bg);
-  color: var(--fg);
-  font: 13px / 1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  .app {
-    --bg: #111318; --bg-2: #181b22; --fg: #e7e9ee; --fg-3: #8a91a0; --line: #2a2f3a;
-    --accent: #22d3ee; --accent-fg: #062a33; --hit: #0f2f37; --bad: #f87171;
-    --key: #22d3ee; --str: #4ade80; --num: #fbbf24; --bool: #c4b5fd; --null: #8a91a0;
-  }
-}
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-.bar {
-  position: sticky; top: 0; z-index: 1;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  padding: 8px 12px; background: var(--bg-2); border-bottom: 1px solid var(--line);
-}
-.brand { font-weight: 600; color: var(--accent); margin-right: 4px; }
-.grow { flex: 1; }
-.meta { color: var(--fg-3); font-size: 12px; }
-button {
-  font: inherit; color: inherit; background: var(--bg); cursor: pointer;
-  border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px;
-}
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.5; cursor: default; }
-button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.seg { display: inline-flex; }
-.seg button { border-radius: 0; }
-.seg button:first-child { border-radius: 6px 0 0 6px; }
-.seg button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
-input[type="search"] {
-  font: inherit; color: inherit; background: var(--bg); min-width: 14em;
-  border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px;
-}
-.banner { display: flex; align-items: center; gap: 8px; margin: 12px 12px 0; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--line); }
-.banner.error { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, transparent); background: color-mix(in srgb, var(--bad) 8%, transparent); }
-.banner.info { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
-.banner .detail { color: var(--fg-3); font-family: var(--mono); font-size: 12px; }
-.view { padding: 8px 12px 48px; font: 13px / 1.6 var(--mono); overflow-x: auto; }
-.raw { margin: 0; font: inherit; white-space: pre; }
-.line { white-space: nowrap; border-radius: 3px; }
-.line:hover { background: var(--bg-2); }
-.children { margin-left: 0.55em; padding-left: 1em; border-left: 1px solid var(--line); }
-.tog, .key {
-  border: 0; background: none; padding: 0; border-radius: 3px;
-  font: inherit; line-height: inherit;
-}
-.tog { display: inline-block; width: 1.3em; text-align: center; color: var(--fg-3); }
-.tog:disabled { opacity: 0.35; }
-.sp { display: inline-block; width: 1.3em; }
-.key { color: var(--key); cursor: copy; }
-.key:hover { text-decoration: underline; }
-.key.idx { color: var(--fg-3); }
-.colon, .count { color: var(--fg-3); }
-.s { color: var(--str); }
-.s a { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
-.n { color: var(--num); }
-.b { color: var(--bool); }
-.null { color: var(--null); font-style: italic; }
-.hit > .line { background: var(--hit); }
-.more { margin: 2px 0 2px 1.3em; font-family: inherit; font-size: 12px; padding: 1px 8px; color: var(--accent); }
-.empty { color: var(--fg-3); font-family: system-ui, sans-serif; }
-.wrap .raw { white-space: pre-wrap; overflow-wrap: anywhere; }
-.wrap .line { white-space: pre-wrap; overflow-wrap: anywhere; }
-.offscreen { position: fixed; top: 0; left: -9999px; opacity: 0; }
-.toast {
-  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
-  padding: 6px 12px; border-radius: 6px; background: var(--fg); color: var(--bg);
-  font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 0.15s;
-}
-.toast.show { opacity: 1; }
-@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
-`;
