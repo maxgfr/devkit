@@ -29,7 +29,9 @@ const snap = (over: Partial<MetaSnapshot> = {}): MetaSnapshot => ({
   meta: [
     { key: "description", value: "A description that is long enough to be useful for search engines and users." },
     { key: "viewport", value: "width=device-width" },
-    ...["og:title", "og:description", "og:image", "og:url", "og:type"].map((key) => ({ key, value: "x" })),
+    ...["og:title", "og:description", "og:type"].map((key) => ({ key, value: "x" })),
+    { key: "og:image", value: "https://ex.com/mug.jpg" },
+    { key: "og:url", value: url },
   ],
   links: [
     { rel: "canonical", href: url },
