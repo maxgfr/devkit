@@ -1087,6 +1087,160 @@ try {
   check("utils: cron explained with next runs", t.includes("Next runs") && /15 minutes/.test(t));
   await shot("utils");
 
+  // On-page SEO: counters, Open Graph checklist and previews, hreflang, indexability, reports.
+  await site.goto(`${base}/seo`);
+  await open("Inspect", "SEO");
+  await panel.getByText("robots.txt (Googlebot)").waitFor();
+  await panel.waitForTimeout(800);
+  t = await text();
+  check(
+    "seo: counters strip (issues, words, headings, images with missing alt, internal · external links)",
+    /Issues\s*\d+/.test(t) &&
+      /Words\s*\d+/.test(t) &&
+      /Headings\s*3\b/.test(t) &&
+      /Images\s*3\s*1 ✕ alt/.test(t) &&
+      /Links\s*4\s*3 · 1/.test(t),
+    t.match(/Issues[\s\S]{0,120}/)?.[0]?.replace(/\s+/g, " "),
+  );
+  check(
+    "seo: issues list missing alt, og: tags written with name=, Open Graph extras and x-default",
+    t.includes("1 of 3 images has no alt text.") &&
+      t.includes('og:description use name="…"') &&
+      t.includes("Open Graph could still add: og:locale, og:image:alt.") &&
+      t.includes("No x-default entry — it is the fallback for languages you do not target."),
+  );
+  check("seo: meta lengths shown against their limits", /Title\s*58\/60/.test(t) && /Meta description\s*148\/160/.test(t));
+  check(
+    "seo: Open Graph checklist with essential, recommended and Twitter fallbacks",
+    t.includes("Social (Open Graph / Twitter) · 5/5") &&
+      /og:image:alt\s*missing/.test(t) &&
+      /twitter:title\s*fallback from og:title: Acme Mug guide/.test(t) &&
+      /twitter:card\s*summary_large_image/.test(t),
+  );
+  check(
+    "seo: hreflang table with this page, de_AT, en-UK, relative URL and the return-links note",
+    t.includes("hreflang (4)") &&
+      t.includes("this page") &&
+      t.includes("Use a hyphen, not an underscore: de-AT.") &&
+      t.includes('"UK" is not a country code: use en-GB.') &&
+      t.includes("Relative URL: Google needs a fully qualified URL") &&
+      t.includes("Return links from the other language versions can only be verified"),
+  );
+  check(
+    "seo: images and links stats",
+    /Missing alt\s*1/.test(t) &&
+      /Without title\s*2/.test(t) &&
+      /Internal\s*3/.test(t) &&
+      /External\s*1/.test(t) &&
+      /Unique\s*3/.test(t) &&
+      /Nofollow\s*1/.test(t),
+  );
+  check(
+    "seo: indexability from meta robots, robots.txt for Googlebot and HTTP status",
+    /Indexability\s*index, follow/.test(t) && /robots.txt \(Googlebot\)\s*Allowed/.test(t) && /HTTP status\s*200/.test(t),
+  );
+  const ogHits = async () => Number(await (await fetch(`${base}/og-hits`)).text());
+  check("seo: the share image is not requested before Load preview image", (await ogHits()) === 0);
+  await panel.getByRole("button", { name: "Load preview image" }).click();
+  await panel
+    .getByText(/800×800 is below 1200×630/)
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "seo: Load preview image measures the file (size, ratio, declared size)",
+    (await ogHits()) === 1 &&
+      t.includes("800×800 is below 1200×630") &&
+      t.includes("Aspect ratio 1.00:1") &&
+      t.includes("og:image:width/height say 1200×630, the file is 800×800."),
+  );
+  await panel.locator('fieldset[aria-label="Preview"] button', { hasText: "X (Twitter)" }).click();
+  await panel.waitForTimeout(200);
+  check("seo: X preview uses the large card at 2:1", (await text()).includes("Image ratio 2:1 · large image"));
+  await shot("inspect-seo");
+  await panel.locator('fieldset[aria-label="Preview"] button', { hasText: "LinkedIn" }).click();
+  await panel.locator("summary", { hasText: "All headings" }).click();
+  await panel.getByLabel("Search headings").fill("second");
+  await panel.waitForTimeout(200);
+  const headingItems = await panel.locator(".seo-headings li").allInnerTexts();
+  check(
+    "seo: heading search filters the list",
+    headingItems.length === 1 && headingItems[0].includes("Second thoughts"),
+    headingItems.join(" | "),
+  );
+  const seoReportText = await lastCopy(panel.getByRole("button", { name: "Copy report" }).first());
+  check(
+    "seo: Copy report gives a readable summary of every section",
+    seoReportText.startsWith("# SEO report: Acme Mug guide") &&
+      seoReportText.includes("## Social (Open Graph / Twitter) · 5/5") &&
+      seoReportText.includes("## hreflang (4)") &&
+      seoReportText.includes("- robots.txt (Googlebot): Allowed"),
+    seoReportText.split("\n")[2],
+  );
+  await site.goto(`${base}/`);
+  await open("Security", "Headers");
+  await panel.getByLabel("Search headers").waitFor();
+  await panel.getByLabel("Search headers").fill("express");
+  await panel.waitForTimeout(200);
+  t = await text();
+  check(
+    "headers: search filters the response headers by value",
+    /Response headers \(\d+\)/.test(t) && /\n1 of \d+ match/.test(t) && t.includes("x-powered-by") && !t.includes("speculation-rules"),
+  );
+  const headersReport = await lastCopy(panel.getByRole("button", { name: "Copy report" }));
+  check(
+    "headers: Copy report lists the checks and every header",
+    headersReport.includes("## Security headers") && headersReport.includes("x-powered-by: Express/4.18.2"),
+  );
+  await open("Inspect", "Open in external tools");
+  t = await text();
+  check(
+    "external: tools grouped, with GTmetrix, W3C CSS, WAVE, Facebook, LinkedIn, Ahrefs, Sistrix and WHOIS",
+    ["Structured data", "Performance", "Validation", "Social", "SEO & domain", "Security"].every((g) => t.includes(g)) &&
+      [
+        "GTmetrix",
+        "W3C CSS validator",
+        "WAVE accessibility",
+        "Facebook Sharing Debugger",
+        "LinkedIn Post Inspector",
+        "Ahrefs Site Explorer",
+        "Sistrix Visibility Index",
+        "WHOIS",
+      ].every((n) => t.includes(n)),
+  );
+  const waveHref = await panel.locator("a.action", { hasText: "WAVE accessibility" }).getAttribute("href");
+  check("external: WAVE gets the page URL", waveHref === `https://wave.webaim.org/report#/${base}/`, waveHref);
+  await context.addInitScript(() => {
+    window.print = () => {
+      window.__printed = true;
+    };
+  });
+  await open("Inspect", "Overview");
+  await panel.waitForTimeout(1500);
+  const [printTab] = await Promise.all([
+    context.waitForEvent("page", { timeout: 10000 }),
+    panel.getByRole("button", { name: "Print / Save as PDF" }).click(),
+  ]);
+  await printTab
+    .locator(".print-report h1")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await printTab.waitForTimeout(800);
+  const printText = await printTab
+    .locator("body")
+    .innerText()
+    .catch(() => "");
+  check(
+    "overview: Print / Save as PDF opens a print-ready report page and prints it",
+    printTab.url() === `chrome-extension://${id}/print.html` &&
+      printText.includes("Page report: Acme Mug") &&
+      printText.includes("nothing was uploaded") &&
+      (await printTab.locator(".print-report table").count()) > 0 &&
+      (await printTab.evaluate(() => window.__printed === true)),
+    printText.split("\n").slice(0, 2).join(" / "),
+  );
+  await printTab.close();
+
   // Headings: a page with every heading problem.
   await site.goto(`${base}/headings`);
   await panel.waitForTimeout(800);

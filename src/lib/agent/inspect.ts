@@ -146,12 +146,35 @@ function seoFix(c: Check, snap: MetaSnapshot): { where: string; fix: string } | 
     }
     case "favicon":
       return { where: "`<head>`", fix: `Add ${code('<link rel="icon" href="/favicon.svg" type="image/svg+xml">')} (or a 32×32 PNG).` };
-    case "hreflang":
+    case "hreflang-x-default":
       return {
         where: '`<link rel="alternate" hreflang>` in `<head>`',
         fix: `Add ${code(`<link rel="alternate" hreflang="x-default" href="${page}">`)} for visitors whose language matches no alternate.`,
       };
+    case "hreflang-self":
+      return {
+        where: '`<link rel="alternate" hreflang>` in `<head>`',
+        fix: `Add ${code(`<link rel="alternate" hreflang="${snap.lang || "en"}" href="${linkHref(snap, "canonical") ?? page}">`)}: every language version lists itself too.`,
+      };
+    case "og-name":
+      return { where: "`<head>`", fix: 'Write Open Graph tags as `<meta property="og:…" content="…">` (property=, not name=).' };
+    case "og-url-canonical":
+      return { where: '`<meta property="og:url">`', fix: `Set og:url to the canonical URL: ${code(linkHref(snap, "canonical") ?? page)}.` };
+    case "images-alt":
+      return {
+        where: "the page's `<img>` elements",
+        fix: 'Give each content image an `alt` describing it, and `alt=""` to decorative ones (Page › Assets lists them).',
+      };
     default:
+      if (c.id.startsWith("og:image") || c.id.startsWith("twitter:image"))
+        return { where: "`<head>`", fix: "Use an absolute `https://` URL for the share image." };
+      if (c.id === "twitter-card")
+        return { where: '`<meta name="twitter:card">`', fix: "Use one of `summary`, `summary_large_image`, `app` or `player`." };
+      if (c.id.startsWith("hreflang"))
+        return {
+          where: '`<link rel="alternate" hreflang>` in `<head>`',
+          fix: "Use ISO 639-1 language codes with an optional ISO 3166-1 region joined by a hyphen (`de-AT`, `en-GB`), absolute URLs, and one URL per language.",
+        };
       return null;
   }
 }

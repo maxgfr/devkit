@@ -4041,3 +4041,196 @@ table.ar-crawlers th:first-child,
 table.ar-crawlers td:first-child {
   width: 46%;
 }
+
+/* SEO & meta */
+.seo-counters {
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+}
+.seo-counters small,
+.seo-stats small {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.seo-stats {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+}
+.seo-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.seo-details > summary {
+  cursor: pointer;
+  padding: 2px 0;
+}
+.seo-details[open] > summary {
+  margin-bottom: 6px;
+}
+.seo-headings {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow: auto;
+}
+.seo-headings .pill {
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.seo-tag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+}
+.seo-tags .checks .label {
+  font-size: 12px;
+}
+table.seo-hreflang {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+table.seo-hreflang td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.seo-hreflang td:first-child {
+  width: 18px;
+}
+table.seo-hreflang .pill {
+  margin-left: 6px;
+}
+
+/* Share card previews, one look per network */
+.social-img {
+  display: grid;
+  place-items: center;
+  background: var(--bg-3);
+  overflow: hidden;
+  width: 100%;
+}
+.social-img img {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  object-fit: cover;
+}
+.social-img.thumb {
+  width: 96px;
+  height: 96px;
+  flex: none;
+}
+.social.small {
+  display: flex;
+  align-items: stretch;
+}
+.social.small .body {
+  flex: 1;
+  min-width: 0;
+}
+.social .title {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.social .desc {
+  overflow-wrap: anywhere;
+}
+.social.net-facebook {
+  border-radius: 0;
+}
+.social.net-facebook .body {
+  background: var(--bg-2);
+}
+.social.net-linkedin .site,
+.social.net-x .site {
+  text-transform: none;
+}
+.social.net-x {
+  border-radius: 14px;
+}
+.social.net-whatsapp {
+  background: color-mix(in srgb, var(--good) 10%, var(--bg));
+  border-radius: 10px;
+}
+.social.net-slack {
+  border: 0;
+  border-left: 4px solid var(--line);
+  border-radius: 0;
+}
+.social.net-slack .title {
+  color: var(--accent);
+}
+.social.net-slack .site-name {
+  font-weight: 650;
+  font-size: 12px;
+}
+.social.net-slack.large {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+/* Print page of the Overview report */
+html:has(.print-page) {
+  background: var(--bg);
+}
+.print-page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+.print-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.print-report {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.print-report h1 {
+  font-size: 20px;
+}
+.print-report h2 {
+  font-size: 16px;
+  margin-top: 24px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 4px;
+}
+.print-report h3 {
+  font-size: 14px;
+}
+.print-report table {
+  width: 100%;
+}
+@media print {
+  .print-actions {
+    display: none;
+  }
+  .print-page {
+    max-width: none;
+    padding: 0;
+  }
+  .print-report h2 {
+    break-after: avoid;
+  }
+  .print-report table,
+  .print-report li {
+    break-inside: avoid;
+  }
+}
+/* Paper is white: print with the light palette even when the system is dark. */
+@media print {
+  html:has(.print-page) {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-2: #f6f7f9;
+    --bg-3: #eceef2;
+    --fg: #14171f;
+    --fg-3: #646b7a;
+    --line: #e2e5eb;
+    --accent: #0e7490;
+  }
+}

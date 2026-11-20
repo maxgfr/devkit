@@ -42,6 +42,46 @@ export function errorsVerdict(data: { installed: boolean; errors: unknown[] }): 
   return { level: "good", text: "None captured" };
 }
 
+/** session storage key of the report the print page renders. */
+export const PRINT_REPORT_KEY = "printReport";
+
+export interface PrintReport {
+  title: string;
+  url: string;
+  /** ISO date of the read. */
+  date: string;
+  markdown: string;
+}
+
+const MARK: Record<Level, string> = { bad: "✕", warn: "▲", info: "ⓘ", good: "✓" };
+const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\s+/g, " ");
+
+/**
+ * The Overview report for people, as printed: the verdict of each row, then the full report of every area
+ * measured (clean ones included), then what could not be measured.
+ */
+export function printReportMarkdown(
+  rows: { label: string; verdict: Verdict | null }[],
+  parts: { area: string; md: string | null; missing?: string }[],
+  ctx: { url: string; title?: string; date: string },
+): string {
+  const measured = parts.filter((p) => p.md !== null);
+  const missing = parts.filter((p) => p.md === null);
+  return [
+    `# Page report: ${ctx.title?.trim() || ctx.url}`,
+    `Page: ${ctx.url}  \nRead on ${ctx.date} by devkit, in this browser (nothing was uploaded).`,
+    [
+      "| Area | Result |",
+      "| --- | --- |",
+      ...rows.map((r) => `| ${cell(r.label)} | ${r.verdict ? `${MARK[r.verdict.level]} ${cell(r.verdict.text)}` : "Not measured"} |`),
+    ].join("\n"),
+    ...measured.map((p) => p.md as string),
+    missing.length ? `## Not measured\n\n${missing.map((p) => `- ${p.area}: ${p.missing ?? "no data"}`).join("\n")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 /** From the last axe audit of the page; null when none ran (the Overview does not audit large pages on its own). */
 export function a11yVerdict(audit: Pick<Audit, "violations" | "incomplete" | "passes">): Verdict {
   const s = auditSummary(audit);

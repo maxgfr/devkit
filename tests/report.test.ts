@@ -1,7 +1,30 @@
 import { describe, expect, it } from "vitest";
 import type { AuditRule, Impact } from "../src/lib/a11y";
 import { analyzeJsonLd } from "../src/lib/jsonld";
-import { a11yVerdict, errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict } from "../src/lib/report";
+import { a11yVerdict, errorsVerdict, jsonLdVerdict, printReportMarkdown, securityVerdict, seoVerdict } from "../src/lib/report";
+
+describe("print report", () => {
+  it("lists every verdict, every measured area and what was not measured", () => {
+    const md = printReportMarkdown(
+      [
+        { label: "SEO", verdict: { level: "warn", text: "2 to review" } },
+        { label: "Web Vitals", verdict: null },
+      ],
+      [
+        { area: "SEO", md: "## SEO checks\nResult: 2 warnings" },
+        { area: "Headings", md: "## Headings outline\nResult: No problem found." },
+        { area: "Console errors", md: null, missing: "not read yet" },
+      ],
+      { url: "https://ex.com/", title: "Acme | Mugs", date: "20/11/2026" },
+    );
+    expect(md.startsWith("# Page report: Acme | Mugs\n\nPage: https://ex.com/")).toBe(true);
+    expect(md).toContain("nothing was uploaded");
+    expect(md).toContain("| SEO | ▲ 2 to review |");
+    expect(md).toContain("| Web Vitals | Not measured |");
+    expect(md).toContain("## Headings outline");
+    expect(md).toContain("## Not measured\n\n- Console errors: not read yet");
+  });
+});
 
 describe("page report card", () => {
   it("states the security grade and its level", () => {

@@ -137,25 +137,68 @@ export function manifestChecks(m: Record<string, unknown>): ManifestCheck[] {
   ];
 }
 
+export type ToolGroup = "Structured data" | "Performance" | "Validation" | "Social" | "SEO & domain" | "Security";
+
+export const TOOL_GROUPS: ToolGroup[] = ["Structured data", "Performance", "Validation", "Social", "SEO & domain", "Security"];
+
 export interface ExternalTool {
   name: string;
+  group: ToolGroup;
   url: (pageUrl: string) => string;
+  /** The site does not take the URL from the link: devkit copies it to paste in the site's form. */
+  pasteUrl?: boolean;
+  /** Shown under the name, e.g. that the tool needs a sign-in. */
+  note?: string;
 }
 
+/** `u` as the browser would send it: spaces, umlauts and emoji percent-encoded, the host in punycode. */
+const href = (u: string) => {
+  try {
+    return new URL(u).href;
+  } catch {
+    return u;
+  }
+};
+const host = (u: string) => new URL(u).hostname;
+/** The domain for domain-level tools (Sistrix, WHOIS): the hostname without a leading "www.". */
+const domain = (u: string) => host(u).replace(/^www\./, "");
+const q = (u: string) => encodeURIComponent(href(u));
+
+// The W3C CSS, WAVE, Facebook, LinkedIn, Sistrix and WHOIS patterns were opened in Chrome (November 2026) and
+// show the page's result. GTmetrix ignores a URL parameter, hence pasteUrl; Ahrefs keeps the target only when
+// signed in (signed out, it lands on its Site Explorer page).
 export const EXTERNAL_TOOLS: ExternalTool[] = [
-  { name: "PageSpeed Insights", url: (u) => `https://pagespeed.web.dev/analysis?url=${encodeURIComponent(u)}` },
-  { name: "Rich Results Test", url: (u) => `https://search.google.com/test/rich-results?url=${encodeURIComponent(u)}` },
-  { name: "Schema.org validator", url: (u) => `https://validator.schema.org/#url=${encodeURIComponent(u)}` },
-  { name: "W3C HTML validator", url: (u) => `https://validator.w3.org/nu/?doc=${encodeURIComponent(u)}` },
-  { name: "Security headers", url: (u) => `https://securityheaders.com/?q=${encodeURIComponent(u)}&followRedirects=on` },
+  { name: "Rich Results Test", group: "Structured data", url: (u) => `https://search.google.com/test/rich-results?url=${q(u)}` },
+  { name: "Schema.org validator", group: "Structured data", url: (u) => `https://validator.schema.org/#url=${q(u)}` },
+  { name: "PageSpeed Insights", group: "Performance", url: (u) => `https://pagespeed.web.dev/analysis?url=${q(u)}` },
+  { name: "GTmetrix", group: "Performance", url: (u) => `https://gtmetrix.com/?url=${q(u)}`, pasteUrl: true },
+  { name: "WebPageTest", group: "Performance", url: (u) => `https://www.webpagetest.org/?url=${q(u)}` },
+  { name: "W3C HTML validator", group: "Validation", url: (u) => `https://validator.w3.org/nu/?doc=${q(u)}` },
+  { name: "W3C CSS validator", group: "Validation", url: (u) => `https://jigsaw.w3.org/css-validator/validator?uri=${q(u)}` },
+  { name: "WAVE accessibility", group: "Validation", url: (u) => `https://wave.webaim.org/report#/${href(u)}` },
+  { name: "Facebook Sharing Debugger", group: "Social", url: (u) => `https://developers.facebook.com/tools/debug/?q=${q(u)}` },
+  { name: "LinkedIn Post Inspector", group: "Social", url: (u) => `https://www.linkedin.com/post-inspector/inspect/${q(u)}` },
+  { name: "Open Graph debugger (opengraph.xyz)", group: "Social", url: (u) => `https://www.opengraph.xyz/url/${q(u)}` },
+  {
+    name: "Ahrefs Site Explorer",
+    group: "SEO & domain",
+    url: (u) => `https://app.ahrefs.com/site-explorer/overview/v2/subdomains/live?target=${encodeURIComponent(host(u))}`,
+    note: "needs an Ahrefs sign-in",
+  },
+  {
+    name: "Sistrix Visibility Index",
+    group: "SEO & domain",
+    url: (u) => `https://app.sistrix.com/en/visibility-index/${encodeURIComponent(domain(u))}`,
+  },
+  { name: "WHOIS", group: "SEO & domain", url: (u) => `https://who.is/whois/${encodeURIComponent(domain(u))}` },
+  { name: "DNS (dnschecker)", group: "SEO & domain", url: (u) => `https://dnschecker.org/#A/${host(u)}` },
+  { name: "BuiltWith", group: "SEO & domain", url: (u) => `https://builtwith.com/${host(u)}` },
+  { name: "Wayback Machine", group: "SEO & domain", url: (u) => `https://web.archive.org/web/*/${href(u)}` },
+  { name: "Security headers", group: "Security", url: (u) => `https://securityheaders.com/?q=${q(u)}&followRedirects=on` },
   {
     name: "Mozilla Observatory",
-    url: (u) => `https://developer.mozilla.org/en-US/observatory/analyze?host=${encodeURIComponent(new URL(u).hostname)}`,
+    group: "Security",
+    url: (u) => `https://developer.mozilla.org/en-US/observatory/analyze?host=${encodeURIComponent(host(u))}`,
   },
-  { name: "SSL Labs", url: (u) => `https://www.ssllabs.com/ssltest/analyze.html?d=${encodeURIComponent(new URL(u).hostname)}` },
-  { name: "WebPageTest", url: (u) => `https://www.webpagetest.org/?url=${encodeURIComponent(u)}` },
-  { name: "Wayback Machine", url: (u) => `https://web.archive.org/web/*/${u}` },
-  { name: "Open Graph debugger (opengraph.xyz)", url: (u) => `https://www.opengraph.xyz/url/${encodeURIComponent(u)}` },
-  { name: "DNS (dnschecker)", url: (u) => `https://dnschecker.org/#A/${new URL(u).hostname}` },
-  { name: "BuiltWith", url: (u) => `https://builtwith.com/${new URL(u).hostname}` },
+  { name: "SSL Labs", group: "Security", url: (u) => `https://www.ssllabs.com/ssltest/analyze.html?d=${encodeURIComponent(host(u))}` },
 ];
