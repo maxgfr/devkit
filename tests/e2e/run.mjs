@@ -125,11 +125,55 @@ try {
   check("SEO: Open the outline goes to the Headings panel", t.includes("Skipped level: h2 → h4") && t.includes("Page map"));
 
   await open("Inspect", "Structured data");
+  const jsonldMode = (name) => panel.locator('fieldset[aria-label="Validate"] button', { hasText: name }).click();
+  const expandFindings = async () => {
+    const closed = panel.locator("details.jl-findings:not([open]) > summary");
+    for (let n = await closed.count(); n > 0; n--) await closed.first().click();
+    await panel.waitForTimeout(200);
+  };
+  await jsonldMode("Rich Results");
+  await panel.getByText("X-Robots-Tag").waitFor();
+  await panel.waitForTimeout(400);
   t = await text();
   check("JSON-LD: invalid block reported with a line", /Invalid JSON, line \d+/.test(t), t.match(/Invalid JSON[^\n]*/)?.[0]);
-  check("JSON-LD: bad price reported", t.includes('price "€12,50" must be a plain number'));
+  check(
+    "JSON-LD: header shows canonical, robots and X-Robots-Tag",
+    /Canonical\s*http:\/\/127\.0\.0\.1:\d+\//.test(t) && /Robots\s*None/.test(t) && /X-Robots-Tag\s*noarchive/.test(t),
+    t.match(/X-Robots-Tag[^\n]*\n?[^\n]*/)?.[0],
+  );
+  check("JSON-LD: every block has a status badge", (await panel.locator(".jl-block").count()) === 2 && /Block #1\s*Error/.test(t));
+  check(
+    "JSON-LD: findings start collapsed below the code",
+    !t.includes('price "€12,50" must be a plain number') && t.includes("Findings:"),
+  );
+  await expandFindings();
+  t = await text();
+  check("JSON-LD: bad price reported with the fix", t.includes('price "€12,50" must be a plain number') && t.includes('write "12.50"'));
   check("JSON-LD: relative image reported", t.includes('image "/mug.jpg" is not an absolute URL'));
+  check(
+    "JSON-LD: Rich Results mode keeps vocabulary findings aside",
+    !t.includes("Did you mean") && /more findings? in Schema\.org mode/.test(t),
+  );
+  await jsonldMode("Schema.org");
+  await panel.waitForTimeout(300);
+  await expandFindings();
+  t = await text();
+  check(
+    "JSON-LD: Schema.org mode catches a property typo",
+    t.includes("descripton is not a Schema.org property. Did you mean description?"),
+    t.match(/descripton[^\n]*/)?.[0],
+  );
+  check("JSON-LD: Schema.org mode drops Google's recommendations", !t.includes("missing recommended"));
+  check("JSON-LD: vocabulary source shown", /Schema\.org \d+\.\d+ vocabulary/.test(t));
+  await panel.locator('input[aria-label="Search the blocks"]').fill("acme mug");
+  await panel.waitForTimeout(200);
+  check(
+    "JSON-LD: search filters blocks and marks matches",
+    (await panel.locator(".jl-block").count()) === 1 && (await panel.locator(".jl-block mark.hl").first().innerText()) === "Acme Mug",
+  );
+  await panel.locator('input[aria-label="Search the blocks"]').fill("");
   await shot("inspect-jsonld");
+  await jsonldMode("Rich Results");
 
   await open("Security", "Headers");
   await panel.waitForTimeout(500);
