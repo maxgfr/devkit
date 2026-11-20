@@ -112,7 +112,9 @@ devkit is a toolbox for web developers to inspect, debug and test the web page o
 | browsingData (optional) | Clears the cache, cookies and storage of the current site only, when asked. |
 | cookies (optional) | The cookie editor: list, edit, delete, export and import the current site's cookies. |
 | contentSettings (optional) | The "JavaScript off for this site" toggle. |
-| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, its own scripts and source maps (secrets, source map and vulnerable library checks), check its links, capture console errors from page load, and show environment ribbons. |
+| webRequest (optional) | Redirect path, only after the developer turns it on: reads the status, Location and response headers of the tab's top-level requests to show each redirect hop (301, 302, 307, 308) and of the URL they choose to trace. Read-only: nothing is blocked or changed, and the chains stay in session storage on the device. |
+| webNavigation (optional) | Redirect path: tells a server redirect from a client one (meta refresh or JavaScript) by reading the transition qualifiers of the tab's top-level navigations. Read-only, kept on the device. |
+| Host permissions (optional, all sites) | Asked on first use: lets the panel follow the developer across tabs, fetch the page's headers, robots.txt and sitemap, its own scripts and source maps (secrets, source map and vulnerable library checks), check its links, capture console errors from page load, show environment ribbons, format JSON, XML, CSV and YAML pages when the developer turns that on, record redirect chains, and crawl the pages of the site the developer chooses. |
 
 **Remote code**: No, I am not using remote code. All JavaScript is bundled in the package.
 
