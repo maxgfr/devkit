@@ -183,15 +183,55 @@ export function msText(n: number | null | undefined): string {
   return n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${Math.round(n)} ms`;
 }
 
+/** `text` with every case-insensitive occurrence of `query` wrapped in a <mark>. */
+export function Highlight({ text, query }: { text: string; query?: string }) {
+  const q = query?.trim().toLowerCase();
+  if (!q) return <>{text}</>;
+  const out: ReactNode[] = [];
+  const lower = text.toLowerCase();
+  let last = 0;
+  for (let at = lower.indexOf(q); at !== -1; at = lower.indexOf(q, at + q.length)) {
+    out.push(text.slice(last, at));
+    out.push(
+      <mark key={at} className="hl">
+        {text.slice(at, at + q.length)}
+      </mark>,
+    );
+    last = at + q.length;
+  }
+  out.push(text.slice(last));
+  return <>{out}</>;
+}
+
 /* JSON tree */
-export function JsonTree({ value, name, depth = 0, open = 2 }: { value: unknown; name?: string; depth?: number; open?: number }) {
-  const key = name !== undefined ? <span className="k">{name}: </span> : null;
+export function JsonTree({
+  value,
+  name,
+  depth = 0,
+  open = 2,
+  highlight,
+}: {
+  value: unknown;
+  name?: string;
+  depth?: number;
+  open?: number;
+  /** Marks this text in keys and values, and opens every level. */
+  highlight?: string;
+}) {
+  const key =
+    name !== undefined ? (
+      <span className="k">
+        <Highlight text={name} query={highlight} />:{" "}
+      </span>
+    ) : null;
   if (value === null || typeof value !== "object") {
     const cls = typeof value === "string" ? "s" : typeof value === "number" ? "n" : "b";
     return (
       <div>
         {key}
-        <span className={cls}>{JSON.stringify(value)}</span>
+        <span className={cls}>
+          <Highlight text={JSON.stringify(value)} query={highlight} />
+        </span>
       </div>
     );
   }
@@ -202,7 +242,7 @@ export function JsonTree({ value, name, depth = 0, open = 2 }: { value: unknown;
       ? ` ${(value as Record<string, unknown>)["@type"]}`
       : "";
   return (
-    <details open={depth < open}>
+    <details open={highlight?.trim() ? true : depth < open}>
       <summary>
         {key}
         <span className="muted">
@@ -212,7 +252,7 @@ export function JsonTree({ value, name, depth = 0, open = 2 }: { value: unknown;
       </summary>
       <div className="children">
         {entries.map(([k, v]) => (
-          <JsonTree key={k} name={k} value={v} depth={depth + 1} open={open} />
+          <JsonTree key={k} name={k} value={v} depth={depth + 1} open={open} highlight={highlight} />
         ))}
       </div>
     </details>

@@ -3592,3 +3592,55 @@ span.hd-fold {
 .linklike:hover {
   text-decoration: underline;
 }
+
+/* Structured data (JSON-LD) */
+.jl-controls {
+  gap: 4px 16px;
+}
+.jl-choice {
+  align-items: center;
+}
+.jl-choice > span {
+  margin-right: 2px;
+}
+pre.jl-code {
+  padding-right: 10px;
+  max-height: 360px;
+}
+.jl-findings > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--fg-2);
+}
+.jl-findings > summary:hover {
+  color: var(--fg);
+}
+.jl-findings > .list {
+  margin-top: 6px;
+}
+.jl-paths {
+  display: inline;
+}
+.jl-paths > summary {
+  display: inline;
+  list-style: none;
+  cursor: pointer;
+}
+.jl-paths > summary::-webkit-details-marker {
+  display: none;
+}
+.jl-paths > ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+}
+a.pill {
+  text-decoration: none;
+}
+a.pill:hover {
+  text-decoration: underline;
+}

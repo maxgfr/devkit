@@ -83,7 +83,7 @@ export const PANELS: PanelDef[] = [
     title: "Structured data (JSON-LD)",
     short: "JSON-LD",
     description: "Validate JSON-LD against schema.org and rich results",
-    keywords: "schema.org json-ld microdata rich results structured data",
+    keywords: "schema.org json-ld microdata rich results structured data vocabulary canonical x-robots-tag",
   },
   {
     id: "headers",
