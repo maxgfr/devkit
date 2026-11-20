@@ -273,6 +273,35 @@ const seoPage = (base) => `<!doctype html>
 </body></html>`;
 let ogImageHits = 0;
 
+// Served vs rendered: JavaScript changes the title and adds a canonical, a JSON-LD block, an og:image and links.
+const RENDERED_SOURCE_PAGE = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Loading…</title>
+<meta name="description" content="Rendered source test page">
+</head><body>
+<h1>Client app</h1>
+<a href="/">Home</a>
+<div id="root"></div>
+<script>
+document.title = "Rendered title from JS";
+const canonical = document.createElement("link");
+canonical.rel = "canonical";
+canonical.href = location.origin + "/rendered-source";
+document.head.append(canonical);
+const og = document.createElement("meta");
+og.setAttribute("property", "og:image");
+og.content = location.origin + "/big.png";
+document.head.append(og);
+const ld = document.createElement("script");
+ld.type = "application/ld+json";
+ld.textContent = JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: "Acme" });
+document.head.append(ld);
+document.getElementById("root").innerHTML =
+  '<h2>Injected section</h2><a href="/js-only-1">JS link one</a> <a href="/js-only-2">JS link two</a> <a href="https://example.org/partner">Partner</a>';
+</script>
+</body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -302,6 +331,8 @@ const server = http.createServer((req, res) => {
         `# Acme\n\n> Acme sells mugs.\n\n## Pages\n\n- [Store hours](${base}/agent): when the shop is open\n- [Mug](${base}/): the Acme mug\n`,
       );
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/rendered-source")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(RENDERED_SOURCE_PAGE);
   if (url.pathname === "/landmarks") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LANDMARKS_PAGE);
   if (url.pathname === "/acme/shop" || url.pathname === "/acme/shop/tree/main/web")
     return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(repoPage(url.pathname.endsWith("/web") ? "web" : ""));
