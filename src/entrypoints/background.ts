@@ -6,6 +6,7 @@ import { installMockSession } from "../lib/mock-session";
 import { hasPermission } from "../lib/permissions";
 import { PENDING_ROUTE_KEY, type Route } from "../lib/panels";
 import { registerRecorder } from "../lib/recorder";
+import { registerRedirects } from "../lib/redirects-bg";
 import { loadPackageInfo, type PackageInfoMessage } from "../lib/repo-deps-info";
 
 const MENU = {
@@ -66,6 +67,7 @@ export default defineBackground(() => {
   });
   browser.runtime.onStartup.addListener(createMenus);
   registerRecorder();
+  registerRedirects();
 
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.windowId) return;

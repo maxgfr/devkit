@@ -52,6 +52,22 @@ export const PANELS: PanelDef[] = [
     description: "View and edit Web Storage keys",
     keywords: "localstorage sessionstorage",
   },
+  {
+    id: "indexeddb",
+    category: "cache",
+    title: "IndexedDB",
+    short: "IndexedDB",
+    description: "Browse, edit and export IndexedDB databases, object stores and records",
+    keywords: "indexeddb idb database object store records index key range cursor dexie localforage offline pwa",
+  },
+  {
+    id: "cache-storage",
+    category: "cache",
+    title: "Cache Storage",
+    short: "Caches",
+    description: "Service worker caches: cached requests, headers and bodies, delete and export",
+    keywords: "cache storage caches service worker cache sw workbox pwa offline cached responses",
+  },
 
   {
     id: "overview",
@@ -81,6 +97,15 @@ export const PANELS: PanelDef[] = [
       "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles landmarks aria banner navigation main region contentinfo complementary",
   },
   {
+    id: "rendered-source",
+    category: "inspect",
+    title: "Served vs rendered",
+    short: "Rendered",
+    description: "The HTML the server sends next to the DOM after JavaScript: what crawlers that do not render miss, and a source diff",
+    keywords:
+      "view source rendered raw html view rendered source javascript seo ssr csr client-side rendering hydration diff crawler googlebot dom",
+  },
+  {
     id: "jsonld",
     category: "inspect",
     title: "Structured data (JSON-LD)",
@@ -98,6 +123,15 @@ export const PANELS: PanelDef[] = [
       "datalayer data layer gtm ga4 google analytics tag manager gtag consent mode events ecommerce purchase transaction_id pii snapshot",
   },
   {
+    id: "consent",
+    category: "inspect",
+    title: "Consent check",
+    short: "Consent",
+    description: "What the site sets and loads before you answer its cookie banner, cross-checked with Consent Mode",
+    keywords:
+      "gdpr rgpd cookie banner consent cmp tracking eprivacy consent mode cookies before consent trackers onetrust cookiebot didomi axeptio tcf",
+  },
+  {
     id: "headers",
     category: "security",
     title: "Headers & security",
@@ -110,7 +144,7 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "Performance",
     description: "Web Vitals, navigation timeline, resource waterfall",
-    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources",
+    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources crux field data real users chrome ux report",
   },
   {
     id: "responsiveness",
@@ -159,6 +193,14 @@ export const PANELS: PanelDef[] = [
     short: "Site files",
     description: "Crawl rules, sitemap URLs, PWA manifest",
     keywords: "robots sitemap pwa manifest crawl",
+  },
+  {
+    id: "crawl",
+    category: "inspect",
+    title: "Site crawl",
+    short: "Crawl",
+    description: "SEO and JSON-LD checks over many pages from the sitemap: duplicates, missing tags, errors, noindex",
+    keywords: "crawl sitemap bulk multiple pages seo audit jsonld audit spider site audit duplicate titles screaming frog",
   },
   {
     id: "repo-deps",
@@ -320,6 +362,14 @@ export const PANELS: PanelDef[] = [
     title: "Environments",
     description: "Jump between local, staging and prod; ribbon on prod",
     keywords: "environment staging production localhost switch",
+  },
+  {
+    id: "redirects",
+    category: "network",
+    title: "Redirect path",
+    short: "Redirects",
+    description: "Every hop of a navigation: 301/302/307/308, meta refresh and JavaScript redirects, with status, Location and headers",
+    keywords: "redirect redirects 301 302 303 307 308 meta refresh javascript redirect chain hops location loop trace hsts redirect path",
   },
 
   {

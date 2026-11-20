@@ -18,7 +18,7 @@ const KIND_COLOR: Record<UsageKind, string> = {
 };
 
 /** A destructive button that asks for a second click instead of a dialog. */
-function ConfirmButton({ label, confirm, onConfirm }: { label: string; confirm: string; onConfirm: () => Promise<void> }) {
+export function ConfirmButton({ label, confirm, onConfirm }: { label: string; confirm: string; onConfirm: () => Promise<void> }) {
   const [armed, setArmed] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {

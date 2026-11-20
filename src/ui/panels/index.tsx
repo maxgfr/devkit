@@ -1,10 +1,13 @@
 import { lazy, type ComponentType } from "react";
 import { A11yAudit } from "./a11y";
 import { DataLayer } from "./datalayer";
+import { CacheStorageViewer, IndexedDbViewer } from "./databases";
 import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
+import { Consent } from "./consent";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
 import { Seo } from "./seo";
+import { SiteCrawl } from "./crawl";
 import { ElementPicker } from "./element";
 import { Headings } from "./headings";
 import { Mocks } from "./mocks";
@@ -12,7 +15,9 @@ import { Assets } from "./assets";
 import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { RenderedSource } from "./rendered-source";
 import { RepoDeps } from "./repo-deps";
+import { Redirects } from "./redirects";
 import { Responsiveness } from "./responsiveness";
 import { BugReport } from "./report";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -32,11 +37,15 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   "site-data": SiteData,
   cookies: Cookies,
   storage: Storage,
+  indexeddb: IndexedDbViewer,
+  "cache-storage": CacheStorageViewer,
   overview: Overview,
   seo: Seo,
   headings: Headings,
+  "rendered-source": RenderedSource,
   jsonld: JsonLd,
   datalayer: DataLayer,
+  consent: Consent,
   headers: Headers,
   perf: Perf,
   responsiveness: Responsiveness,
@@ -45,6 +54,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  crawl: SiteCrawl,
   "repo-deps": RepoDeps,
   "agent-tools": AgentTools,
   "agent-readiness": AgentReadiness,
@@ -65,6 +75,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   rules: Rules,
   mocks: Mocks,
   envs: Envs,
+  redirects: Redirects,
   ask: Ask,
   report: BugReport,
   models: Models,

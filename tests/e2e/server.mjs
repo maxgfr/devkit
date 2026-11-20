@@ -1,5 +1,5 @@
 import http from "node:http";
-import { deflateSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 
 // Fake credential planted for the secrets scanner, assembled at runtime so the repository never holds
 // a string that secret scanners would take for a real key.
@@ -301,15 +301,192 @@ const DATA_DOCS = {
   ],
   "/data/events.jsonl": ["text/plain", '{"level":"info","msg":"started"}\n{"level":"error",\n{"level":"warn","msg":"slow"}\n'],
 };
+// IndexedDB and Cache Storage viewer: a database with an in-line key store and an out-of-line one, and a cache
+// with JSON, HTML and image entries. Starts from scratch on every load; window.__dbReady says when it is done.
+const DATABASES_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Databases – devkit test page</title></head>
+<body><h1>Databases</h1>
+<script>
+(async () => {
+  await new Promise((done, fail) => {
+    indexedDB.deleteDatabase("devkit-shop");
+    const req = indexedDB.open("devkit-shop", 3);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      const users = db.createObjectStore("users", { keyPath: "id", autoIncrement: true });
+      users.createIndex("by_email", "email", { unique: true });
+      users.createIndex("by_tags", "tags", { multiEntry: true });
+      db.createObjectStore("settings");
+    };
+    req.onerror = () => fail(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction(["users", "settings"], "readwrite");
+      const users = tx.objectStore("users");
+      users.put({ id: 1, name: "Ada", email: "ada@example.com", tags: ["admin"], born: new Date("1815-12-10T00:00:00Z") });
+      users.put({ id: 2, name: "Grace", email: "grace@example.com", tags: ["dev", "admin"], prefs: new Map([["theme", "dark"]]) });
+      users.put({ id: 3, name: "Linus", email: "linus@example.com", tags: ["dev"] });
+      const settings = tx.objectStore("settings");
+      settings.put({ seen: new Set([1, 2]), avatar: new Blob(["png"], { type: "image/png" }), bytes: new Uint8Array([1, 2, 3]), big: 10n }, "prefs");
+      settings.put("dark", "theme");
+      tx.oncomplete = () => { db.close(); done(); };
+      tx.onerror = () => fail(tx.error);
+    };
+  });
+  await caches.delete("devkit-shop-v1");
+  const cache = await caches.open("devkit-shop-v1");
+  await cache.put("/api/products.json", new Response(JSON.stringify({ products: [{ id: 1, name: "Mug" }] }), { headers: { "content-type": "application/json" } }));
+  await cache.put("/offline.html", new Response("<h1>Offline</h1>", { headers: { "content-type": "text/html" } }));
+  await cache.put("/tile.png", await fetch("/tile.png"));
+  window.__dbReady = true;
+})().catch((e) => { window.__dbReady = String(e); });
+</script>
+</body></html>`;
+// Consent check: before any interaction the page sets `_ga`, loads a script and a GA-shaped hit from another local
+// origin (localhost vs 127.0.0.1) and sets Consent Mode's default to granted. "Accept" adds `_fbp` and a Meta-shaped hit.
+const consentPage = (port) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Consent fixture</title>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "granted", analytics_storage: "granted", ad_user_data: "granted", ad_personalization: "granted" });
+document.cookie = "_ga=GA1.1.555.777; path=/";
+localStorage.setItem("_hjSessionUser_42", "e2e-hj-value");
+</script>
+<script src="http://localhost:${port}/consent/tracker.js"></script>
+</head><body>
+<h1>Consent fixture</h1>
+<img alt="" src="http://localhost:${port}/g/collect?v=2&tid=G-E2ECONSENT&gcs=G111&cid=555.777&en=page_view">
+<button id="accept" type="button">Accept all</button>
+<script>
+document.getElementById("accept").addEventListener("click", () => {
+  gtag("consent", "update", { ad_storage: "granted", analytics_storage: "granted", ad_user_data: "granted", ad_personalization: "granted" });
+  document.cookie = "_fbp=fb.1.e2e-fbp-value; path=/";
+  const img = new Image();
+  img.src = "http://localhost:${port}/tr?id=42&ev=PageView";
+  document.body.append(img);
+});
+</script>
+</body></html>`;
+// Site crawl: a small site of its own on localhost:<port> (127.0.0.1 keeps its robots.txt and sitemap for the
+// other panels). robots.txt points to a sitemap index of a plain sitemap and a gzipped one (served as a file, so
+// devkit must gunzip it); the pages carry a duplicate title, a missing description, a noindex, a 404, a redirect
+// and invalid JSON-LD; one URL is blocked by robots.txt and one is on another host.
+const CRAWL_DESC = "Acme mugs: ceramic, 350 ml, dishwasher safe, made to last for years of morning coffee.";
+const CRAWL_PAGES = {
+  "/crawl/": {
+    title: "Acme home",
+    description: CRAWL_DESC,
+    jsonld: ['{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}'],
+  },
+  "/crawl/a": { title: "Acme mugs", description: `${CRAWL_DESC} Page A.` },
+  "/crawl/b": { title: "Acme mugs", h1: "Mugs, page B" },
+  "/crawl/noindex": { title: "Acme drafts", description: `${CRAWL_DESC} Drafts.`, robots: "noindex, follow" },
+  "/crawl/jsonld": {
+    title: "Acme product",
+    description: `${CRAWL_DESC} Product.`,
+    jsonld: ['{"@context":"https://schema.org","@type":"Product","name":"Mug"}', '{"@context":"https://schema.org","@type":"Offer",}'],
+  },
+  "/crawl/moved": { title: "Acme moved page", description: `${CRAWL_DESC} Moved.` },
+  "/crawl/other": { title: "Other host page", description: CRAWL_DESC },
+  "/crawl/private/x": { title: "Private", description: CRAWL_DESC },
+};
+const crawlHtml = (base, path, { title, description, robots, jsonld = [], h1 = title }) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${title}</title>
+${description ? `<meta name="description" content="${description}">` : ""}${robots ? `<meta name="robots" content="${robots}">` : ""}
+<link rel="canonical" href="${base}${path}">
+${jsonld.map((j) => `<script type="application/ld+json">${j}</script>`).join("\n")}
+</head><body><h1>${h1}</h1><p>Acme makes mugs for coffee, tea and hot chocolate.</p></body></html>`;
+function crawlRoute(req, url, base) {
+  const xml = (body) => ({ status: 200, headers: { "content-type": "application/xml" }, body });
+  const urlset = (paths) =>
+    `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((p) => `<url><loc>${p.startsWith("http") ? p : base + p}</loc></url>`).join("")}</urlset>`;
+  if (/^localhost:/.test(req.headers.host ?? "") && url.pathname === "/robots.txt")
+    return {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: `User-agent: *\nDisallow: /crawl/private\n\nSitemap: ${base}/crawl/sitemap-index.xml\n`,
+    };
+  if (!url.pathname.startsWith("/crawl/")) return null;
+  if (url.pathname === "/crawl/sitemap-index.xml")
+    return xml(
+      `<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>${base}/crawl/sitemap-pages.xml</loc></sitemap><sitemap><loc>${base}/crawl/sitemap-more.xml.gz</loc></sitemap></sitemapindex>`,
+    );
+  if (url.pathname === "/crawl/sitemap-pages.xml")
+    return xml(urlset(["/crawl/", "/crawl/a", "/crawl/b", "/crawl/private/x", `${base.replace("localhost", "127.0.0.1")}/crawl/other`]));
+  if (url.pathname === "/crawl/sitemap-more.xml.gz")
+    return {
+      status: 200,
+      headers: { "content-type": "application/gzip" },
+      body: gzipSync(urlset(["/crawl/noindex", "/crawl/gone", "/crawl/old", "/crawl/jsonld"])),
+    };
+  if (url.pathname === "/crawl/old") return { status: 301, headers: { location: "/crawl/moved" }, body: "" };
+  const spec = CRAWL_PAGES[url.pathname];
+  if (!spec) return { status: 404, headers: { "content-type": "text/html" }, body: "<!doctype html><title>Not found</title>" };
+  return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: crawlHtml(base, url.pathname, spec) };
+}
 let ogImageHits = 0;
+
+// Overview and AI context: landmarks (two unnamed navigation landmarks), a dataLayer with a Consent Mode v1 default
+// and an e-mail address, and an Organization node. The last AI request's context is kept for /ai-last-context.
+const OVERVIEW_CONTEXT_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme overview context</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}</script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "denied", analytics_storage: "denied" });
+gtag("js", new Date());
+gtag("config", "G-OVR1234");
+dataLayer.push({ event: "sign_up", user: { email: "sam.smith@example.com" } });
+</script></head><body>
+<header><nav><a href="/">Home</a></nav></header>
+<main><h1>Overview context</h1><p>Landmarks and a dataLayer.</p><nav><a href="#more">More links</a></nav></main>
+<footer><p>Footer</p></footer>
+</body></html>`;
+let lastAiContext = "";
+
+// Served vs rendered: JavaScript changes the title and adds a canonical, a JSON-LD block, an og:image and links.
+const RENDERED_SOURCE_PAGE = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Loading…</title>
+<meta name="description" content="Rendered source test page">
+</head><body>
+<h1>Client app</h1>
+<a href="/">Home</a>
+<div id="root"></div>
+<script>
+document.title = "Rendered title from JS";
+const canonical = document.createElement("link");
+canonical.rel = "canonical";
+canonical.href = location.origin + "/rendered-source";
+document.head.append(canonical);
+const og = document.createElement("meta");
+og.setAttribute("property", "og:image");
+og.content = location.origin + "/big.png";
+document.head.append(og);
+const ld = document.createElement("script");
+ld.type = "application/ld+json";
+ld.textContent = JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: "Acme" });
+document.head.append(ld);
+document.getElementById("root").innerHTML =
+  '<h2>Injected section</h2><a href="/js-only-1">JS link one</a> <a href="/js-only-2">JS link two</a> <a href="https://example.org/partner">Partner</a>';
+</script>
+</body></html>`;
 
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
   const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
   if (req.method === "OPTIONS") return res.writeHead(204, cors).end();
+  const crawled = crawlRoute(req, url, base);
+  if (crawled) return res.writeHead(crawled.status, crawled.headers).end(crawled.body);
   if (url.pathname === "/seo") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(seoPage(base));
   if (url.pathname === "/og-hits") return res.writeHead(200, { "content-type": "text/plain" }).end(String(ogImageHits));
+  if (url.pathname === "/overview-context")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(OVERVIEW_CONTEXT_PAGE);
+  if (url.pathname === "/ai-last-context") return res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(lastAiContext);
   if (url.pathname === "/big.png" && url.searchParams.get("og") === "1") ogImageHits++;
   if (url.pathname === "/") {
     res.writeHead(200, {
@@ -331,7 +508,10 @@ const server = http.createServer((req, res) => {
       .end(
         `# Acme\n\n> Acme sells mugs.\n\n## Pages\n\n- [Store hours](${base}/agent): when the shop is open\n- [Mug](${base}/): the Acme mug\n`,
       );
+  if (url.pathname === "/databases") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(DATABASES_PAGE);
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/rendered-source")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(RENDERED_SOURCE_PAGE);
   if (url.pathname === "/landmarks") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LANDMARKS_PAGE);
   if (url.pathname === "/acme/shop" || url.pathname === "/acme/shop/tree/main/web")
     return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(repoPage(url.pathname.endsWith("/web") ? "web" : ""));
@@ -345,6 +525,11 @@ const server = http.createServer((req, res) => {
     return res
       .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
       .end(REPO_FILES[url.pathname.slice("/raw-files/acme/shop/main/".length)] ?? "");
+  if (url.pathname === "/consent")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(consentPage(req.socket.localPort));
+  if (url.pathname === "/consent/tracker.js") return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__tracker = 1;");
+  if (url.pathname === "/g/collect" || url.pathname === "/tr")
+    return res.writeHead(200, { "content-type": "image/png" }).end(IMAGES["/tile.png"]);
   if (url.pathname === "/datalayer") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(DATALAYER_PAGE);
   if (url.pathname === "/slow.js")
     return res
@@ -416,6 +601,21 @@ const server = http.createServer((req, res) => {
   }
   if (IMAGES[url.pathname])
     return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
+  // Redirect path: /r1 → 301 → /r2 → 302 → /final, a meta refresh to /final, and a loop.
+  if (url.pathname === "/r1") return res.writeHead(301, { location: "/r2", "x-hop": "first" }).end();
+  if (url.pathname === "/r2") return res.writeHead(302, { location: "/final" }).end();
+  if (url.pathname === "/final")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end("<!doctype html><title>Final</title><h1>Final page</h1>");
+  if (url.pathname === "/meta")
+    return res
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end('<!doctype html><title>Moving</title><meta http-equiv="refresh" content="0; url=/final"><p>Moving…</p>');
+  if (url.pathname === "/js-redirect")
+    return res
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end('<!doctype html><title>Moving</title><script>setTimeout(() => location.replace("/final"), 50)</script>');
+  if (url.pathname === "/loop-a") return res.writeHead(302, { location: "/loop-b" }).end();
+  if (url.pathname === "/loop-b") return res.writeHead(302, { location: "/loop-a" }).end();
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
     return res
@@ -442,6 +642,7 @@ const server = http.createServer((req, res) => {
       const json = JSON.parse(body);
       const user = json.messages.filter((m) => m.role === "user").at(-1);
       const content = typeof user.content === "string" ? user.content : user.content.map((p) => p.text ?? "").join("");
+      lastAiContext = content;
       const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
       const hasText = content.includes("best mug");
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
@@ -458,6 +659,31 @@ const server = http.createServer((req, res) => {
         `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Secrets section: ${secrets}. Raw secret sent: ${leaked}. First CVE: ${cve}. Headings section: ${headings}. Section text sent: ${sectionText}. Heading in focus: ${focus}. Context length: ${content.length} chars.`,
       );
     });
+    return;
+  }
+  // GraphQL endpoint for the DevTools panel's GraphQL view: single, batched and persisted (GET) operations.
+  if (url.pathname === "/graphql") {
+    const answer = (op) => {
+      const doc = op?.query ?? "";
+      if (op?.operationName === "GetUser" || /query GetUser\b/.test(doc))
+        return { data: { user: { id: op.variables?.id ?? "1", name: "Ada" } } };
+      if (/query ListPosts\b/.test(doc)) return { data: { posts: [{ id: "p1", title: "Hello" }] } };
+      if (/^\s*mutation\s*\{\s*like\b/.test(doc))
+        return { data: { like: null }, errors: [{ message: "Not authorized", path: ["like"], extensions: { code: "FORBIDDEN" } }] };
+      if (op?.operationName === "Feed" && op?.extensions?.persistedQuery) return { data: { feed: [{ id: 1 }] }, extensions: { cost: 2 } };
+      return { errors: [{ message: `Unknown operation ${op?.operationName ?? "(anonymous)"}`, locations: [{ line: 1, column: 1 }] }] };
+    };
+    const reply = (payload) =>
+      res
+        .writeHead(200, { "content-type": "application/json", ...cors })
+        .end(JSON.stringify(Array.isArray(payload) ? payload.map(answer) : answer(payload)));
+    if (req.method === "GET") {
+      const json = (k) => (url.searchParams.has(k) ? JSON.parse(url.searchParams.get(k)) : undefined);
+      return reply({ operationName: url.searchParams.get("operationName"), variables: json("variables"), extensions: json("extensions") });
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => reply(JSON.parse(body || "{}")));
     return;
   }
   res.writeHead(404, { "content-type": "text/plain" }).end("not found");
