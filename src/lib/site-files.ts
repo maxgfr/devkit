@@ -51,12 +51,30 @@ const patternToRegex = (p: string) =>
       .replace(/\\\$$/, "$")}`,
   );
 
-/** Whether `agent` may fetch `path`, by Google's rules: the longest matching rule wins, allow wins a tie. */
-export function isAllowed(robots: Robots, agent: string, path: string): { allowed: boolean; rule?: string } {
+/** The group that applies to `agent`: the one naming the longest token the agent contains, else `*`. */
+function groupFor(robots: Robots, agent: string): RobotsGroup | undefined {
   const a = agent.toLowerCase();
-  const group =
-    robots.groups.find((g) => g.agents.some((x) => x.toLowerCase() !== "*" && a.includes(x.toLowerCase()))) ??
-    robots.groups.find((g) => g.agents.includes("*"));
+  let best: { group: RobotsGroup; len: number } | undefined;
+  for (const g of robots.groups)
+    for (const x of g.agents) {
+      const token = x.toLowerCase();
+      if (token && token !== "*" && a.includes(token) && (!best || token.length > best.len)) best = { group: g, len: token.length };
+    }
+  return best?.group ?? robots.groups.find((g) => g.agents.includes("*"));
+}
+
+/** Whether robots.txt has a group naming `agent` itself, rather than leaving it to `User-agent: *`. */
+export function hasOwnGroup(robots: Robots, agent: string): boolean {
+  const group = groupFor(robots, agent);
+  return Boolean(group && !group.agents.includes("*"));
+}
+
+/**
+ * Whether `agent` may fetch `path`, by Google's rules: the group with the most specific user-agent token applies,
+ * the longest matching rule wins, allow wins a tie.
+ */
+export function isAllowed(robots: Robots, agent: string, path: string): { allowed: boolean; rule?: string } {
+  const group = groupFor(robots, agent);
   if (!group) return { allowed: true };
   let best: { len: number; allow: boolean; rule: string } | null = null;
   for (const [list, allow] of [

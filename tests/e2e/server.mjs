@@ -205,6 +205,44 @@ dataLayer.push({ event: "login", user: { email: "jane.doe@example.com" }, eventC
 window.google_tag_manager = { "GTM-E2E1234": { dataLayer: { name: "dataLayer" } } };
 </script></head><body><h1>Thank you for your order</h1></body></html>`;
 
+// WebMCP as Chrome's early preview exposed it behind its testing flag: a read-only tool and a Critical one. Running
+// delete_account would set window.__accountDeleted: the Agent tools panel must refuse to.
+const AGENT_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme store hours</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}</script>
+<script>
+(function () {
+  var tools = [
+    {
+      name: "get_store_hours",
+      description: "Returns the store's opening hours for a given day of the week.",
+      inputSchema: JSON.stringify({ type: "object", properties: { day: { type: "string", enum: ["monday", "tuesday", "sunday"], description: "Day of the week" } }, required: ["day"] }),
+      annotations: { readOnlyHint: true },
+    },
+    {
+      name: "delete_account",
+      description: "Deletes the signed-in user's account and all its data. Cannot be undone.",
+      inputSchema: JSON.stringify({ type: "object", properties: { confirm: { type: "boolean", description: "Must be true" } }, required: ["confirm"] }),
+    },
+  ];
+  Object.defineProperty(navigator, "modelContextTesting", {
+    configurable: true,
+    value: {
+      listTools: function () { return tools; },
+      executeTool: function (name, json) {
+        var args = JSON.parse(json);
+        if (name === "delete_account") { window.__accountDeleted = true; return Promise.resolve(JSON.stringify({ deleted: true })); }
+        if (name === "get_store_hours") return Promise.resolve(JSON.stringify({ day: args.day, open: "09:00", close: args.day === "sunday" ? "13:00" : "19:00" }));
+        return Promise.reject(new Error("Unknown tool " + name));
+      },
+    },
+  });
+})();
+</script></head><body>
+<nav><a href="/">Home</a></nav>
+<main><h1>Store hours</h1><p>Open every day.</p></main>
+</body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -223,6 +261,13 @@ const server = http.createServer((req, res) => {
   }
   // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
   // back/forward cache: the Responsiveness panel must name both.
+  if (url.pathname === "/agent") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(AGENT_PAGE);
+  if (url.pathname === "/llms.txt")
+    return res
+      .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+      .end(
+        `# Acme\n\n> Acme sells mugs.\n\n## Pages\n\n- [Store hours](${base}/agent): when the shop is open\n- [Mug](${base}/): the Acme mug\n`,
+      );
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
   if (url.pathname === "/landmarks") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LANDMARKS_PAGE);
   if (url.pathname === "/acme/shop" || url.pathname === "/acme/shop/tree/main/web")
@@ -303,7 +348,9 @@ const server = http.createServer((req, res) => {
     return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
-    return res.writeHead(200, { "content-type": "text/plain" }).end(`User-agent: *\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`);
+    return res
+      .writeHead(200, { "content-type": "text/plain" })
+      .end(`User-agent: *\nDisallow: /admin\n\nUser-agent: GPTBot\nDisallow: /\n\nSitemap: ${base}/sitemap.xml\n`);
   if (url.pathname === "/sitemap.xml")
     return res
       .writeHead(200, { "content-type": "application/xml" })
