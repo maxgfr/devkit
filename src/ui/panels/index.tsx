@@ -12,6 +12,7 @@ import { Assets } from "./assets";
 import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { RenderedSource } from "./rendered-source";
 import { RepoDeps } from "./repo-deps";
 import { Responsiveness } from "./responsiveness";
 import { BugReport } from "./report";
@@ -35,6 +36,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   overview: Overview,
   seo: Seo,
   headings: Headings,
+  "rendered-source": RenderedSource,
   jsonld: JsonLd,
   datalayer: DataLayer,
   headers: Headers,
