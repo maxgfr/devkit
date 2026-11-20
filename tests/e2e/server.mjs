@@ -134,6 +134,26 @@ const HEADINGS_PAGE = `<!doctype html>
 </main>
 </body></html>`;
 
+// A shop page whose dataLayer has a Consent Mode v1 default, a purchase without transaction_id and a comma value,
+// an e-mail address, and a view_item whose item disagrees with the Product markup. google_tag_manager is faked so
+// the page loads nothing from Google.
+const DATALAYER_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme Mug order</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Acme Mug","sku":"MUG-1","offers":{"@type":"Offer","price":"12.50","priceCurrency":"EUR"}}</script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "denied", analytics_storage: "denied" });
+gtag("js", new Date());
+gtag("config", "G-E2E5678");
+gtag("consent", "update", { ad_storage: "granted", analytics_storage: "granted" });
+dataLayer.push({ event: "view_item", ecommerce: { currency: "EUR", items: [{ item_id: "MUG-2", item_name: "Acme Mug", price: 15 }] } });
+dataLayer.push({ ecommerce: null });
+dataLayer.push({ event: "purchase", ecommerce: { value: "129,00", currency: "EUR", items: [{ item_id: "MUG-1", item_name: "Acme Mug", price: 12.5, quantity: 1 }] } });
+dataLayer.push({ event: "login", user: { email: "jane.doe@example.com" }, eventCallback: function () {} });
+window.google_tag_manager = { "GTM-E2E1234": { dataLayer: { name: "dataLayer" } } };
+</script></head><body><h1>Thank you for your order</h1></body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -152,6 +172,7 @@ const server = http.createServer((req, res) => {
   // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
   // back/forward cache: the Responsiveness panel must name both.
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/datalayer") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(DATALAYER_PAGE);
   if (url.pathname === "/slow.js")
     return res
       .writeHead(200, { "content-type": "text/javascript" })
