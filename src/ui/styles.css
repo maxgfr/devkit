@@ -1598,6 +1598,44 @@ kbd {
 .cookie-flags {
   margin-top: 2px;
 }
+/* Cookies as the seven cookies.txt fields; Nowrap keeps one line per cookie and scrolls sideways. */
+.cookie-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.cookie-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.cookie-table th,
+.cookie-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.cookie-table th {
+  background: var(--bg-2);
+  color: var(--fg-2);
+  font-family: var(--sans);
+  font-weight: 550;
+}
+.cookie-table td {
+  overflow-wrap: anywhere;
+}
+.cookie-table td .pill {
+  margin-left: 4px;
+  font-family: var(--sans);
+}
+.cookie-table-wrap.nowrap th,
+.cookie-table-wrap.nowrap td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
 .checks .label .pill {
   font-family: var(--sans);
 }

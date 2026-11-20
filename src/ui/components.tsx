@@ -171,6 +171,38 @@ export function download(filename: string, content: string | Blob, type = "appli
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+type SaveFilePicker = (options: {
+  suggestedName?: string;
+  types?: { description?: string; accept: Record<string, string[]> }[];
+}) => Promise<{ createWritable: () => Promise<{ write: (data: string | Blob) => Promise<void>; close: () => Promise<void> }> }>;
+
+/**
+ * Saves `content` where the user picks, with Chrome's save dialog (File System Access API, no
+ * permission needed); falls back to a plain download where the dialog is missing. Resolves to
+ * false when the user cancels the dialog.
+ */
+export async function saveAs(
+  filename: string,
+  content: string,
+  { type = "text/plain", extension = ".txt", description = "File" }: { type?: string; extension?: string; description?: string } = {},
+): Promise<boolean> {
+  const picker = (window as unknown as { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
+  if (!picker) {
+    download(filename, content, type);
+    return true;
+  }
+  try {
+    const handle = await picker({ suggestedName: filename, types: [{ description, accept: { [type]: [extension] } }] });
+    const file = await handle.createWritable();
+    await file.write(content);
+    await file.close();
+    return true;
+  } catch (e) {
+    if ((e as Error)?.name === "AbortError") return false;
+    throw e;
+  }
+}
+
 export function bytes(n: number | undefined | null): string {
   if (n === undefined || n === null || !Number.isFinite(n)) return "–";
   if (n < 1024) return `${n} B`;

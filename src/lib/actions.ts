@@ -1,5 +1,7 @@
 import { browser } from "wxt/browser";
 import { quickReport } from "./bug-report-gather";
+import { readCookies } from "./cookie-jar";
+import { toNetscape } from "./cookies-export";
 import { runInTab } from "./inject";
 import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
@@ -121,6 +123,25 @@ export const ACTIONS: ActionDef[] = [
     run: async ({ origin }) => {
       await removeSiteData(origin, { cookies: true });
       return { message: `Cookies cleared for ${origin}.` };
+    },
+  },
+  {
+    id: "copy-cookies-txt",
+    title: "Copy cookies.txt",
+    description: "This site's cookies in Netscape format, for curl, wget or yt-dlp",
+    category: "cache",
+    keywords: "cookies.txt netscape curl yt-dlp wget export cookie jar",
+    needsPage: true,
+    // Chrome only lists the cookies of hosts devkit can access: ask for this site like the cookie editor.
+    scripts: true,
+    needs: () => ({ permissions: ["cookies"] }),
+    run: async ({ url }) => {
+      const cookies = await readCookies({ url });
+      if (!cookies.length) return { message: "No cookie for this page." };
+      return {
+        message: `cookies.txt copied (${cookies.length} cookie${cookies.length > 1 ? "s" : ""}). It holds session tokens: keep it private.`,
+        copy: toNetscape(cookies),
+      };
     },
   },
   {

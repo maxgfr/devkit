@@ -32,6 +32,14 @@
     "keywords": "delete cookies session logout"
   },
   {
+    "id": "copy-cookies-txt",
+    "kind": "action",
+    "category": "cache",
+    "title": "Copy cookies.txt",
+    "description": "This site's cookies in Netscape format, for curl, wget or yt-dlp",
+    "keywords": "cookies.txt netscape curl yt-dlp wget export cookie jar"
+  },
+  {
     "id": "clear-storage",
     "kind": "action",
     "category": "cache",
@@ -149,7 +157,7 @@
     "category": "cache",
     "title": "Cookies",
     "description": "View, edit, export and import cookies, and audit their flags",
-    "keywords": "cookie editor session audit flags httponly secure samesite"
+    "keywords": "cookie editor session audit flags httponly secure samesite cookies.txt netscape curl wget yt-dlp export header partitioned chips"
   },
   {
     "id": "storage",
