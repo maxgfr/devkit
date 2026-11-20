@@ -2017,6 +2017,183 @@ try {
   check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
   await jsonTab.close();
 
+  // --- CrUX field data (issue #30): a fake key saved in Options, the CrUX API answered from fixtures. ---
+  // The real API is never called: context.route answers chromeuxreport.googleapis.com, and a public-looking host
+  // (CrUX skips local addresses) serves the page. Self-contained: it restores the site tab at the end.
+  {
+    const CRUX_KEY = "AIzaE2eFakeCruxKey000000000000000000000";
+    const CRUX_HOST = "https://shop.crux-fixture.dev";
+    const cruxCalls = [];
+    const bins = (good, poor, d) => [
+      { start: 0, end: good, density: d[0] },
+      { start: good, end: poor, density: d[1] },
+      { start: poor, density: d[2] },
+    ];
+    const cruxRecord = (key) => ({
+      record: {
+        key,
+        metrics: {
+          largest_contentful_paint: { histogram: bins(2500, 4000, [0.78, 0.15, 0.07]), percentiles: { p75: 2380 } },
+          interaction_to_next_paint: { histogram: bins(200, 500, [0.61, 0.27, 0.12]), percentiles: { p75: 312 } },
+          cumulative_layout_shift: {
+            histogram: [
+              { start: "0.00", end: "0.10", density: 0.9 },
+              { start: "0.10", end: "0.25", density: 0.06 },
+              { start: "0.25", density: 0.04 },
+            ],
+            percentiles: { p75: "0.05" },
+          },
+          round_trip_time: { percentiles: { p75: 145 } },
+        },
+        collectionPeriod: { firstDate: { year: 2026, month: 10, day: 19 }, lastDate: { year: 2026, month: 11, day: 15 } },
+      },
+    });
+    const cruxHistory = (key) => ({
+      record: {
+        key,
+        metrics: { largest_contentful_paint: { percentilesTimeseries: { p75s: [2900, 2600, null, 2380] } } },
+        collectionPeriods: [1, 2, 3, 4].map((d) => ({
+          firstDate: { year: 2026, month: 9, day: d },
+          lastDate: { year: 2026, month: 10, day: d },
+        })),
+      },
+    });
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-goog-api-key" };
+    await context.route("https://chromeuxreport.googleapis.com/**", (route) => {
+      const req = route.request();
+      if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      const body = JSON.parse(req.postData() ?? "{}");
+      cruxCalls.push({ url: req.url(), key: req.headers()["x-goog-api-key"], body });
+      const json = (status, data) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(data) });
+      if (req.headers()["x-goog-api-key"] !== CRUX_KEY)
+        return json(400, { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } });
+      if (body.url?.endsWith("/empty"))
+        return json(404, { error: { code: 404, message: "chrome ux report data not found", status: "NOT_FOUND" } });
+      const key = {
+        ...(body.formFactor ? { formFactor: body.formFactor } : {}),
+        ...(body.url ? { url: body.url } : { origin: body.origin }),
+      };
+      return json(200, req.url().endsWith(":queryHistoryRecord") ? cruxHistory(key) : cruxRecord(key));
+    });
+    await context.route(`${CRUX_HOST}/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html lang=en><title>CrUX fixture</title><h1>Field data fixture</h1><p>A page with real-user data.</p></html>",
+      }),
+    );
+    const cruxSection = () => panel.locator("section", { has: panel.getByRole("heading", { name: "Field data (CrUX)" }) });
+    const cruxText = () =>
+      cruxSection()
+        .innerText()
+        .catch(() => "");
+
+    await site.goto(`${CRUX_HOST}/product`);
+    await open("Inspect", "Performance");
+    await cruxSection()
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    check(
+      "crux: without a key, the Performance panel points to Options",
+      (await cruxText()).includes("add a free Chrome UX Report API key in Options") && cruxCalls.length === 0,
+    );
+
+    const cruxOptions = await context.newPage();
+    cruxOptions.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
+    await cruxOptions.goto(`chrome-extension://${id}/options.html`);
+    const keyInput = cruxOptions.getByLabel("CrUX API key");
+    const keySection = cruxOptions.locator("section", { has: keyInput });
+    await keyInput.fill("AIzaWrongKey");
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("not valid")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check("crux: Test key reports an invalid key", (await keySection.innerText()).includes("Google says the CrUX API key is not valid"));
+    await keyInput.fill(CRUX_KEY);
+    await keySection.getByRole("button", { name: "Save" }).click();
+    await keySection
+      .getByText("A key is saved.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("The key works.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    const keyText = await keySection.innerText();
+    check(
+      "crux: Options saves the key, clears the field and tests the saved key",
+      keyText.includes("The key works.") && (await keyInput.inputValue()) === "" && !keyText.includes(CRUX_KEY),
+    );
+    const storedKey = await sw.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)));
+    check("crux: the key is not stored in clear in extension storage", !storedKey.includes("AIzaE2eFakeCruxKey"));
+    await cruxOptions.close();
+
+    await panel.bringToFront();
+    await cruxSection()
+      .getByText("2.38 s")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    let ct = await cruxText();
+    const first = cruxCalls.find((c) => c.key === CRUX_KEY && c.url.endsWith(":queryRecord") && c.body.url);
+    check(
+      "crux: the section shows p75, distribution, period and history",
+      /LCP[\s\S]*2\.38 s[\s\S]*Good/.test(ct) &&
+        ct.includes("78% good") &&
+        ct.includes("Needs improvement") &&
+        ct.includes("Oct 19 – Nov 15, 2026") &&
+        ct.includes("Round trip time p75 145 ms") &&
+        (await cruxSection().locator("svg.crux-spark").count()) === 1,
+      ct.slice(0, 300),
+    );
+    await shot("inspect-performance-crux");
+    check(
+      "crux: the request names the URL and phone, the key only in a header",
+      first?.body.url === `${CRUX_HOST}/product` && first.body.formFactor === "PHONE" && cruxCalls.every((c) => !c.url.includes("key=")),
+      JSON.stringify(first?.body),
+    );
+
+    await cruxSection().getByRole("button", { name: "Desktop", exact: true }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "crux: the device toggle asks for desktop",
+      cruxCalls.some((c) => c.body.formFactor === "DESKTOP"),
+    );
+
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).first().click();
+    await panel.waitForTimeout(300);
+    const cruxMd = await panel.evaluate(() => window.__copied.at(-1) ?? "");
+    check(
+      "crux: Copy for agent includes the field p75",
+      cruxMd.includes("### Field data (CrUX)") && cruxMd.includes("- LCP p75 2.38 s (good)") && !cruxMd.includes(CRUX_KEY),
+      cruxMd.slice(0, 200),
+    );
+
+    await site.goto(`${CRUX_HOST}/empty`);
+    await cruxSection()
+      .getByText("No field data for this URL")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    ct = await cruxText();
+    check(
+      "crux: a URL without data falls back to its origin",
+      ct.includes(`No field data for this URL, showing the origin (${CRUX_HOST})`) && ct.includes("2.38 s"),
+      ct.slice(0, 200),
+    );
+
+    await context.unroute("https://chromeuxreport.googleapis.com/**");
+    await context.unroute(`${CRUX_HOST}/**`);
+    await site.goto(`${base}/`);
+  }
+  // --- end CrUX field data ---
+
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
 } catch (e) {
   check("run completed", false, e instanceof Error ? e.stack : String(e));
