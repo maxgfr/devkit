@@ -3398,9 +3398,38 @@ table.rs-fns td:first-child {
   padding-left: 9px;
   border-left: 1px solid var(--line);
 }
+.hd-tree > li.hd-run > .hd-tree {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
 .hd-line {
   display: flex;
   align-items: flex-start;
+}
+.hd-viewbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.hd-folds {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+.hd-role {
+  font-family: var(--mono);
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.hd-pseudo {
+  flex: 1;
+  padding: 3px 4px;
+  color: var(--fg-3);
+  font-style: italic;
 }
 .hd-fold {
   flex: none;
