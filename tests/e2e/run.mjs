@@ -1462,6 +1462,116 @@ try {
     (await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).length)) === 0,
   );
 
+  // dataLayer: GA4 events, Consent Mode, PII, JSON-LD cross-check and snapshots on a shop page.
+  await site.goto(`${base}/datalayer`);
+  await panel.waitForTimeout(800);
+  await open("Inspect", "dataLayer inspector");
+  await panel
+    .locator(".dl-counters")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  const counters = (
+    await panel
+      .locator(".dl-counters")
+      .innerText()
+      .catch(() => "")
+  ).replace(/\s+/g, " ");
+  check(
+    "datalayer: counters (issues, events, unique, layers, consent, containers)",
+    counters.includes("Issues 6") &&
+      counters.includes("Events 3") &&
+      counters.includes("Unique events 3") &&
+      counters.includes("Layers 8") &&
+      counters.includes("Consent 2") &&
+      counters.includes("Containers 2"),
+    counters,
+  );
+  t = await text();
+  check(
+    "datalayer: GA4, Consent Mode v2, PII and JSON-LD issues",
+    [
+      "purchase without transaction_id",
+      "value is not numeric",
+      "Consent Mode v2: ad_user_data and ad_personalization missing",
+      "E-mail address in the dataLayer",
+      "SKU differs from the Product markup",
+      "Price differs from the Product markup",
+    ].every((s) => t.includes(s)),
+    t.match(/Issues \(\d+\)[^\n]*/)?.[0],
+  );
+  check("datalayer: PII reported by path, never by value", t.includes("dataLayer[7].user.email") && !t.includes("jane.doe@example.com"));
+  check(
+    "datalayer: containers and consent timeline",
+    t.includes("GTM-E2E1234") && t.includes("G-E2E5678") && t.includes("ad_storage: denied"),
+  );
+  check("datalayer: read-only note", t.includes("events fired later appear after Read again"));
+  check(
+    "datalayer: the page's dataLayer.push is left alone",
+    await site.evaluate(() => window.dataLayer.push === Array.prototype.push && window.dataLayer.length === 8),
+  );
+  await panel.locator(".dl-event summary", { hasText: "login" }).first().click();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check("datalayer: an event opens as a tree, masked", t.includes("j•••@•••.com") && t.includes("[Function"));
+  await shot("inspect-datalayer");
+  await panel.getByRole("button", { name: "JSON view" }).click();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check(
+    "datalayer: JSON view is masked too",
+    t.includes("JSON (masked)") && t.includes("j•••@•••.com") && !t.includes("jane.doe@example.com"),
+  );
+  await panel.getByRole("button", { name: "JSON view" }).click();
+  const dlReport = await lastCopy(panel.getByRole("button", { name: "Copy report" }));
+  check(
+    "datalayer: Copy report",
+    dlReport.startsWith("dataLayer report") && dlReport.includes("Issues: 6") && !dlReport.includes("jane.doe@example.com"),
+    dlReport.split("\n")[1],
+  );
+  const dlMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }));
+  check(
+    "datalayer: Copy for agent with paths and fixes, PII masked",
+    dlMd.startsWith("## dataLayer") &&
+      dlMd.includes("Result: 3 problems, 3 warnings") &&
+      dlMd.includes("Fix: Add `transaction_id`") &&
+      dlMd.includes("Where: `dataLayer[7].user.email`") &&
+      !dlMd.includes("jane.doe@example.com"),
+    dlMd.split("\n")[2],
+  );
+  await panel.getByRole("button", { name: "Save snapshot" }).click();
+  await panel.waitForTimeout(400);
+  t = await text();
+  const stored = await sw.evaluate(async () =>
+    JSON.stringify((await chrome.storage.local.get("datalayerSnapshots")).datalayerSnapshots ?? []),
+  );
+  check(
+    "datalayer: snapshot saved locally, masked",
+    t.includes("Snapshots (1/50)") && stored.includes("j•••@•••.com") && !stored.includes("jane.doe@example.com"),
+    t.match(/Snapshots \([^)]*\)/)?.[0],
+  );
+  await site.evaluate(() => window.dataLayer.push({ event: "late_event", step: 2 }));
+  await panel.getByRole("button", { name: "Read again" }).click();
+  await panel.waitForTimeout(500);
+  check(
+    "datalayer: Read again picks up later events",
+    (await panel.locator(".dl-counters").innerText()).replace(/\s+/g, " ").includes("Events 4"),
+  );
+  await panel.getByRole("button", { name: "Compare with current" }).first().click();
+  await panel.waitForTimeout(300);
+  t = await text();
+  check(
+    "datalayer: snapshot compared with the current read",
+    /1 added · 0 removed · 0 duplicated · 0 changed/.test(t) && t.includes("late_event"),
+  );
+  await panel
+    .getByRole("button", { name: /^Delete the snapshot/ })
+    .first()
+    .click();
+  await panel.waitForTimeout(300);
+  check("datalayer: snapshot deleted", (await text()).includes("Snapshots (0/50)"));
+  await site.goto(`${base}/headings`);
+  await panel.waitForTimeout(1200);
+  check("datalayer: empty state without a dataLayer", (await text()).includes("No dataLayer found on this page."));
   await site.goto(`${base}/`);
   await panel.waitForTimeout(800);
   t = await text();
@@ -1491,6 +1601,16 @@ try {
   await popup.getByLabel("Search commands").fill("yt-dlp");
   const cookiesTxtFirst = await popup.getByRole("option").first().innerText();
   check("palette finds Copy cookies.txt", /Copy cookies\.txt/.test(cookiesTxtFirst), cookiesTxtFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("consent mode");
+  const dlItems = await popup.getByRole("option").allInnerTexts();
+  check(
+    "palette finds the dataLayer inspector",
+    dlItems.some((r) => r.startsWith("dataLayer inspector")),
+    dlItems
+      .slice(0, 3)
+      .map((r) => r.split("\n")[0])
+      .join(" | "),
+  );
   await popup.getByLabel("Search commands").fill("hn");
   const hnItems = await popup.getByRole("option").allInnerTexts();
   check(

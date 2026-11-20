@@ -208,6 +208,14 @@
     "keywords": "schema.org json-ld microdata rich results structured data vocabulary canonical x-robots-tag"
   },
   {
+    "id": "datalayer",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "dataLayer inspector",
+    "description": "GA4 events, Consent Mode and GTM containers: validation, PII warnings, snapshots",
+    "keywords": "datalayer data layer gtm ga4 google analytics tag manager gtag consent mode events ecommerce purchase transaction_id pii snapshot"
+  },
+  {
     "id": "headers",
     "kind": "panel",
     "category": "security",

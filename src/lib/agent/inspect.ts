@@ -4,6 +4,7 @@
 import { agentDoc, clip, code, fence, plural } from "../agent-md";
 import { createRedactor, type ReportError } from "../bug-report";
 import { sourcePath } from "../element";
+import type { DataLayerAnalysis, DataLayerIssue } from "../datalayer";
 import { cachingReport, type Check, type HeaderFetch, securityReport } from "../headers";
 import { type HeadingIssue, headingIssues, headingText, isExposed, levelCounts, outlineLines } from "../headings";
 import { type Finding, type JsonLdBlock, type JsonLdReport, richResultsTestUrl } from "../jsonld";
@@ -1056,5 +1057,93 @@ export function siteFilesMarkdown(data: SiteFilesData, ctx: AgentCtx): string {
       bad.length || warn.length
         ? "Deploy, then refresh devkit's robots.txt, sitemap, manifest panel; Search Console's robots.txt and sitemap reports show what Google fetched."
         : undefined,
+  });
+}
+
+/* dataLayer */
+
+const DATALAYER_FIX: Record<string, string> = {
+  "transaction-id":
+    "Add `transaction_id` (the order number, unique per order): `ecommerce.transaction_id` in a GTM push, the third argument of `gtag('event', …)` otherwise.",
+  "value-type": 'Send `value` as a number (`value: 129.00`), not a string such as `"129,00"`: convert the amount before pushing it.',
+  "value-zero": "Fill `value` with the order or cart total when the event fires (ignore if the order really is free).",
+  "value-missing": "Add `value` (the order total, a number) and `currency`.",
+  "currency-missing": 'Add `currency` with the ISO 4217 code (e.g. `"EUR"`) next to `value`.',
+  "currency-code": "Replace it with the three-letter ISO 4217 code (`EUR`, `USD`, `GBP`…).",
+  "items-missing": "Add `items: [{ item_id, item_name, price, quantity }]` with the products the event is about.",
+  "items-type": "Make `items` an array of item objects: `items: [{ item_id, item_name, price, quantity }]`.",
+  "items-empty": "Fill `items` with the products the event is about.",
+  "item-id": "Give every item an `item_id` (the SKU) or an `item_name`.",
+  "item-price": "Send the item `price` as a number.",
+  "item-quantity": "Send `quantity` as a positive integer.",
+  "legacy-ua":
+    'Rewrite the push in the GA4 shape, `{ event: "purchase", ecommerce: { transaction_id, value, currency, items: [{ item_id, item_name, price, quantity }] } }`, and point the GTM tags at the new variables.',
+  "ua-config": "Remove the `gtag('config', 'UA-…')` call, or replace it with the GA4 `G-` id.",
+  "ecommerce-not-cleared": "Push `{ ecommerce: null }` right before each ecommerce event.",
+  "event-name": "Rename the event: letters, digits and `_`, starting with a letter, 40 characters at most, not a reserved name.",
+  "duplicate-transaction":
+    "Send purchase once per order: guard it (mark the order as tracked, server-side or in sessionStorage) so a reload of the confirmation page does not send it again.",
+  "duplicate-event": "Find the second trigger (a tag on two triggers, a listener added twice, a component mounting twice) and keep one.",
+  "consent-no-default":
+    "Call `gtag('consent', 'default', { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' })` before the GTM or gtag snippet.",
+  "consent-update-first": "Send the default first, before GTM loads; the CMP sends the update once the visitor chooses.",
+  "consent-default-late":
+    "Move `gtag('consent', 'default', …)` above the tag snippet so it is the first entry of the dataLayer (or set it from a Consent Initialization trigger in GTM).",
+  "consent-v2": "Add `ad_user_data` and `ad_personalization` to the default, and make the CMP's update set them too.",
+  "consent-value": "Use `'granted'` or `'denied'`.",
+  "consent-command": "Use `gtag('consent', 'default', …)` or `gtag('consent', 'update', …)`.",
+  "jsonld-price": "Feed the dataLayer item and the JSON-LD offer from the same product record so the price matches.",
+  "jsonld-currency": "Use the same currency in the dataLayer and in the JSON-LD offer's `priceCurrency`.",
+  "jsonld-sku": "Use the JSON-LD `sku` as `item_id` (or the other way round), so both name the same product.",
+};
+
+/** dataLayer panel: the issues of `analyzeDataLayer`, with containers and the consent sequence. PII stays masked. */
+export function dataLayerMarkdown(a: DataLayerAnalysis, ctx: AgentCtx): string {
+  const fix = (i: DataLayerIssue) =>
+    i.area === "pii"
+      ? "Stop pushing it: remove the field, or send a SHA-256 hash of the normalized value (Google's user-provided data) instead."
+      : (DATALAYER_FIX[i.id] ?? "");
+  const item = (i: DataLayerIssue): Item => ({
+    text: `${i.label}: ${clip(i.detail, 300)}`,
+    details: [i.path ? `Where: ${code(i.path)}` : "", fix(i) ? `Fix: ${fix(i)}` : ""],
+  });
+  const bad = a.issues.filter((i) => i.level === "bad");
+  const warn = a.issues.filter((i) => i.level === "warn");
+  const notes = a.issues.filter((i) => i.level === "info");
+  const c = a.counts;
+  return agentDoc({
+    title: "dataLayer (GA4, Consent Mode, GTM)",
+    url: ctx.url,
+    heading: ctx.heading,
+    result: a.layers.length ? counted(bad.length, warn.length) : "No dataLayer found on this page.",
+    context: [
+      a.layers.length
+        ? `${plural(c.events, "event")} (${c.unique} unique) in ${plural(c.layers, "entry", "entries")} of ${a.layers.map((l) => code(l.name)).join(", ")}, ${plural(c.consent, "consent command")}, ${plural(c.containers, "container")}.`
+        : "",
+      a.truncated ? "The dataLayer was too large: part of it was left out." : "",
+      c.pii ? "Personal data is masked: findings give its path, never its value." : "",
+    ],
+    sections: [
+      { title: "To fix", body: list(bad.map(item)) },
+      { title: "Worth checking", body: list(warn.map(item)) },
+      { title: "Notes", body: list(notes.map((i) => ({ text: `${i.label}: ${clip(i.detail, 200)}` }), 10)) },
+      {
+        title: "Containers",
+        body: a.containers.map(
+          (k) => `- ${code(k.id)}: ${k.kind}${k.layer ? `, reads ${code(k.layer)}` : ""} (seen in ${k.sources.join(", ")})`,
+        ),
+      },
+      {
+        title: "Consent sequence",
+        body: a.consent.map(
+          (s) =>
+            `- ${code(`${s.layer}[${s.index}]`)} ${s.command}: ${Object.entries(s.states)
+              .map(([k, v]) => `${k}=${v}`)
+              .join(", ")}`,
+        ),
+      },
+    ],
+    verify:
+      bad.length || warn.length ? "Reload the page and press Read again in devkit's dataLayer panel (Inspect › dataLayer)." : undefined,
   });
 }
