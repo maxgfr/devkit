@@ -176,6 +176,22 @@
     "keywords": "localstorage sessionstorage"
   },
   {
+    "id": "indexeddb",
+    "kind": "panel",
+    "category": "cache",
+    "title": "IndexedDB",
+    "description": "Browse, edit and export IndexedDB databases, object stores and records",
+    "keywords": "indexeddb idb database object store records index key range cursor dexie localforage offline pwa"
+  },
+  {
+    "id": "cache-storage",
+    "kind": "panel",
+    "category": "cache",
+    "title": "Cache Storage",
+    "description": "Service worker caches: cached requests, headers and bodies, delete and export",
+    "keywords": "cache storage caches service worker cache sw workbox pwa offline cached responses"
+  },
+  {
     "id": "overview",
     "kind": "panel",
     "category": "inspect",
