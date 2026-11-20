@@ -120,6 +120,8 @@ import { type AsyncState, useAsync, useStored } from "../hooks";
 import { useNav } from "../nav";
 import { AccessGate, useInPage, usePage } from "../page";
 import { useA11yReport } from "./a11y";
+import { CruxField } from "./crux";
+import { useOverviewExtras } from "./overview-extras";
 
 export function useHeaders() {
   const page = usePage();
@@ -190,6 +192,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const errors = useInPage(readErrors, [], "MAIN");
   const headings = useInPage(collectHeadings);
   const a11y = useA11yReport(meta.data?.stats.elements);
+  const extras = useOverviewExtras(meta, headings.data?.headings);
   const page = usePage();
   const toast = useToast();
   const [copying, setCopying] = useState(false);
@@ -280,6 +283,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd, { vocab }), ctx) : null,
           missing: notRead(meta),
         },
+        ...extras.parts(ctx),
       ];
       return parts;
     }
@@ -299,6 +303,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           "robots.txt, sitemap and manifest (Inspect › Site files)",
           "cookie flags (Cache › Cookies)",
           "image weight and alt text (Page › Assets)",
+          "AI crawlers in robots.txt, ai.txt and the sitemap (Inspect › Agent readiness)",
         ],
       });
       const ok = await copyText(md);
@@ -354,6 +359,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
     { panel: "errors", label: "Console errors", state: errors, verdict: errors.data ? errorsVerdict(errors.data) : null },
     { panel: "a11y", label: "Accessibility", state: meta.error ? meta : a11y.state, verdict: a11y.verdict },
     { panel: "perf", label: "Web Vitals", state: perf, verdict: perf.data ? vitalsSummary(perf.data) : null },
+    ...extras.rows,
   ];
   return (
     <Section
@@ -377,6 +383,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
             onClick={() => {
               for (const s of [meta, headers, perf, errors, headings]) s.run();
               a11y.run();
+              extras.refresh();
             }}
           >
             Refresh
@@ -387,7 +394,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
       <ul className="report" aria-label="Page report">
         {rows.map((r) => (
           <ReportRow
-            key={r.panel}
+            key={r.label}
             label={r.label}
             verdict={r.verdict}
             loading={r.state.loading}
@@ -964,7 +971,8 @@ export function Perf() {
   const nav = useMemo(() => (p?.navigation ? navigationPhases(p.navigation) : null), [p]);
   const navAxis = nav ? niceTicks(nav.end, 2) : null;
   const breakdown = useMemo(() => resourceBreakdown(p?.resources ?? []), [p]);
-  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url }) : ""), [p, page.url]);
+  const [field, setField] = useState<string>();
+  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url, field }) : ""), [p, page.url, field]);
   const waterfall = useMemo(
     () =>
       p ? waterfallLayout(p.resources, { sort, limit: all ? undefined : WATERFALL_ROWS, markers: nav?.markers.map((m) => m.at) }) : null,
@@ -1008,6 +1016,7 @@ export function Perf() {
               </span>
             </div>
           </Section>
+          <CruxField lab={p} onMarkdown={setField} />
           {p.navigation && nav && navAxis ? (
             <Section title="Navigation timing" hint="The document request, from navigation start.">
               <Timeline

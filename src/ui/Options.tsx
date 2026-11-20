@@ -7,6 +7,7 @@ import { ALL_SITES, ensurePermission } from "../lib/permissions";
 import { Button, download, Notice, Section, ToastProvider, useToast } from "./components";
 import { useAsync } from "./hooks";
 import { disableErrorCapture, enableErrorCapture } from "./panels/inspect";
+import { CruxSettings } from "./panels/crux";
 import { ERROR_SCRIPT_IDS } from "../lib/page/errors";
 import { disableRepoDepsBox, enableRepoDepsBox, repoDepsBoxEnabled } from "../lib/repo-deps-box";
 
@@ -295,6 +296,7 @@ export function OptionsApp() {
         <Suspense fallback={<p className="muted">Loading…</p>}>
           <AiSettings />
         </Suspense>
+        <CruxSettings />
         <Permissions />
         <Capture />
         <JsonViewer />

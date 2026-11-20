@@ -330,6 +330,54 @@ function crawlRoute(req, url, base) {
 }
 let ogImageHits = 0;
 
+// Overview and AI context: landmarks (two unnamed navigation landmarks), a dataLayer with a Consent Mode v1 default
+// and an e-mail address, and an Organization node. The last AI request's context is kept for /ai-last-context.
+const OVERVIEW_CONTEXT_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme overview context</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}</script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "denied", analytics_storage: "denied" });
+gtag("js", new Date());
+gtag("config", "G-OVR1234");
+dataLayer.push({ event: "sign_up", user: { email: "sam.smith@example.com" } });
+</script></head><body>
+<header><nav><a href="/">Home</a></nav></header>
+<main><h1>Overview context</h1><p>Landmarks and a dataLayer.</p><nav><a href="#more">More links</a></nav></main>
+<footer><p>Footer</p></footer>
+</body></html>`;
+let lastAiContext = "";
+
+// Served vs rendered: JavaScript changes the title and adds a canonical, a JSON-LD block, an og:image and links.
+const RENDERED_SOURCE_PAGE = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Loading…</title>
+<meta name="description" content="Rendered source test page">
+</head><body>
+<h1>Client app</h1>
+<a href="/">Home</a>
+<div id="root"></div>
+<script>
+document.title = "Rendered title from JS";
+const canonical = document.createElement("link");
+canonical.rel = "canonical";
+canonical.href = location.origin + "/rendered-source";
+document.head.append(canonical);
+const og = document.createElement("meta");
+og.setAttribute("property", "og:image");
+og.content = location.origin + "/big.png";
+document.head.append(og);
+const ld = document.createElement("script");
+ld.type = "application/ld+json";
+ld.textContent = JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: "Acme" });
+document.head.append(ld);
+document.getElementById("root").innerHTML =
+  '<h2>Injected section</h2><a href="/js-only-1">JS link one</a> <a href="/js-only-2">JS link two</a> <a href="https://example.org/partner">Partner</a>';
+</script>
+</body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -339,6 +387,9 @@ const server = http.createServer((req, res) => {
   if (crawled) return res.writeHead(crawled.status, crawled.headers).end(crawled.body);
   if (url.pathname === "/seo") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(seoPage(base));
   if (url.pathname === "/og-hits") return res.writeHead(200, { "content-type": "text/plain" }).end(String(ogImageHits));
+  if (url.pathname === "/overview-context")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(OVERVIEW_CONTEXT_PAGE);
+  if (url.pathname === "/ai-last-context") return res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(lastAiContext);
   if (url.pathname === "/big.png" && url.searchParams.get("og") === "1") ogImageHits++;
   if (url.pathname === "/") {
     res.writeHead(200, {
@@ -361,6 +412,8 @@ const server = http.createServer((req, res) => {
         `# Acme\n\n> Acme sells mugs.\n\n## Pages\n\n- [Store hours](${base}/agent): when the shop is open\n- [Mug](${base}/): the Acme mug\n`,
       );
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/rendered-source")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(RENDERED_SOURCE_PAGE);
   if (url.pathname === "/landmarks") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LANDMARKS_PAGE);
   if (url.pathname === "/acme/shop" || url.pathname === "/acme/shop/tree/main/web")
     return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(repoPage(url.pathname.endsWith("/web") ? "web" : ""));
@@ -464,6 +517,7 @@ const server = http.createServer((req, res) => {
       const json = JSON.parse(body);
       const user = json.messages.filter((m) => m.role === "user").at(-1);
       const content = typeof user.content === "string" ? user.content : user.content.map((p) => p.text ?? "").join("");
+      lastAiContext = content;
       const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
       const hasText = content.includes("best mug");
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
@@ -480,6 +534,31 @@ const server = http.createServer((req, res) => {
         `FAKE-MODEL answer. Title seen: ${title}. Page text included: ${hasText}. Picked element: ${element}. Axe rules seen: ${axe}. Bug report included: ${report}. Secrets section: ${secrets}. Raw secret sent: ${leaked}. First CVE: ${cve}. Headings section: ${headings}. Section text sent: ${sectionText}. Heading in focus: ${focus}. Context length: ${content.length} chars.`,
       );
     });
+    return;
+  }
+  // GraphQL endpoint for the DevTools panel's GraphQL view: single, batched and persisted (GET) operations.
+  if (url.pathname === "/graphql") {
+    const answer = (op) => {
+      const doc = op?.query ?? "";
+      if (op?.operationName === "GetUser" || /query GetUser\b/.test(doc))
+        return { data: { user: { id: op.variables?.id ?? "1", name: "Ada" } } };
+      if (/query ListPosts\b/.test(doc)) return { data: { posts: [{ id: "p1", title: "Hello" }] } };
+      if (/^\s*mutation\s*\{\s*like\b/.test(doc))
+        return { data: { like: null }, errors: [{ message: "Not authorized", path: ["like"], extensions: { code: "FORBIDDEN" } }] };
+      if (op?.operationName === "Feed" && op?.extensions?.persistedQuery) return { data: { feed: [{ id: 1 }] }, extensions: { cost: 2 } };
+      return { errors: [{ message: `Unknown operation ${op?.operationName ?? "(anonymous)"}`, locations: [{ line: 1, column: 1 }] }] };
+    };
+    const reply = (payload) =>
+      res
+        .writeHead(200, { "content-type": "application/json", ...cors })
+        .end(JSON.stringify(Array.isArray(payload) ? payload.map(answer) : answer(payload)));
+    if (req.method === "GET") {
+      const json = (k) => (url.searchParams.has(k) ? JSON.parse(url.searchParams.get(k)) : undefined);
+      return reply({ operationName: url.searchParams.get("operationName"), variables: json("variables"), extensions: json("extensions") });
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => reply(JSON.parse(body || "{}")));
     return;
   }
   res.writeHead(404, { "content-type": "text/plain" }).end("not found");

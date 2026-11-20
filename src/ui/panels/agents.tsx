@@ -7,19 +7,16 @@ import { runInTab } from "../../lib/inject";
 import { analyzeJsonLd } from "../../lib/jsonld";
 import { collectMeta } from "../../lib/page/collect";
 import { collectSemantics, collectWebMcp, executeWebMcpTool, type WebMcpRun } from "../../lib/page/webmcp";
+import { fetchAgentFiles } from "../../lib/agent-files";
 import {
   type Area,
-  crawlerAccess,
   IMPACT_TEXT,
   type Impact,
-  parseAiTxt,
-  parseLlmsTxt,
   PURPOSE_TEXT,
   type ReadinessInputs,
   type Recommendation,
   readinessScore,
 } from "../../lib/readiness";
-import { parseRobots } from "../../lib/site-files";
 import {
   buildArgs,
   confirmSteps,
@@ -632,49 +629,13 @@ export function AgentTools() {
   );
 }
 
-async function fetchText(url: string): Promise<{ status: number; text: string; type: string }> {
-  try {
-    const res = await fetch(url, { credentials: "omit", cache: "no-store" });
-    return { status: res.status, text: await res.text(), type: res.headers.get("content-type") ?? "" };
-  } catch {
-    return { status: 0, text: "", type: "" };
-  }
-}
-
 /** robots.txt, llms.txt, llms-full.txt, ai.txt and the sitemap of the page's origin. */
 function useAgentFiles() {
   const page = usePage();
-  return useAsync(async () => {
-    if (!page.origin || !page.canScript) return null;
-    const o = page.origin;
-    const [robots, llms, llmsFull, ai] = await Promise.all(
-      ["/robots.txt", "/llms.txt", "/llms-full.txt", "/ai.txt"].map((p) => fetchText(`${o}${p}`)),
-    );
-    const parsedRobots = robots!.status > 0 && robots!.status < 400 && !/text\/html/i.test(robots!.type) ? parseRobots(robots!.text) : null;
-    let path = "/";
-    try {
-      path = new URL(page.url).pathname || "/";
-    } catch {
-      /* keep / */
-    }
-    const listed = parsedRobots?.sitemaps[0];
-    let sitemap: { url: string; found: boolean };
-    if (listed) sitemap = { url: listed, found: true };
-    else {
-      const s = await fetchText(`${o}/sitemap.xml`);
-      sitemap = { url: `${o}/sitemap.xml`, found: s.status > 0 && s.status < 400 && /<(urlset|sitemapindex)\b/.test(s.text) };
-    }
-    return {
-      robotsStatus: robots!.status,
-      robots: parsedRobots,
-      crawlers: crawlerAccess(parsedRobots, path),
-      path,
-      llms: parseLlmsTxt(`${o}/llms.txt`, llms!.status, llms!.type, llms!.text),
-      llmsFull: parseLlmsTxt(`${o}/llms-full.txt`, llmsFull!.status, llmsFull!.type, llmsFull!.text),
-      aiTxt: parseAiTxt(`${o}/ai.txt`, ai!.status, ai!.type, ai!.text),
-      sitemap,
-    };
-  }, [page.origin, page.url, page.canScript]);
+  return useAsync(
+    async () => (page.origin && page.canScript ? fetchAgentFiles(page.origin, page.url) : null),
+    [page.origin, page.url, page.canScript],
+  );
 }
 
 function AreaRow({ area, open, onToggle }: { area: Area; open: boolean; onToggle: () => void }) {

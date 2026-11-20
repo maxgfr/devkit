@@ -1555,6 +1555,74 @@ try {
   check("landmarks: the chosen view is kept", (await viewChip("All").getAttribute("aria-pressed")) === "true");
   await viewChip("Headings").click();
 
+  // --- Served vs rendered (issue #23): JavaScript changes the title and adds a canonical, JSON-LD, og:image and links.
+  {
+    await site.goto(`${base}/rendered-source`);
+    await panel.waitForTimeout(600);
+    await open("Inspect", "Served vs rendered");
+    await panel
+      .locator("table.rsrc-table")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "rendered source: findings name what JavaScript added or changed",
+      [
+        "Canonical only exists after JavaScript",
+        "1 JSON-LD block injected by JavaScript",
+        "Title changed by JavaScript",
+        "3 links only after JavaScript",
+        "1 share tag only after JavaScript",
+      ].every((s) => t.includes(s)),
+      t.slice(0, 400),
+    );
+    check(
+      "rendered source: field table and added links listed",
+      /Title\s+Loading…\s+Rendered title from JS\s+changed by JS/.test(t) &&
+        t.includes("Links added by JavaScript") &&
+        t.includes(`${base}/js-only-1`) &&
+        t.includes("https://example.org/partner") &&
+        t.includes("JSON-LD added by JavaScript") &&
+        t.includes("Organization"),
+      t.match(/Title[^\n]*\n?[^\n]*/)?.[0],
+    );
+    const sourceText = () => panel.locator(".rsrc-source").innerText();
+    const diffText = await sourceText().catch(() => "");
+    check(
+      "rendered source: the source diff shows the injected canonical",
+      /\+\s+<link rel="canonical"/.test(diffText) && /−\s+<title>Loading…<\/title>/.test(diffText) && /\+\d+\s+−\d+/.test(await text()),
+      diffText.slice(0, 200),
+    );
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Served", exact: true }).click();
+    const servedText = await sourceText().catch(() => "");
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Rendered", exact: true }).click();
+    const renderedText = await sourceText().catch(() => "");
+    check(
+      "rendered source: served and rendered views",
+      servedText.includes("<title>Loading…</title>") &&
+        !servedText.includes('<link rel="canonical"') &&
+        renderedText.includes("<title>Rendered title from JS</title>") &&
+        renderedText.includes("JS link two</a>"),
+    );
+    await shot("inspect-rendered-source");
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    const rsMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "rendered source: Copy for agent with findings and fixes",
+      rsMd.startsWith("## Served HTML vs rendered DOM") &&
+        rsMd.includes("Canonical only exists after JavaScript") &&
+        rsMd.includes('Fix: Render `<link rel="canonical">` in the served HTML') &&
+        rsMd.includes("- JSON-LD added: Organization"),
+      rsMd.split("\n").slice(0, 3).join(" / "),
+    );
+  }
+  // --- end Served vs rendered
+
   // Repo dependencies: a GitHub-like folder served locally (the page's meta tags say GitHub), registries faked.
   await context.route("https://registry.npmjs.org/**", (route) => {
     const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1).replace(/\/latest$/, ""));
@@ -1916,6 +1984,66 @@ try {
   const readinessMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
   check("readiness: Copy for agent", readinessMd.startsWith("## Agent readiness") && readinessMd.includes("84/100"));
   await shot("inspect-agent-readiness");
+
+  // Overview and AI context: landmarks, the dataLayer (an e-mail address in it) and agent readiness on one page.
+  {
+    await site.goto(`${base}/overview-context`);
+    await panel.waitForTimeout(800);
+    await open("Inspect", "Overview");
+    await panel
+      .locator(".report-row", { hasText: "Agent readiness" })
+      .filter({ hasText: /\d+\/100/ })
+      .waitFor({ timeout: 10000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "overview: landmarks, dataLayer and agent readiness rows",
+      /Landmarks\s*5 landmarks · 1 to review/.test(t) &&
+        /dataLayer\s*1 event · Consent Mode: 1 issue · personal data found · 1 to fix, 1 to review/.test(t) &&
+        /Agent readiness\s*\d+\/100 · no WebMCP tool/.test(t),
+      [
+        t.match(/Landmarks[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/dataLayer[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/Agent readiness[^\n]*\n?[^\n]*/)?.[0],
+      ].join(" | "),
+    );
+    const overviewMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "overview: Copy for agent has the landmarks, dataLayer and readiness reports, the e-mail masked",
+      overviewMd.includes("| Landmarks | 1 warning | Inspect › Headings |") &&
+        overviewMd.includes("## Landmarks") &&
+        overviewMd.includes("## dataLayer (GA4, Consent Mode, GTM)") &&
+        overviewMd.includes("`dataLayer[3].user.email`") &&
+        overviewMd.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        !overviewMd.includes("sam.smith"),
+      overviewMd.split("\n")[2],
+    );
+    await panel.locator(".report-row", { hasText: "dataLayer" }).click();
+    await panel.waitForTimeout(600);
+    check("overview: the dataLayer row opens its panel", (await text()).includes("GTM-") || (await text()).includes("G-OVR1234"));
+
+    await open("AI", "Ask AI");
+    const newChat = panel.getByRole("button", { name: "New chat" });
+    if (await newChat.isVisible().catch(() => false)) await newChat.click();
+    await panel.waitForTimeout(300);
+    await action("Fix plan for the whole page");
+    await panel.waitForSelector(".msg.assistant .markdown", { timeout: 20_000 }).catch(() => undefined);
+    await panel.waitForTimeout(1500);
+    const sent = await (await fetch(`${base}/ai-last-context`)).text();
+    check(
+      "AI: the fix plan context has the landmarks, the masked dataLayer and agent readiness",
+      sent.includes("## Landmarks (devkit panel: Inspect › Headings)") &&
+        sent.includes("2 unnamed navigation") &&
+        sent.includes("## dataLayer (GA4, Consent Mode, GTM) (devkit panel: Inspect › dataLayer)") &&
+        sent.includes("`G-OVR1234`: GA4 measurement ID") &&
+        sent.includes("Consent Mode v2") &&
+        sent.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        /Score: \d+\/100\. A heuristic/.test(sent) &&
+        sent.includes("- llms.txt: present") &&
+        !sent.includes("sam.smith"),
+      `${sent.length} chars`,
+    );
+  }
   await site.goto(`${base}/`);
 
   // Popup palette
@@ -2092,6 +2220,351 @@ try {
   const afterOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
   check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
   await jsonTab.close();
+
+  // --- CrUX field data (issue #30): a fake key saved in Options, the CrUX API answered from fixtures. ---
+  // The real API is never called: context.route answers chromeuxreport.googleapis.com, and a public-looking host
+  // (CrUX skips local addresses) serves the page. Self-contained: it restores the site tab at the end.
+  {
+    const CRUX_KEY = "AIzaE2eFakeCruxKey000000000000000000000";
+    const CRUX_HOST = "https://shop.crux-fixture.dev";
+    const cruxCalls = [];
+    const bins = (good, poor, d) => [
+      { start: 0, end: good, density: d[0] },
+      { start: good, end: poor, density: d[1] },
+      { start: poor, density: d[2] },
+    ];
+    const cruxRecord = (key) => ({
+      record: {
+        key,
+        metrics: {
+          largest_contentful_paint: { histogram: bins(2500, 4000, [0.78, 0.15, 0.07]), percentiles: { p75: 2380 } },
+          interaction_to_next_paint: { histogram: bins(200, 500, [0.61, 0.27, 0.12]), percentiles: { p75: 312 } },
+          cumulative_layout_shift: {
+            histogram: [
+              { start: "0.00", end: "0.10", density: 0.9 },
+              { start: "0.10", end: "0.25", density: 0.06 },
+              { start: "0.25", density: 0.04 },
+            ],
+            percentiles: { p75: "0.05" },
+          },
+          round_trip_time: { percentiles: { p75: 145 } },
+        },
+        collectionPeriod: { firstDate: { year: 2026, month: 10, day: 19 }, lastDate: { year: 2026, month: 11, day: 15 } },
+      },
+    });
+    const cruxHistory = (key) => ({
+      record: {
+        key,
+        metrics: { largest_contentful_paint: { percentilesTimeseries: { p75s: [2900, 2600, null, 2380] } } },
+        collectionPeriods: [1, 2, 3, 4].map((d) => ({
+          firstDate: { year: 2026, month: 9, day: d },
+          lastDate: { year: 2026, month: 10, day: d },
+        })),
+      },
+    });
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-goog-api-key" };
+    await context.route("https://chromeuxreport.googleapis.com/**", (route) => {
+      const req = route.request();
+      if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      const body = JSON.parse(req.postData() ?? "{}");
+      cruxCalls.push({ url: req.url(), key: req.headers()["x-goog-api-key"], body });
+      const json = (status, data) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(data) });
+      if (req.headers()["x-goog-api-key"] !== CRUX_KEY)
+        return json(400, { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } });
+      if (body.url?.endsWith("/empty"))
+        return json(404, { error: { code: 404, message: "chrome ux report data not found", status: "NOT_FOUND" } });
+      const key = {
+        ...(body.formFactor ? { formFactor: body.formFactor } : {}),
+        ...(body.url ? { url: body.url } : { origin: body.origin }),
+      };
+      return json(200, req.url().endsWith(":queryHistoryRecord") ? cruxHistory(key) : cruxRecord(key));
+    });
+    await context.route(`${CRUX_HOST}/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html lang=en><title>CrUX fixture</title><h1>Field data fixture</h1><p>A page with real-user data.</p></html>",
+      }),
+    );
+    const cruxSection = () => panel.locator("section", { has: panel.getByRole("heading", { name: "Field data (CrUX)" }) });
+    const cruxText = () =>
+      cruxSection()
+        .innerText()
+        .catch(() => "");
+
+    await site.goto(`${CRUX_HOST}/product`);
+    await open("Inspect", "Performance");
+    await cruxSection()
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    check(
+      "crux: without a key, the Performance panel points to Options",
+      (await cruxText()).includes("add a free Chrome UX Report API key in Options") && cruxCalls.length === 0,
+    );
+
+    const cruxOptions = await context.newPage();
+    cruxOptions.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
+    await cruxOptions.goto(`chrome-extension://${id}/options.html`);
+    const keyInput = cruxOptions.getByLabel("CrUX API key");
+    const keySection = cruxOptions.locator("section", { has: keyInput });
+    await keyInput.fill("AIzaWrongKey");
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("not valid")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check("crux: Test key reports an invalid key", (await keySection.innerText()).includes("Google says the CrUX API key is not valid"));
+    await keyInput.fill(CRUX_KEY);
+    await keySection.getByRole("button", { name: "Save" }).click();
+    await keySection
+      .getByText("A key is saved.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("The key works.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    const keyText = await keySection.innerText();
+    check(
+      "crux: Options saves the key, clears the field and tests the saved key",
+      keyText.includes("The key works.") && (await keyInput.inputValue()) === "" && !keyText.includes(CRUX_KEY),
+    );
+    const storedKey = await sw.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)));
+    check("crux: the key is not stored in clear in extension storage", !storedKey.includes("AIzaE2eFakeCruxKey"));
+    await cruxOptions.close();
+
+    await panel.bringToFront();
+    await cruxSection()
+      .getByText("2.38 s")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    let ct = await cruxText();
+    const first = cruxCalls.find((c) => c.key === CRUX_KEY && c.url.endsWith(":queryRecord") && c.body.url);
+    check(
+      "crux: the section shows p75, distribution, period and history",
+      /LCP[\s\S]*2\.38 s[\s\S]*Good/.test(ct) &&
+        ct.includes("78% good") &&
+        ct.includes("Needs improvement") &&
+        ct.includes("Oct 19 – Nov 15, 2026") &&
+        ct.includes("Round trip time p75 145 ms") &&
+        (await cruxSection().locator("svg.crux-spark").count()) === 1,
+      ct.slice(0, 300),
+    );
+    await shot("inspect-performance-crux");
+    check(
+      "crux: the request names the URL and phone, the key only in a header",
+      first?.body.url === `${CRUX_HOST}/product` && first.body.formFactor === "PHONE" && cruxCalls.every((c) => !c.url.includes("key=")),
+      JSON.stringify(first?.body),
+    );
+
+    await cruxSection().getByRole("button", { name: "Desktop", exact: true }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "crux: the device toggle asks for desktop",
+      cruxCalls.some((c) => c.body.formFactor === "DESKTOP"),
+    );
+
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).first().click();
+    await panel.waitForTimeout(300);
+    const cruxMd = await panel.evaluate(() => window.__copied.at(-1) ?? "");
+    check(
+      "crux: Copy for agent includes the field p75",
+      cruxMd.includes("### Field data (CrUX)") && cruxMd.includes("- LCP p75 2.38 s (good)") && !cruxMd.includes(CRUX_KEY),
+      cruxMd.slice(0, 200),
+    );
+
+    await site.goto(`${CRUX_HOST}/empty`);
+    await cruxSection()
+      .getByText("No field data for this URL")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    ct = await cruxText();
+    check(
+      "crux: a URL without data falls back to its origin",
+      ct.includes(`No field data for this URL, showing the origin (${CRUX_HOST})`) && ct.includes("2.38 s"),
+      ct.slice(0, 200),
+    );
+
+    await context.unroute("https://chromeuxreport.googleapis.com/**");
+    await context.unroute(`${CRUX_HOST}/**`);
+    await site.goto(`${base}/`);
+  }
+  // --- end CrUX field data ---
+
+  // ---- DevTools panel › GraphQL (issue #28) ----
+  // Playwright cannot open Chrome DevTools, so devtools-panel.html runs as a page with a stub of
+  // chrome.devtools.network: the HAR entries are fixed, their response bodies come from the
+  // fixture server's /graphql endpoint through getContent(), like the real API hands them out.
+  {
+    const dt = await context.newPage();
+    dt.on("pageerror", (e) => extErrors.push(`devtools pageerror: ${e.message}`));
+    dt.on(
+      "console",
+      (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && extErrors.push(`devtools console: ${m.text()}`),
+    );
+    await dt.addInitScript((origin) => {
+      const entry = (method, path, body) => {
+        const url = origin + path;
+        return {
+          request: {
+            method,
+            url,
+            headers: [{ name: "Content-Type", value: "application/json" }],
+            queryString: [],
+            ...(body ? { postData: { mimeType: "application/json", text: body } } : {}),
+          },
+          response: {
+            status: 200,
+            statusText: "OK",
+            headers: [{ name: "content-type", value: "application/json" }],
+            content: { size: 120, mimeType: "application/json" },
+            _transferSize: 321,
+          },
+          time: 42,
+          startedDateTime: new Date().toISOString(),
+          _resourceType: "fetch",
+          getContent(cb) {
+            fetch(url, { method, headers: body ? { "content-type": "application/json" } : {}, body })
+              .then((r) => r.text())
+              .then((t) => cb(t, ""));
+          },
+        };
+      };
+      const persisted = new URLSearchParams({
+        operationName: "Feed",
+        variables: "{}",
+        extensions: JSON.stringify({
+          persistedQuery: { version: 1, sha256Hash: "ecf4edb46db40b5132295c0291d62fb65d6759a9eedfa4d5d612dd5ec54a6b38" },
+        }),
+      });
+      const entries = [
+        entry("GET", "/api/posts/1"),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify({
+            operationName: "GetUser",
+            query: "query GetUser($id: ID!) { user(id: $id) { id name } }",
+            variables: { id: "7" },
+          }),
+        ),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify([{ query: "query ListPosts { posts { id title } }" }, { query: "mutation { like(id: 1) { ok } }" }]),
+        ),
+        entry("GET", `/graphql?${persisted}`),
+      ];
+      window.__pushHar = (method, path, body) => window.__finished?.(entry(method, path, body));
+      const noop = { addListener() {}, removeListener() {} };
+      const devtools = {
+        inspectedWindow: { tabId: -1 },
+        network: {
+          getHAR: (cb) => setTimeout(() => cb({ entries: entries.map((e) => ({ ...e })) }), 0),
+          onRequestFinished: { addListener: (f) => (window.__finished = f), removeListener() {} },
+          onNavigated: noop,
+        },
+      };
+      // Chromium exposes both `chrome` and a separate `browser` namespace; wxt/browser reads the latter.
+      for (const ns of [globalThis.chrome, globalThis.browser])
+        if (ns) Object.defineProperty(ns, "devtools", { configurable: true, value: devtools });
+    }, base);
+    await dt.setViewportSize({ width: 1100, height: 800 });
+    await dt.goto(`chrome-extension://${id}/devtools-panel.html`);
+    await dt.getByRole("button", { name: /^GraphQL/ }).waitFor();
+    await dt.evaluate(() =>
+      window.__pushHar("POST", "/graphql", JSON.stringify({ query: "mutation SaveDraft($t: String) { saveDraft(title: $t) { id } }" })),
+    );
+    await dt.waitForTimeout(300);
+    const gqlTab = dt.getByRole("button", { name: /^GraphQL/ });
+    check(
+      "devtools graphql: the view counts the operations, live ones included",
+      (await gqlTab.innerText()).replace(/\s+/g, "") === "GraphQL5",
+    );
+    await gqlTab.click();
+    await dt.waitForTimeout(800);
+    const listText = await dt.locator(".gql-list").innerText();
+    check(
+      "devtools graphql: one row per operation with type, batch position and errors",
+      ["GetUser", "ListPosts", "(anonymous)", "Feed", "SaveDraft"].every((n) => listText.includes(n)) &&
+        !listText.includes("/api/posts/1") &&
+        listText.includes("batch 2/2") &&
+        (await dt.locator(".gql-list .pill.t-bad", { hasText: "1 error" }).count()) === 2 &&
+        (await dt.locator(".gql-list .pill.gql-persisted").count()) === 1 &&
+        (await dt.locator(".gql-list .pill.gql-mutation").count()) === 2,
+      listText.replace(/\s+/g, " ").slice(0, 300),
+    );
+    await dt.getByLabel("Operation type").selectOption("mutation");
+    const mutations = await dt.locator(".gql-list tr").count();
+    await dt.getByLabel("Operation type").selectOption("all");
+    await dt.getByLabel("Filter operation name").fill("user");
+    const named = await dt.locator(".gql-list tr").allInnerTexts();
+    check(
+      "devtools graphql: filters by type and by name",
+      mutations === 2 && named.length === 1 && named[0].includes("GetUser"),
+      `${mutations}`,
+    );
+    await dt.getByLabel("Filter operation name").fill("");
+    await dt.locator(".gql-list tr", { hasText: "GetUser" }).click();
+    await dt.waitForTimeout(500);
+    let detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: an operation shows its query pretty-printed, variables and response data",
+      detail.includes("query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name") &&
+        /id:\s*"7"/.test(detail) &&
+        detail.includes('"Ada"') &&
+        detail.includes("Request headers"),
+      detail.slice(0, 300),
+    );
+    await dt.evaluate(() => {
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied = s;
+      };
+    });
+    await dt.getByRole("button", { name: "Copy as cURL" }).click();
+    await dt.waitForTimeout(200);
+    const curl = await dt.evaluate(() => window.__copied ?? "");
+    await dt.getByRole("button", { name: "Copy query" }).click();
+    await dt.waitForTimeout(200);
+    const copiedQuery = await dt.evaluate(() => window.__copied ?? "");
+    check(
+      "devtools graphql: copy as cURL replays the request, copy query gives the pretty document",
+      curl.startsWith(`curl '${base}/graphql'`) && curl.includes("--data-raw") && copiedQuery.startsWith("query GetUser($id: ID!) {\n"),
+      curl.slice(0, 120),
+    );
+    await dt.locator(".gql-list tr", { hasText: "(anonymous)" }).click();
+    await dt.waitForTimeout(500);
+    const errorsText = await dt
+      .locator(".gql-errors")
+      .innerText()
+      .catch(() => "");
+    check(
+      "devtools graphql: a batched operation gets its own response, errors highlighted with path and code",
+      errorsText.includes("Not authorized") && errorsText.includes("like") && errorsText.includes("FORBIDDEN"),
+      errorsText,
+    );
+    await dt.locator(".gql-list tr", { hasText: "Feed" }).click();
+    await dt.waitForTimeout(500);
+    detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: a persisted query shows its hash and the response",
+      detail.includes("Persisted query") && detail.includes("ecf4edb46db40b51") && detail.includes("feed") && detail.includes("extensions"),
+      detail.slice(0, 300),
+    );
+    check(
+      "devtools graphql: WebSocket subscriptions are called out as outside the HAR",
+      (await dt.locator(".gql-hint").innerText()).includes("WebSocket"),
+    );
+    await dt.close();
+  }
+  // ---- end DevTools panel › GraphQL ----
 
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
 } catch (e) {
