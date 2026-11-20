@@ -1896,6 +1896,97 @@ try {
     `${webmcpFirst.split("\n")[0]} | ${llmsFirst.split("\n")[0]}`,
   );
 
+  // Redirect path: the tab's navigations hop by hop (server, meta refresh, JavaScript), then the URL tracer.
+  // Self-contained: leaves the pinned tab back on the home page.
+  {
+    const tabPath = panel.locator("section", { hasText: "Redirect path" }).first();
+    const hopsOf = async (section) => (await section.locator(".redir-hop").allInnerTexts()).map((h) => h.replace(/\s+/g, " "));
+    const waitHops = (section, n) =>
+      panel
+        .waitForFunction(
+          ([title, count]) =>
+            [...document.querySelectorAll("section")].some(
+              (s) => s.querySelector("h2")?.textContent?.startsWith(title) && s.querySelectorAll(".redir-hop").length === count,
+            ),
+          [section, n],
+          { timeout: 6000 },
+        )
+        .catch(() => undefined);
+    await site.goto(`${base}/r1`);
+    await open("Network", "Redirect path");
+    await waitHops("Redirect path", 3);
+    let hops = await hopsOf(tabPath);
+    check(
+      "redirect path: the tab's navigation hop by hop, 301 then 302 then 200",
+      hops.length === 3 &&
+        /301 Moved Permanently .*\/r1\b.*→ .*\/r2\b/.test(hops[0]) &&
+        /302 Found .*\/r2\b.*→ .*\/final\b/.test(hops[1]) &&
+        /200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    t = await tabPath.innerText();
+    check(
+      "redirect path: summary and findings",
+      /2 redirects · 3 hops/.test(t) && t.includes("2 redirects before the page."),
+      t.slice(0, 200),
+    );
+    await tabPath.locator(".redir-hop").first().locator("summary").click();
+    check(
+      "redirect path: a hop's response headers expand",
+      /x-hop\s*first/.test(await tabPath.locator(".redir-hop").first().locator(".redir-headers").innerText()),
+    );
+    await site.goto(`${base}/meta`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a meta refresh joins the chain as a client hop",
+      hops.length === 2 &&
+        /200 OK .*\/meta\b.*meta refresh.*→ .*\/final\b/.test(hops[0]) &&
+        (await tabPath.innerText()).includes("Client-side redirect"),
+      hops.join(" | "),
+    );
+    await site.goto(`${base}/js-redirect`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a script redirect is named as JavaScript (heuristic)",
+      hops.length === 2 && /\/js-redirect\b.*JavaScript redirect \(heuristic/.test(hops[0]),
+      hops.join(" | "),
+    );
+    check("redirect path: earlier navigations stay listed", (await text()).includes("Earlier in this tab"));
+    await shot("redirect-path");
+
+    const trace = panel.locator("section", { hasText: "Trace a URL" }).first();
+    const runTrace = async (path, n) => {
+      await trace.getByLabel("URL to trace").fill(`${base}${path}`);
+      await trace.getByRole("button", { name: "Trace" }).click();
+      await waitHops("Trace a URL", n);
+      return hopsOf(trace);
+    };
+    hops = await runTrace("/r1", 3);
+    check(
+      "redirect path: Trace follows a URL's redirects from devkit",
+      hops.length === 3 && /^1 301 /.test(hops[0]) && /^2 302 /.test(hops[1]) && /^3 200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/meta", 2);
+    check(
+      "redirect path: Trace follows a meta refresh",
+      hops.length === 2 && /meta refresh.*→ .*\/final\b/.test(hops[0]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/loop-a", 21);
+    t = await trace.innerText();
+    check(
+      "redirect path: Trace stops a redirect loop at 20 redirects",
+      hops.length === 21 && t.includes("Redirect loop") && t.includes("Too many redirects") && t.includes("ERR_TOO_MANY_REDIRECTS"),
+      `${hops.length} hops`,
+    );
+    await site.goto(`${base}/`);
+  }
+
   // JSON page viewer, on demand: the palette action formats the pinned tab.
   const jsonTab = await context.newPage();
   const tabOf = (u) => sw.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, u);

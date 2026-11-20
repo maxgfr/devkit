@@ -379,6 +379,21 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/api/plain") return res.writeHead(200, { "content-type": "text/plain" }).end('{"plain":true,"items":[1,2]}');
   if (IMAGES[url.pathname])
     return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
+  // Redirect path: /r1 → 301 → /r2 → 302 → /final, a meta refresh to /final, and a loop.
+  if (url.pathname === "/r1") return res.writeHead(301, { location: "/r2", "x-hop": "first" }).end();
+  if (url.pathname === "/r2") return res.writeHead(302, { location: "/final" }).end();
+  if (url.pathname === "/final")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end("<!doctype html><title>Final</title><h1>Final page</h1>");
+  if (url.pathname === "/meta")
+    return res
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end('<!doctype html><title>Moving</title><meta http-equiv="refresh" content="0; url=/final"><p>Moving…</p>');
+  if (url.pathname === "/js-redirect")
+    return res
+      .writeHead(200, { "content-type": "text/html; charset=utf-8" })
+      .end('<!doctype html><title>Moving</title><script>setTimeout(() => location.replace("/final"), 50)</script>');
+  if (url.pathname === "/loop-a") return res.writeHead(302, { location: "/loop-b" }).end();
+  if (url.pathname === "/loop-b") return res.writeHead(302, { location: "/loop-a" }).end();
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");
   if (url.pathname === "/robots.txt")
     return res
