@@ -112,6 +112,14 @@
     "keywords": "ruler spacing distance gap padding margin box model px pixel dimensions"
   },
   {
+    "id": "format-json",
+    "kind": "action",
+    "category": "utils",
+    "title": "Format this JSON page",
+    "description": "Collapsible tree, filter, copy paths and download for the JSON document in this tab",
+    "keywords": "json formatter pretty viewer beautify api response tree"
+  },
+  {
     "id": "copy-markdown-link",
     "kind": "action",
     "category": "utils",
