@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { cachingReport, securityReport } from "../src/lib/headers";
+import { cachingReport, filterHeaders, headersTextReport, securityReport } from "../src/lib/headers";
+
+describe("response headers list", () => {
+  const f = {
+    status: 200,
+    url: "https://ex.com/",
+    redirected: false,
+    ms: 42,
+    headers: { server: "nginx", "content-type": "text/html", vary: "Accept" },
+  };
+  it("filters by name or value", () => {
+    expect(filterHeaders(f.headers, "").map(([k]) => k)).toEqual(["content-type", "server", "vary"]);
+    expect(filterHeaders(f.headers, "NGINX")).toEqual([["server", "nginx"]]);
+    expect(filterHeaders(f.headers, "type")).toEqual([["content-type", "text/html"]]);
+  });
+  it("writes a report for people", () => {
+    const md = headersTextReport(f);
+    expect(md).toMatch(/^# Response headers: https:\/\/ex.com\/\n\nHTTP 200 · 42 ms · security grade [A-F]/);
+    expect(md).toContain("## Response headers (3)\n\ncontent-type: text/html\nserver: nginx\nvary: Accept");
+    expect(md).toContain("## Caching & delivery");
+  });
+});
 
 describe("security headers", () => {
   it("grades a hardened response A", () => {

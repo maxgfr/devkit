@@ -66,8 +66,9 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "SEO & meta",
     short: "SEO",
-    description: "Title, description, canonical, Open Graph, headings",
-    keywords: "meta tags og twitter card",
+    description: "Meta lengths, Open Graph / Twitter checklist and share previews, hreflang, indexability, headings",
+    keywords:
+      "meta tags og open graph twitter card social share preview facebook linkedin whatsapp slack hreflang indexability noindex alt links words",
   },
   {
     id: "headings",
@@ -189,8 +190,8 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "Open in external tools",
     short: "External",
-    description: "PageSpeed, validators, SSL Labs, Wayback…",
-    keywords: "pagespeed lighthouse validator w3c ssl",
+    description: "PageSpeed, GTmetrix, W3C, WAVE, Facebook and LinkedIn debuggers, Ahrefs, Sistrix, WHOIS…",
+    keywords: "pagespeed lighthouse gtmetrix validator w3c css wave facebook debugger linkedin post inspector ahrefs sistrix whois ssl",
   },
 
   {

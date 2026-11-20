@@ -17,7 +17,7 @@ import { auditMarkdown } from "../../lib/a11y";
 import { collectSecretSources, collectSurface } from "../../lib/page/security";
 import { parseCsp, starterCsp } from "../../lib/security/csp";
 import { scanSecrets } from "../../lib/security/secrets";
-import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
+import { cachingReport, fetchHeaders, filterHeaders, type HeaderFetch, headersTextReport, securityReport } from "../../lib/headers";
 import { headingIssues, headingsVerdict } from "../../lib/headings";
 import { runInTab } from "../../lib/inject";
 import { collectHeadings } from "../../lib/page/headings";
@@ -43,9 +43,18 @@ import { loadSchemaVocab, type SchemaVocab } from "../../lib/schema-vocab";
 import { collectFontsColors, collectLinks, collectMeta, collectPerf, collectTechSignals, type MetaSnapshot } from "../../lib/page/collect";
 import { clearErrors, ERROR_SCRIPT_IDS, installErrorCapture, readErrors } from "../../lib/page/errors";
 import { ALL_SITES, ensurePermission } from "../../lib/permissions";
-import { errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict, type Verdict } from "../../lib/report";
-import { seoReport, socialPreview } from "../../lib/seo";
-import { EXTERNAL_TOOLS, isAllowed, manifestChecks, parseRobots, parseSitemap } from "../../lib/site-files";
+import {
+  errorsVerdict,
+  jsonLdVerdict,
+  PRINT_REPORT_KEY,
+  type PrintReport,
+  printReportMarkdown,
+  securityVerdict,
+  seoVerdict,
+  type Verdict,
+} from "../../lib/report";
+import { seoReport } from "../../lib/seo";
+import { EXTERNAL_TOOLS, isAllowed, manifestChecks, parseRobots, parseSitemap, TOOL_GROUPS } from "../../lib/site-files";
 import { detectTech } from "../../lib/tech";
 import { contrast, parseColor, toHex } from "../../lib/utils/color";
 import {
@@ -184,15 +193,14 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const page = usePage();
   const toast = useToast();
   const [copying, setCopying] = useState(false);
-  /** Everything Overview measured, plus the in-page security reads (no extra request), as one fix list. */
-  const copyForAgent = async () => {
-    if (page.tabId === undefined) return;
-    setCopying(true);
-    try {
+  const [printing, setPrinting] = useState(false);
+  /** Everything Overview measured, plus the in-page security reads (no extra request), one part per area. */
+  const gatherParts = async (tabId: number): Promise<PagePart[]> => {
+    {
       const ctx = { url: page.url };
       const [surface, secretSources, vocab] = await Promise.all([
-        runInTab(page.tabId, collectSurface).catch(() => null),
-        runInTab(page.tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
+        runInTab(tabId, collectSurface).catch(() => null),
+        runInTab(tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
         loadSchemaVocab().catch(() => undefined),
       ]);
       const h = headers.data?.headers ?? {};
@@ -273,7 +281,14 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           missing: notRead(meta),
         },
       ];
-      const md = pageReportMarkdown(parts, {
+      return parts;
+    }
+  };
+  const copyForAgent = async () => {
+    if (page.tabId === undefined) return;
+    setCopying(true);
+    try {
+      const md = pageReportMarkdown(await gatherParts(page.tabId), {
         url: page.url,
         title: meta.data?.title,
         notCovered: [
@@ -290,6 +305,30 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
       toast(ok ? "Fix list for your agent copied." : "The clipboard refused the copy.", !ok);
     } finally {
       setCopying(false);
+    }
+  };
+  /** A print-ready page of the report in a new devkit tab (rendered locally; Chrome's dialog saves it as PDF). */
+  const printReport = async () => {
+    if (page.tabId === undefined) return;
+    setPrinting(true);
+    try {
+      const parts = await gatherParts(page.tabId);
+      const report: PrintReport = {
+        title: meta.data?.title?.trim() || page.url,
+        url: page.url,
+        date: new Date().toISOString(),
+        markdown: printReportMarkdown(
+          rows.map((r) => ({ label: r.label, verdict: r.verdict })),
+          parts,
+          { url: page.url, title: meta.data?.title, date: new Date().toLocaleString("en-GB") },
+        ),
+      };
+      await browser.storage.session.set({ [PRINT_REPORT_KEY]: report });
+      await browser.tabs.create({ url: browser.runtime.getURL("/print.html") });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setPrinting(false);
     }
   };
   const rows: { panel: string; label: string; state: { loading: boolean; error: unknown }; verdict: Verdict | null }[] = [
@@ -323,6 +362,15 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
         <>
           <Button size="small" busy={copying} disabled={!meta.data && !headers.data} onClick={copyForAgent}>
             Copy for agent
+          </Button>
+          <Button
+            size="small"
+            busy={printing}
+            disabled={!meta.data && !headers.data}
+            onClick={printReport}
+            title="Opens a print-ready page of the report; nothing is uploaded"
+          >
+            Print / Save as PDF
           </Button>
           <Button
             size="small"
@@ -434,92 +482,6 @@ export function Overview() {
   );
 }
 
-/** og:image of the social card; says so instead of showing a broken image when it is missing or does not load. */
-function SocialImage({ src }: { src: string | undefined }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (!src || failed === src) return <div className="social-noimg">{src ? `og:image does not load: ${src}` : "No og:image set."}</div>;
-  return <img src={src} alt="" onError={() => setFailed(src)} />;
-}
-
-export function Seo() {
-  const go = useNav();
-  const meta = useInPage(collectMeta);
-  const snap = meta.data;
-  const checks = useMemo(() => (snap ? seoReport(snap) : []), [snap]);
-  const agentMd = useMemo(() => (snap ? seoMarkdown(snap, { url: snap.url }) : ""), [snap]);
-  const social = snap ? socialPreview(snap) : null;
-  return (
-    <AccessGate>
-      <ErrorText error={meta.error} />
-      {snap ? (
-        <>
-          <Section
-            title="SEO checks"
-            actions={
-              <>
-                <Button size="small" onClick={meta.run}>
-                  Refresh
-                </Button>
-                <CopyButton text={agentMd} label="Copy for agent" />
-              </>
-            }
-          >
-            <Checks checks={checks} />
-          </Section>
-          {social ? (
-            <Section title="Social preview">
-              <div className="social">
-                <SocialImage src={social.image} />
-                <div className="body">
-                  <div className="site">{social.site}</div>
-                  <b>{social.title}</b>
-                  <div className="small muted">{social.description.slice(0, 200)}</div>
-                </div>
-              </div>
-            </Section>
-          ) : null}
-          <Section
-            title={`Headings (${snap.headings.length})`}
-            actions={
-              go ? (
-                <Button size="small" onClick={() => go({ panel: "headings" })}>
-                  Open the outline
-                </Button>
-              ) : null
-            }
-          >
-            {snap.headings.length ? (
-              <p className="small" style={{ margin: 0 }}>
-                {[1, 2, 3, 4, 5, 6]
-                  .map((l) => [l, snap.headings.filter((h) => h.level === l).length] as const)
-                  .filter(([, n]) => n)
-                  .map(([l, n]) => `h${l} ×${n}`)
-                  .join(" · ")}
-                {snap.headings[0] ? (
-                  <span className="muted">
-                    {" "}
-                    · first: h{snap.headings[0].level} "{snap.headings[0].text.slice(0, 60) || "(empty)"}"
-                  </span>
-                ) : null}
-              </p>
-            ) : (
-              <Empty>No heading.</Empty>
-            )}
-          </Section>
-          <Section title={`Meta tags (${snap.meta.length})`}>
-            <KV rows={snap.meta.map((m) => [m.key, m.value])} />
-          </Section>
-          <Section title={`Links in <head> (${snap.links.length})`}>
-            <KV rows={snap.links.map((l) => [`${l.rel}${l.hreflang ? ` (${l.hreflang})` : ""}${l.sizes ? ` ${l.sizes}` : ""}`, l.href])} />
-          </Section>
-        </>
-      ) : (
-        <Empty>{meta.loading ? "Reading the page…" : ""}</Empty>
-      )}
-    </AccessGate>
-  );
-}
-
 const STATUS_TEXT: Record<BlockStatus, string> = { valid: "Valid", warning: "Warning", error: "Error" };
 const STATUS_LEVEL = { valid: "good", warning: "warn", error: "bad" } as const;
 const MODE_TEXT: Record<ValidateMode, string> = { rich: "Rich Results", schema: "Schema.org" };
@@ -536,7 +498,7 @@ function blockVerdict(block: JsonLdBlock, mode: ValidateMode): Verdict {
 }
 
 /** Pressed-state chips for a small choice (validation mode, how blocks open). */
-function Choice<T extends string>({
+export function Choice<T extends string>({
   label,
   value,
   options,
@@ -867,8 +829,11 @@ export function Headers() {
   const headers = useHeaders();
   const sec = headers.data ? securityReport(headers.data.headers, headers.data.url) : null;
   const cache = headers.data ? cachingReport(headers.data.headers) : null;
-  const raw = headers.data ? Object.entries(headers.data.headers).sort(([a], [b]) => a.localeCompare(b)) : [];
+  const [query, setQuery] = useState("");
+  const raw = headers.data ? filterHeaders(headers.data.headers, "") : [];
+  const shown = headers.data ? filterHeaders(headers.data.headers, query) : [];
   const agentMd = useMemo(() => (headers.data ? headersMarkdown(headers.data, { url: page.url }) : ""), [headers.data, page.url]);
+  const report = useMemo(() => (headers.data ? headersTextReport(headers.data) : ""), [headers.data]);
   return (
     <AccessGate>
       <ErrorText error={headers.error} />
@@ -904,9 +869,32 @@ export function Headers() {
           <Section title="Caching & delivery">{cache ? <Checks checks={cache} /> : null}</Section>
           <Section
             title={`Response headers (${raw.length})`}
-            actions={<CopyButton text={raw.map(([k, v]) => `${k}: ${v}`).join("\n")} label="Copy all" />}
+            actions={
+              <>
+                <CopyButton text={raw.map(([k, v]) => `${k}: ${v}`).join("\n")} label="Copy all" />
+                <CopyButton text={report} label="Copy report" />
+              </>
+            }
           >
-            <KV rows={raw} />
+            <input
+              type="search"
+              placeholder="Search headers by name or value"
+              aria-label="Search headers"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query.trim() ? (
+              <p className="small muted" style={{ margin: 0 }}>
+                {shown.length} of {raw.length} match
+              </p>
+            ) : null}
+            {shown.length ? (
+              <KV
+                rows={shown.map(([k, v]) => [<Highlight key={k} text={k} query={query} />, <Highlight key={k} text={v} query={query} />])}
+              />
+            ) : (
+              <Empty>No header matches.</Empty>
+            )}
           </Section>
         </>
       ) : (
@@ -1590,7 +1578,7 @@ export function Fonts() {
   );
 }
 
-async function fetchText(url: string): Promise<{ status: number; text: string; type: string }> {
+export async function fetchText(url: string): Promise<{ status: number; text: string; type: string }> {
   const res = await fetch(url, { credentials: "omit", cache: "no-store" });
   return { status: res.status, text: await res.text(), type: res.headers.get("content-type") ?? "" };
 }
@@ -1766,17 +1754,42 @@ export function SiteFiles() {
 
 export function External() {
   const page = usePage();
+  const toast = useToast();
   if (!page.origin) return <Empty>Open a web page.</Empty>;
   return (
-    <Section title="Open this page in" hint={page.url}>
-      <div className="grid2">
-        {EXTERNAL_TOOLS.map((t) => (
-          <a key={t.name} className="action" href={t.url(page.url)} target="_blank" rel="noreferrer">
-            <strong>{t.name}</strong>
-            <span>{new URL(t.url(page.url)).host}</span>
-          </a>
-        ))}
-      </div>
-    </Section>
+    <>
+      <p className="muted small break" style={{ margin: 0 }}>
+        Open {page.url} in
+      </p>
+      {TOOL_GROUPS.map((group) => (
+        <Section key={group} title={group}>
+          <div className="grid2">
+            {EXTERNAL_TOOLS.filter((t) => t.group === group).map((t) => (
+              <a
+                key={t.name}
+                className="action"
+                href={t.url(page.url)}
+                target="_blank"
+                rel="noreferrer"
+                onClick={
+                  t.pasteUrl
+                    ? () => {
+                        copyText(page.url).then((ok) => ok && toast(`URL copied: paste it in ${t.name}.`));
+                      }
+                    : undefined
+                }
+              >
+                <strong>{t.name}</strong>
+                <span>
+                  {new URL(t.url(page.url)).host}
+                  {t.pasteUrl ? " · URL copied to paste" : ""}
+                  {t.note ? ` · ${t.note}` : ""}
+                </span>
+              </a>
+            ))}
+          </div>
+        </Section>
+      ))}
+    </>
   );
 }
