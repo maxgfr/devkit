@@ -2017,6 +2017,174 @@ try {
   check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
   await jsonTab.close();
 
+  // ---- DevTools panel › GraphQL (issue #28) ----
+  // Playwright cannot open Chrome DevTools, so devtools-panel.html runs as a page with a stub of
+  // chrome.devtools.network: the HAR entries are fixed, their response bodies come from the
+  // fixture server's /graphql endpoint through getContent(), like the real API hands them out.
+  {
+    const dt = await context.newPage();
+    dt.on("pageerror", (e) => extErrors.push(`devtools pageerror: ${e.message}`));
+    dt.on(
+      "console",
+      (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && extErrors.push(`devtools console: ${m.text()}`),
+    );
+    await dt.addInitScript((origin) => {
+      const entry = (method, path, body) => {
+        const url = origin + path;
+        return {
+          request: {
+            method,
+            url,
+            headers: [{ name: "Content-Type", value: "application/json" }],
+            queryString: [],
+            ...(body ? { postData: { mimeType: "application/json", text: body } } : {}),
+          },
+          response: {
+            status: 200,
+            statusText: "OK",
+            headers: [{ name: "content-type", value: "application/json" }],
+            content: { size: 120, mimeType: "application/json" },
+            _transferSize: 321,
+          },
+          time: 42,
+          startedDateTime: new Date().toISOString(),
+          _resourceType: "fetch",
+          getContent(cb) {
+            fetch(url, { method, headers: body ? { "content-type": "application/json" } : {}, body })
+              .then((r) => r.text())
+              .then((t) => cb(t, ""));
+          },
+        };
+      };
+      const persisted = new URLSearchParams({
+        operationName: "Feed",
+        variables: "{}",
+        extensions: JSON.stringify({
+          persistedQuery: { version: 1, sha256Hash: "ecf4edb46db40b5132295c0291d62fb65d6759a9eedfa4d5d612dd5ec54a6b38" },
+        }),
+      });
+      const entries = [
+        entry("GET", "/api/posts/1"),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify({
+            operationName: "GetUser",
+            query: "query GetUser($id: ID!) { user(id: $id) { id name } }",
+            variables: { id: "7" },
+          }),
+        ),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify([{ query: "query ListPosts { posts { id title } }" }, { query: "mutation { like(id: 1) { ok } }" }]),
+        ),
+        entry("GET", `/graphql?${persisted}`),
+      ];
+      window.__pushHar = (method, path, body) => window.__finished?.(entry(method, path, body));
+      const noop = { addListener() {}, removeListener() {} };
+      const devtools = {
+        inspectedWindow: { tabId: -1 },
+        network: {
+          getHAR: (cb) => setTimeout(() => cb({ entries: entries.map((e) => ({ ...e })) }), 0),
+          onRequestFinished: { addListener: (f) => (window.__finished = f), removeListener() {} },
+          onNavigated: noop,
+        },
+      };
+      // Chromium exposes both `chrome` and a separate `browser` namespace; wxt/browser reads the latter.
+      for (const ns of [globalThis.chrome, globalThis.browser])
+        if (ns) Object.defineProperty(ns, "devtools", { configurable: true, value: devtools });
+    }, base);
+    await dt.setViewportSize({ width: 1100, height: 800 });
+    await dt.goto(`chrome-extension://${id}/devtools-panel.html`);
+    await dt.getByRole("button", { name: /^GraphQL/ }).waitFor();
+    await dt.evaluate(() =>
+      window.__pushHar("POST", "/graphql", JSON.stringify({ query: "mutation SaveDraft($t: String) { saveDraft(title: $t) { id } }" })),
+    );
+    await dt.waitForTimeout(300);
+    const gqlTab = dt.getByRole("button", { name: /^GraphQL/ });
+    check(
+      "devtools graphql: the view counts the operations, live ones included",
+      (await gqlTab.innerText()).replace(/\s+/g, "") === "GraphQL5",
+    );
+    await gqlTab.click();
+    await dt.waitForTimeout(800);
+    const listText = await dt.locator(".gql-list").innerText();
+    check(
+      "devtools graphql: one row per operation with type, batch position and errors",
+      ["GetUser", "ListPosts", "(anonymous)", "Feed", "SaveDraft"].every((n) => listText.includes(n)) &&
+        !listText.includes("/api/posts/1") &&
+        listText.includes("batch 2/2") &&
+        (await dt.locator(".gql-list .pill.t-bad", { hasText: "1 error" }).count()) === 2 &&
+        (await dt.locator(".gql-list .pill.gql-persisted").count()) === 1 &&
+        (await dt.locator(".gql-list .pill.gql-mutation").count()) === 2,
+      listText.replace(/\s+/g, " ").slice(0, 300),
+    );
+    await dt.getByLabel("Operation type").selectOption("mutation");
+    const mutations = await dt.locator(".gql-list tr").count();
+    await dt.getByLabel("Operation type").selectOption("all");
+    await dt.getByLabel("Filter operation name").fill("user");
+    const named = await dt.locator(".gql-list tr").allInnerTexts();
+    check(
+      "devtools graphql: filters by type and by name",
+      mutations === 2 && named.length === 1 && named[0].includes("GetUser"),
+      `${mutations}`,
+    );
+    await dt.getByLabel("Filter operation name").fill("");
+    await dt.locator(".gql-list tr", { hasText: "GetUser" }).click();
+    await dt.waitForTimeout(500);
+    let detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: an operation shows its query pretty-printed, variables and response data",
+      detail.includes("query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name") &&
+        /id:\s*"7"/.test(detail) &&
+        detail.includes('"Ada"') &&
+        detail.includes("Request headers"),
+      detail.slice(0, 300),
+    );
+    await dt.evaluate(() => {
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied = s;
+      };
+    });
+    await dt.getByRole("button", { name: "Copy as cURL" }).click();
+    await dt.waitForTimeout(200);
+    const curl = await dt.evaluate(() => window.__copied ?? "");
+    await dt.getByRole("button", { name: "Copy query" }).click();
+    await dt.waitForTimeout(200);
+    const copiedQuery = await dt.evaluate(() => window.__copied ?? "");
+    check(
+      "devtools graphql: copy as cURL replays the request, copy query gives the pretty document",
+      curl.startsWith(`curl '${base}/graphql'`) && curl.includes("--data-raw") && copiedQuery.startsWith("query GetUser($id: ID!) {\n"),
+      curl.slice(0, 120),
+    );
+    await dt.locator(".gql-list tr", { hasText: "(anonymous)" }).click();
+    await dt.waitForTimeout(500);
+    const errorsText = await dt
+      .locator(".gql-errors")
+      .innerText()
+      .catch(() => "");
+    check(
+      "devtools graphql: a batched operation gets its own response, errors highlighted with path and code",
+      errorsText.includes("Not authorized") && errorsText.includes("like") && errorsText.includes("FORBIDDEN"),
+      errorsText,
+    );
+    await dt.locator(".gql-list tr", { hasText: "Feed" }).click();
+    await dt.waitForTimeout(500);
+    detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: a persisted query shows its hash and the response",
+      detail.includes("Persisted query") && detail.includes("ecf4edb46db40b51") && detail.includes("feed") && detail.includes("extensions"),
+      detail.slice(0, 300),
+    );
+    check(
+      "devtools graphql: WebSocket subscriptions are called out as outside the HAR",
+      (await dt.locator(".gql-hint").innerText()).includes("WebSocket"),
+    );
+    await dt.close();
+  }
+  // ---- end DevTools panel › GraphQL ----
+
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
 } catch (e) {
   check("run completed", false, e instanceof Error ? e.stack : String(e));

@@ -423,6 +423,31 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
+  // GraphQL endpoint for the DevTools panel's GraphQL view: single, batched and persisted (GET) operations.
+  if (url.pathname === "/graphql") {
+    const answer = (op) => {
+      const doc = op?.query ?? "";
+      if (op?.operationName === "GetUser" || /query GetUser\b/.test(doc))
+        return { data: { user: { id: op.variables?.id ?? "1", name: "Ada" } } };
+      if (/query ListPosts\b/.test(doc)) return { data: { posts: [{ id: "p1", title: "Hello" }] } };
+      if (/^\s*mutation\s*\{\s*like\b/.test(doc))
+        return { data: { like: null }, errors: [{ message: "Not authorized", path: ["like"], extensions: { code: "FORBIDDEN" } }] };
+      if (op?.operationName === "Feed" && op?.extensions?.persistedQuery) return { data: { feed: [{ id: 1 }] }, extensions: { cost: 2 } };
+      return { errors: [{ message: `Unknown operation ${op?.operationName ?? "(anonymous)"}`, locations: [{ line: 1, column: 1 }] }] };
+    };
+    const reply = (payload) =>
+      res
+        .writeHead(200, { "content-type": "application/json", ...cors })
+        .end(JSON.stringify(Array.isArray(payload) ? payload.map(answer) : answer(payload)));
+    if (req.method === "GET") {
+      const json = (k) => (url.searchParams.has(k) ? JSON.parse(url.searchParams.get(k)) : undefined);
+      return reply({ operationName: url.searchParams.get("operationName"), variables: json("variables"), extensions: json("extensions") });
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => reply(JSON.parse(body || "{}")));
+    return;
+  }
   res.writeHead(404, { "content-type": "text/plain" }).end("not found");
 });
 server.listen(Number(process.argv[2] ?? 0), "127.0.0.1", () => console.log(`listening ${server.address().port}`));
