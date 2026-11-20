@@ -41,6 +41,12 @@
         <li>Your AI provider key, encrypted with a key kept in the extension's IndexedDB. It is never written to sync storage and never sent anywhere except to the provider it belongs to.</li>
         <li>Console errors captured from a page, kept in that page's memory and gone when it reloads or closes.</li>
         <li>
+          Redirect chains, once you allow Redirect path: the status, Location and response headers of each hop of your tabs' top-level
+          navigations, read through Chrome's webRequest and webNavigation APIs (read-only: nothing is blocked or changed), plus whether
+          each page has a meta refresh. The last five per tab are kept in Chrome's session storage, never sent anywhere, and gone when the
+          tab closes or the browser quits.
+        </li>
+        <li>
           Steps recorded for a bug report, only after you start the recorder: kept in Chrome's session storage for that tab, gone when the tab
           closes or the browser quits. Typed values are masked unless you turn them on; passwords, card numbers and hidden fields are never
           recorded.
@@ -60,7 +66,7 @@
         </li>
         <li>
           <strong>Page checks.</strong> The headers, link checker, robots.txt, sitemap and manifest tools request the current site's own URLs, from your
-          browser, as any visit would.
+          browser, as any visit would. "Trace a URL" in Redirect path requests the URL you enter and the redirects it answers with, the same way.
         </li>
         <li>
           <strong>Repository dependencies.</strong> On a GitHub or GitLab repository page, devkit reads its manifest files from that site with your
