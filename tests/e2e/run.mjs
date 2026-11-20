@@ -1110,7 +1110,148 @@ try {
     "headings: per-heading Ask AI sends the heading in focus",
     t.includes("Fix this heading") && t.includes("Heading in focus: Skipped level"),
   );
+
+  // Repo dependencies: a GitHub-like folder served locally (the page's meta tags say GitHub), registries faked.
+  await context.route("https://registry.npmjs.org/**", (route) => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1).replace(/\/latest$/, ""));
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ name, version: "9.9.9", description: `E2E description of ${name}` }),
+    });
+  });
+  await context.route("https://pypi.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ info: { summary: "E2E PyPI summary", version: "3.1.0" } }),
+    }),
+  );
+  await site.goto(`${base}/acme/shop/tree/main/web`);
+  await open("Inspect", "Repo dependencies");
+  await panel
+    .locator(".rd-row")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await panel
+    .locator(".rd-desc", { hasText: "E2E description of react" })
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "repo deps: the folder's package.json and requirements.txt, by kind, with versions",
+    t.includes("acme/shop/web") &&
+      t.includes("web/package.json") &&
+      t.includes("web/requirements.txt") &&
+      /Dependencies \(2\)[\s\S]*react[\s\S]*\^19\.0\.0/.test(t) &&
+      /Development dependencies \(1\)[\s\S]*vitest/.test(t) &&
+      /flask\s*==3\.0\.3/.test(t) &&
+      t.includes("extras: socks"),
+    t.match(/Repo dependencies[^\n]*/)?.[0],
+  );
+  check(
+    "repo deps: descriptions and latest versions from the registries",
+    t.includes("E2E description of react") && t.includes("E2E description of @tanstack/react-query") && t.includes("latest 9.9.9"),
+  );
+  check("repo deps: an unreadable manifest is reported", /Could not read\s*web\/Gemfile\s*\(needs a signed-in session/.test(t));
+  const scoped = await panel.locator(".rd-row", { hasText: "@tanstack/react-query" }).first();
+  const scopedLinks = await scoped.locator("a").evaluateAll((as) => as.map((a) => a.href));
+  check(
+    "repo deps: npm links encode scoped names",
+    scopedLinks.includes("https://www.npmjs.com/package/@tanstack/react-query") &&
+      scopedLinks.includes("https://packagephobia.com/result?p=%40tanstack%2Freact-query") &&
+      scopedLinks.includes("https://unpkg.com/@tanstack/react-query/"),
+    scopedLinks.join(" "),
+  );
+  check(
+    "repo deps: the manifest links to its file",
+    (await panel.locator(".section h2 a", { hasText: "web/package.json" }).getAttribute("href")) ===
+      `${base}/acme/shop/blob/main/web/package.json`,
+  );
+  await panel.getByPlaceholder("Filter by name, group or description").fill("flask");
+  t = await text();
+  check("repo deps: the filter keeps matching packages only", t.includes("flask") && !t.includes("vitest") && t.includes("1 of 2"));
+  await panel.getByPlaceholder("Filter by name, group or description").fill("");
+  const depsMd = await lastCopy(panel.getByRole("button", { name: "Copy as Markdown" }));
+  check(
+    "repo deps: Copy as Markdown lists packages with links and descriptions",
+    depsMd.startsWith("## Dependencies of acme/shop/web at main") &&
+      depsMd.includes("- [react](https://www.npmjs.com/package/react) `^19.0.0` — E2E description of react (latest 9.9.9)") &&
+      depsMd.includes("### [web/requirements.txt]"),
+    depsMd.split("\n")[0],
+  );
+  await shot("inspect-repo-deps");
+
+  // The in-page box: turned on from the panel (registers the content script), run on the fake page.
+  await panel.getByRole("button", { name: "Turn on" }).click();
+  await panel.waitForTimeout(500);
+  const registeredBox = await sw.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).map((s) => s.matches),
+  );
+  check(
+    "repo deps box: turning it on registers the content script for github.com and gitlab.com only",
+    JSON.stringify(registeredBox) === JSON.stringify([["https://github.com/*", "https://gitlab.com/*"]]),
+    JSON.stringify(registeredBox),
+  );
+  await sw.evaluate((id) => chrome.scripting.executeScript({ target: { tabId: id }, files: ["content-scripts/repo-deps.js"] }), tabId);
+  await site
+    .waitForFunction(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("react"), null, { timeout: 8000 })
+    .catch(() => undefined);
+  const box = await site.evaluate(() => {
+    const host = document.querySelector("devkit-repo-deps");
+    return { text: host?.shadowRoot?.textContent ?? "", after: host?.previousElementSibling?.id ?? "" };
+  });
+  check(
+    "repo deps box: injected below the README with the folder's packages",
+    box.after === "readme-box" && box.text.includes("Dependencies") && box.text.includes("web/package.json") && box.text.includes("flask"),
+    `after #${box.after}`,
+  );
+  // The panel's lookups are cached in storage.session: the background answers the box from there.
+  await site
+    .waitForFunction(
+      () => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("E2E description of react"),
+      null,
+      {
+        timeout: 8000,
+      },
+    )
+    .catch(() => undefined);
+  check(
+    "repo deps box: descriptions come through the background",
+    (await site.evaluate(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent ?? "")).includes(
+      "E2E description of react",
+    ),
+  );
+  // In-app navigation: the URL changes and the page re-renders without a reload.
+  await site.evaluate(async () => {
+    const html = await (await fetch("/acme/shop")).text();
+    history.pushState({}, "", "/acme/shop");
+    document.querySelector("main").replaceWith(new DOMParser().parseFromString(html, "text/html").querySelector("main"));
+  });
+  await site
+    .waitForFunction(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("express"), null, {
+      timeout: 8000,
+    })
+    .catch(() => undefined);
+  const rootBox = await site.evaluate(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent ?? "");
+  check(
+    "repo deps box: follows in-app navigation to the repository root",
+    rootBox.includes("express") && !rootBox.includes("vitest") && rootBox.includes("Workspaces"),
+  );
+  await panel.getByRole("button", { name: "Turn off" }).click();
+  await panel.waitForTimeout(400);
+  check(
+    "repo deps box: turning it off unregisters the content script",
+    (await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).length)) === 0,
+  );
+
   await site.goto(`${base}/`);
+  await panel.waitForTimeout(800);
+  t = await text();
+  check("repo deps: explains itself off repository pages", t.includes("Open a repository or folder page on GitHub or GitLab"));
 
   // Popup palette
   const popup = await context.newPage();

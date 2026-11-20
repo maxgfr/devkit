@@ -134,6 +134,37 @@ const HEADINGS_PAGE = `<!doctype html>
 </main>
 </body></html>`;
 
+// A GitHub-like repository for Repo dependencies: the pages carry GitHub's meta tags, branch picker and file
+// listing markup, and /raw/ redirects like github.com does (to another path here).
+const REPO_FILES = {
+  "package.json": JSON.stringify({
+    name: "acme-shop",
+    workspaces: ["web"],
+    dependencies: { express: "^5.1.0" },
+  }),
+  "web/package.json": JSON.stringify({
+    name: "@acme/web",
+    dependencies: { react: "^19.0.0", "@tanstack/react-query": "^5.0.0" },
+    devDependencies: { vitest: "^4.0.0" },
+  }),
+  "web/requirements.txt": "# API helpers\nflask==3.0.3\n-r base.txt\nrequests[socks]>=2.31 ; python_version >= '3.10'\n",
+};
+const repoPage = (dir) => {
+  const files = Object.keys(REPO_FILES).filter((p) => p.split("/").slice(0, -1).join("/") === dir);
+  const listed = [...files, ...(dir === "web" ? ["web/Gemfile"] : [])];
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>acme/shop</title>
+<meta property="og:site_name" content="GitHub"><meta name="octolytics-dimension-repository_nwo" content="acme/shop">
+</head><body><main id="js-repo-pjax-container">
+<button id="ref-picker-repos-header-ref-selector" type="button">main</button>
+<div id="files"><div data-testid="directory-content"><table aria-labelledby="folders-and-files">
+${listed.map((p) => `<tr><td><a class="Link--primary" href="/acme/shop/blob/main/${p}">${p.split("/").at(-1)}</a></td></tr>`).join("\n")}
+<tr><td><a href="/acme/shop/tree/main/web">web</a></td></tr>
+</table></div></div>
+<div id="readme-box"><div><article class="markdown-body"><h1>Acme shop</h1><p>The shop.</p></article></div></div>
+</main></body></html>`;
+};
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -152,6 +183,18 @@ const server = http.createServer((req, res) => {
   // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
   // back/forward cache: the Responsiveness panel must name both.
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/acme/shop" || url.pathname === "/acme/shop/tree/main/web")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(repoPage(url.pathname.endsWith("/web") ? "web" : ""));
+  if (url.pathname.startsWith("/acme/shop/raw/main/")) {
+    const path = url.pathname.slice("/acme/shop/raw/main/".length);
+    if (path === "web/Gemfile") return res.writeHead(403, { "content-type": "text/plain" }).end("forbidden");
+    if (!REPO_FILES[path]) return res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+    return res.writeHead(302, { location: `/raw-files/acme/shop/main/${path}` }).end();
+  }
+  if (url.pathname.startsWith("/raw-files/acme/shop/main/"))
+    return res
+      .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+      .end(REPO_FILES[url.pathname.slice("/raw-files/acme/shop/main/".length)] ?? "");
   if (url.pathname === "/slow.js")
     return res
       .writeHead(200, { "content-type": "text/javascript" })
