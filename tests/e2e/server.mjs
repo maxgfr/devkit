@@ -199,6 +199,20 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/.git/HEAD") return res.writeHead(200, { "content-type": "text/plain" }).end("ref: refs/heads/main\n");
   if (url.pathname === "/api/orders")
     return res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: "payment provider unavailable" }));
+  // JSON documents for the JSON page viewer: a valid one, a broken one, and JSON served as text/plain.
+  if (url.pathname === "/api/posts/1")
+    return res.writeHead(200, { "content-type": "application/json; charset=utf-8" }).end(
+      JSON.stringify({
+        userId: 1,
+        id: 1,
+        title: "sunt aut facere",
+        link: `${base}/ok`,
+        tags: ["a", "b", "c"],
+        author: { name: "Ada", address: { city: "London", geo: { lat: "51.5" } } },
+      }),
+    );
+  if (url.pathname === "/api/broken") return res.writeHead(200, { "content-type": "application/json" }).end('{\n  "a": 1,\n  "b": }');
+  if (url.pathname === "/api/plain") return res.writeHead(200, { "content-type": "text/plain" }).end('{"plain":true,"items":[1,2]}');
   if (IMAGES[url.pathname])
     return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
   if (url.pathname === "/ok") return res.writeHead(200, { "content-type": "text/plain" }).end("ok");

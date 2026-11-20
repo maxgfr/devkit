@@ -1144,6 +1144,78 @@ try {
       .join(" | "),
   );
 
+  // JSON page viewer, on demand: the palette action formats the pinned tab.
+  const jsonTab = await context.newPage();
+  const tabOf = (u) => sw.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, u);
+  const viewer = (p) => p.locator("#devkit-json-viewer");
+  const runFormat = async (tab) => {
+    const pal = await context.newPage();
+    pal.on("pageerror", (e) => extErrors.push(`palette pageerror: ${e.message}`));
+    await pal.goto(`chrome-extension://${id}/popup.html?tab=${tab}`);
+    await pal.getByLabel("Search commands").fill("json formatter");
+    const items = await pal.getByRole("option").allInnerTexts();
+    await pal.getByRole("option").filter({ hasText: "Format this JSON page" }).first().click();
+    const toastText = await pal
+      .locator(".toast")
+      .first()
+      .innerText({ timeout: 4000 })
+      .catch(() => "");
+    await pal.close().catch(() => undefined);
+    return { items, toast: toastText };
+  };
+  await jsonTab.goto(`${base}/api/posts/1`);
+  check(
+    "json viewer: off by default, the page stays as Chrome shows it",
+    (await viewer(jsonTab).count()) === 0 && (await jsonTab.locator("pre").count()) === 1,
+  );
+  let fmt = await runFormat(await tabOf(`${base}/api/posts/1`));
+  check(
+    "palette finds Format this JSON page",
+    fmt.items.some((r) => r.startsWith("Format this JSON page")),
+    fmt.items.map((r) => r.split("\n")[0]).join(" | "),
+  );
+  check("json viewer: the palette action formats the tab", fmt.toast === "JSON formatted.", fmt.toast);
+  await viewer(jsonTab)
+    .locator(".node[data-path='$.author.address.city']")
+    .waitFor({ timeout: 4000 })
+    .catch(() => undefined);
+  check(
+    "json viewer: tree with counts, colors and links",
+    (await viewer(jsonTab).locator(".node[data-path='$'] > .line .count").innerText()) === "{6}" &&
+      (await viewer(jsonTab).locator(".node[data-path='$.tags'] > .line .count").innerText()) === "[3]" &&
+      (await viewer(jsonTab).locator(".node[data-path='$.author.address.city'] .s").innerText()) === '"London"' &&
+      (await viewer(jsonTab).locator(".node[data-path='$.link'] a").getAttribute("href")) === `${base}/ok`,
+  );
+  await viewer(jsonTab).getByRole("button", { name: "Collapse all" }).click();
+  const authorToggle = viewer(jsonTab).locator(".node[data-path='$.author'] > .line .tog");
+  const collapsed = await authorToggle.getAttribute("aria-expanded");
+  await authorToggle.click();
+  check("json viewer: toggles collapse and expand", collapsed === "false" && (await authorToggle.getAttribute("aria-expanded")) === "true");
+  await viewer(jsonTab).getByLabel("Filter keys and values").fill("london");
+  await jsonTab.waitForTimeout(400);
+  check(
+    "json viewer: filter keeps the matches and their parents",
+    (await viewer(jsonTab).locator(".node.hit[data-path='$.author.address.city']").count()) === 1 &&
+      (await viewer(jsonTab).locator(".node[data-path='$.title']").count()) === 0,
+  );
+  fmt = await runFormat(await tabOf(`${base}/api/posts/1`));
+  check("json viewer: running it twice keeps one viewer", (await viewer(jsonTab).count()) === 1, fmt.toast);
+  if (shots) await jsonTab.screenshot({ path: join(shots, "json-viewer.png") });
+  await jsonTab.goto(`${base}/api/plain`);
+  fmt = await runFormat(await tabOf(`${base}/api/plain`));
+  check(
+    "json viewer: the palette action also formats JSON served as text/plain",
+    fmt.toast === "JSON formatted." && (await viewer(jsonTab).locator(".node[data-path='$.items']").count()) === 1,
+    fmt.toast,
+  );
+  await jsonTab.goto(`${base}/`);
+  fmt = await runFormat(await tabOf(`${base}/`));
+  check(
+    "json viewer: leaves HTML pages alone",
+    /not a JSON document \(text\/html\)/.test(fmt.toast) && (await viewer(jsonTab).count()) === 0,
+    fmt.toast,
+  );
+
   // Options
   const options = await context.newPage();
   options.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
@@ -1154,6 +1226,44 @@ try {
     "options page renders settings and permissions",
     ot.includes("AI settings") && ot.includes("Permissions") && ot.includes("Error capture"),
   );
+
+  // JSON page viewer, automatic: the Options toggle registers the content script.
+  const jsonSection = options.locator("section", { hasText: "Format JSON pages" }).last();
+  await jsonSection.getByRole("button", { name: "Turn on" }).click();
+  await options.waitForTimeout(400);
+  const registered = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  check(
+    "json viewer: Options turns on Format JSON pages",
+    registered.includes("devkit-json-viewer") && (await jsonSection.innerText()).includes("Format JSON pages: On"),
+    registered.join(", "),
+  );
+  await jsonTab.goto(`${base}/api/posts/1`);
+  await viewer(jsonTab)
+    .locator(".node[data-path='$.author']")
+    .waitFor({ timeout: 4000 })
+    .catch(() => undefined);
+  check(
+    "json viewer: JSON pages open formatted",
+    (await viewer(jsonTab).locator(".node[data-path='$.author.name'] .s").count()) === 1 &&
+      (await jsonTab.locator("pre").first().isHidden()),
+  );
+  await jsonTab.goto(`${base}/api/broken`);
+  const brokenBanner = await viewer(jsonTab)
+    .locator(".banner.error")
+    .innerText({ timeout: 4000 })
+    .catch(() => "");
+  check(
+    "json viewer: invalid JSON shows the raw text and where it breaks",
+    brokenBanner.startsWith("Invalid JSON at line 3, column 8") && (await viewer(jsonTab).locator(".raw").innerText()).includes('"b": }'),
+    brokenBanner,
+  );
+  await jsonTab.goto(`${base}/`);
+  check("json viewer: HTML pages are left alone", (await viewer(jsonTab).count()) === 0);
+  await jsonSection.getByRole("button", { name: "Turn off" }).click();
+  await options.waitForTimeout(400);
+  const afterOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
+  await jsonTab.close();
 
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
 } catch (e) {
