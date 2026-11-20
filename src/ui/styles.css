@@ -4235,6 +4235,44 @@ html:has(.print-page) {
   }
 }
 
+/* Field data (CrUX), src/ui/panels/crux.tsx: Web Vitals rows with a distribution bar and a p75 sparkline. */
+.crux-controls {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.crux-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 8px;
+}
+.crux-dist {
+  font-variant-numeric: tabular-nums;
+}
+.crux-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crux-spark {
+  flex: none;
+  overflow: visible;
+}
+.crux-spark polyline {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.crux-spark circle {
+  fill: var(--accent);
+}
+.crux-spark circle.last {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
 /* DevTools panel › GraphQL */
 .gql-list .gql-name {
   gap: 6px;

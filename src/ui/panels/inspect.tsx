@@ -120,6 +120,7 @@ import { type AsyncState, useAsync, useStored } from "../hooks";
 import { useNav } from "../nav";
 import { AccessGate, useInPage, usePage } from "../page";
 import { useA11yReport } from "./a11y";
+import { CruxField } from "./crux";
 import { useOverviewExtras } from "./overview-extras";
 
 export function useHeaders() {
@@ -970,7 +971,8 @@ export function Perf() {
   const nav = useMemo(() => (p?.navigation ? navigationPhases(p.navigation) : null), [p]);
   const navAxis = nav ? niceTicks(nav.end, 2) : null;
   const breakdown = useMemo(() => resourceBreakdown(p?.resources ?? []), [p]);
-  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url }) : ""), [p, page.url]);
+  const [field, setField] = useState<string>();
+  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url, field }) : ""), [p, page.url, field]);
   const waterfall = useMemo(
     () =>
       p ? waterfallLayout(p.resources, { sort, limit: all ? undefined : WATERFALL_ROWS, markers: nav?.markers.map((m) => m.at) }) : null,
@@ -1014,6 +1016,7 @@ export function Perf() {
               </span>
             </div>
           </Section>
+          <CruxField lab={p} onMarkdown={setField} />
           {p.navigation && nav && navAxis ? (
             <Section title="Navigation timing" hint="The document request, from navigation start.">
               <Timeline
