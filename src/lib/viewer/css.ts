@@ -28,6 +28,8 @@ export const CSS = `
 }
 .brand { font-weight: 600; color: var(--accent); margin-right: 4px; }
 .grow { flex: 1; }
+.controls { display: inline-flex; align-items: center; gap: 6px; }
+.controls:empty { display: none; }
 .meta { color: var(--fg-3); font-size: 12px; }
 button {
   font: inherit; color: inherit; background: var(--bg); cursor: pointer;
@@ -101,7 +103,7 @@ input[type="search"] {
 .feed-date { color: var(--fg-3); font-size: 12px; margin-left: 8px; }
 .feed-more { color: var(--fg-3); margin: 4px 0 0; }
 /* CSV */
-.table-wrap { overflow: auto; max-height: calc(100vh - var(--bar-h, 48px) - 16px); border: 1px solid var(--line); border-radius: 6px; }
+.table-wrap { width: fit-content; max-width: 100%; overflow: auto; max-height: calc(100vh - var(--bar-h, 48px) - 16px); border: 1px solid var(--line); border-radius: 6px; }
 .grid { border-collapse: separate; border-spacing: 0; font: 12px / 1.5 var(--mono); }
 .grid th, .grid td { padding: 3px 8px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); text-align: left; vertical-align: top; white-space: pre; max-width: 32em; overflow: hidden; text-overflow: ellipsis; }
 .grid thead th { position: sticky; top: 0; z-index: 2; background: var(--bg-2); padding: 0; }
