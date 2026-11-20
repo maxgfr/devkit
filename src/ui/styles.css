@@ -4290,3 +4290,65 @@ html:has(.print-page) {
 .gql-errors .pill {
   margin-left: 6px;
 }
+
+/* Served vs rendered */
+.rsrc-scroll {
+  overflow-x: auto;
+}
+table.rsrc-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 12px;
+}
+table.rsrc-table th,
+table.rsrc-table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+table.rsrc-table thead th {
+  color: var(--fg-3);
+  font-weight: 550;
+}
+table.rsrc-table tbody th {
+  color: var(--fg-2);
+  font-weight: 550;
+  white-space: nowrap;
+}
+table.rsrc-table td:last-child {
+  white-space: nowrap;
+}
+table.rsrc-table tr.rsrc-diff td:nth-child(3) {
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+}
+.rsrc-group summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 2px 0;
+}
+.rsrc-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 12px;
+  display: grid;
+  gap: 3px;
+}
+.rsrc-list li {
+  overflow-wrap: anywhere;
+}
+.rsrc-list .pill {
+  margin-left: 6px;
+}
+.rsrc-source {
+  padding: 0;
+  max-height: 480px;
+  overflow: auto;
+}
+.rsrc-source .rsrc-skip {
+  color: var(--fg-3);
+  background: var(--bg-3);
+  font-style: italic;
+}

@@ -1479,6 +1479,74 @@ try {
   check("landmarks: the chosen view is kept", (await viewChip("All").getAttribute("aria-pressed")) === "true");
   await viewChip("Headings").click();
 
+  // --- Served vs rendered (issue #23): JavaScript changes the title and adds a canonical, JSON-LD, og:image and links.
+  {
+    await site.goto(`${base}/rendered-source`);
+    await panel.waitForTimeout(600);
+    await open("Inspect", "Served vs rendered");
+    await panel
+      .locator("table.rsrc-table")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "rendered source: findings name what JavaScript added or changed",
+      [
+        "Canonical only exists after JavaScript",
+        "1 JSON-LD block injected by JavaScript",
+        "Title changed by JavaScript",
+        "3 links only after JavaScript",
+        "1 share tag only after JavaScript",
+      ].every((s) => t.includes(s)),
+      t.slice(0, 400),
+    );
+    check(
+      "rendered source: field table and added links listed",
+      /Title\s+Loading…\s+Rendered title from JS\s+changed by JS/.test(t) &&
+        t.includes("Links added by JavaScript") &&
+        t.includes(`${base}/js-only-1`) &&
+        t.includes("https://example.org/partner") &&
+        t.includes("JSON-LD added by JavaScript") &&
+        t.includes("Organization"),
+      t.match(/Title[^\n]*\n?[^\n]*/)?.[0],
+    );
+    const sourceText = () => panel.locator(".rsrc-source").innerText();
+    const diffText = await sourceText().catch(() => "");
+    check(
+      "rendered source: the source diff shows the injected canonical",
+      /\+\s+<link rel="canonical"/.test(diffText) && /−\s+<title>Loading…<\/title>/.test(diffText) && /\+\d+\s+−\d+/.test(await text()),
+      diffText.slice(0, 200),
+    );
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Served", exact: true }).click();
+    const servedText = await sourceText().catch(() => "");
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Rendered", exact: true }).click();
+    const renderedText = await sourceText().catch(() => "");
+    check(
+      "rendered source: served and rendered views",
+      servedText.includes("<title>Loading…</title>") &&
+        !servedText.includes('<link rel="canonical"') &&
+        renderedText.includes("<title>Rendered title from JS</title>") &&
+        renderedText.includes("JS link two</a>"),
+    );
+    await shot("inspect-rendered-source");
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    const rsMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "rendered source: Copy for agent with findings and fixes",
+      rsMd.startsWith("## Served HTML vs rendered DOM") &&
+        rsMd.includes("Canonical only exists after JavaScript") &&
+        rsMd.includes('Fix: Render `<link rel="canonical">` in the served HTML') &&
+        rsMd.includes("- JSON-LD added: Organization"),
+      rsMd.split("\n").slice(0, 3).join(" / "),
+    );
+  }
+  // --- end Served vs rendered
+
   // Repo dependencies: a GitHub-like folder served locally (the page's meta tags say GitHub), registries faked.
   await context.route("https://registry.npmjs.org/**", (route) => {
     const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1).replace(/\/latest$/, ""));
@@ -1840,6 +1908,66 @@ try {
   const readinessMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
   check("readiness: Copy for agent", readinessMd.startsWith("## Agent readiness") && readinessMd.includes("84/100"));
   await shot("inspect-agent-readiness");
+
+  // Overview and AI context: landmarks, the dataLayer (an e-mail address in it) and agent readiness on one page.
+  {
+    await site.goto(`${base}/overview-context`);
+    await panel.waitForTimeout(800);
+    await open("Inspect", "Overview");
+    await panel
+      .locator(".report-row", { hasText: "Agent readiness" })
+      .filter({ hasText: /\d+\/100/ })
+      .waitFor({ timeout: 10000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "overview: landmarks, dataLayer and agent readiness rows",
+      /Landmarks\s*5 landmarks · 1 to review/.test(t) &&
+        /dataLayer\s*1 event · Consent Mode: 1 issue · personal data found · 1 to fix, 1 to review/.test(t) &&
+        /Agent readiness\s*\d+\/100 · no WebMCP tool/.test(t),
+      [
+        t.match(/Landmarks[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/dataLayer[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/Agent readiness[^\n]*\n?[^\n]*/)?.[0],
+      ].join(" | "),
+    );
+    const overviewMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "overview: Copy for agent has the landmarks, dataLayer and readiness reports, the e-mail masked",
+      overviewMd.includes("| Landmarks | 1 warning | Inspect › Headings |") &&
+        overviewMd.includes("## Landmarks") &&
+        overviewMd.includes("## dataLayer (GA4, Consent Mode, GTM)") &&
+        overviewMd.includes("`dataLayer[3].user.email`") &&
+        overviewMd.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        !overviewMd.includes("sam.smith"),
+      overviewMd.split("\n")[2],
+    );
+    await panel.locator(".report-row", { hasText: "dataLayer" }).click();
+    await panel.waitForTimeout(600);
+    check("overview: the dataLayer row opens its panel", (await text()).includes("GTM-") || (await text()).includes("G-OVR1234"));
+
+    await open("AI", "Ask AI");
+    const newChat = panel.getByRole("button", { name: "New chat" });
+    if (await newChat.isVisible().catch(() => false)) await newChat.click();
+    await panel.waitForTimeout(300);
+    await action("Fix plan for the whole page");
+    await panel.waitForSelector(".msg.assistant .markdown", { timeout: 20_000 }).catch(() => undefined);
+    await panel.waitForTimeout(1500);
+    const sent = await (await fetch(`${base}/ai-last-context`)).text();
+    check(
+      "AI: the fix plan context has the landmarks, the masked dataLayer and agent readiness",
+      sent.includes("## Landmarks (devkit panel: Inspect › Headings)") &&
+        sent.includes("2 unnamed navigation") &&
+        sent.includes("## dataLayer (GA4, Consent Mode, GTM) (devkit panel: Inspect › dataLayer)") &&
+        sent.includes("`G-OVR1234`: GA4 measurement ID") &&
+        sent.includes("Consent Mode v2") &&
+        sent.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        /Score: \d+\/100\. A heuristic/.test(sent) &&
+        sent.includes("- llms.txt: present") &&
+        !sent.includes("sam.smith"),
+      `${sent.length} chars`,
+    );
+  }
   await site.goto(`${base}/`);
 
   // Popup palette
