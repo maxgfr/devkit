@@ -27,7 +27,7 @@
     </header>
     <main id="main" class="policy">
       <h1>Privacy policy</h1>
-      <p>Last updated: November 5, 2026. Applies to the devkit Chrome extension.</p>
+      <p>Last updated: November 20, 2026. Applies to the devkit Chrome extension.</p>
 
       <h2>The short version</h2>
       <p>
@@ -61,6 +61,11 @@
         <li>
           <strong>Page checks.</strong> The headers, link checker, robots.txt, sitemap and manifest tools request the current site's own URLs, from your
           browser, as any visit would.
+        </li>
+        <li>
+          <strong>Repository dependencies.</strong> On a GitHub or GitLab repository page, devkit reads its manifest files from that site with your
+          session, then asks the public registries (npm, PyPI, crates.io, Packagist, RubyGems) for each package's description by its name. These
+          requests carry package names only.
         </li>
         <li>
           <strong>External tools.</strong> "Open in external tools" opens a third-party site (PageSpeed Insights, Rich Results Test and others) with the
