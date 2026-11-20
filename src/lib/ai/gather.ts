@@ -8,6 +8,7 @@ import { REPORT_HANDOFF_KEY, type ReportHandoff } from "../bug-report";
 import { runInTab } from "../inject";
 import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
+import { loadSchemaVocab } from "../schema-vocab";
 import { collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
 import { readErrors } from "../page/errors";
 import { secretsMarkdown } from "../agent/security";
@@ -17,6 +18,13 @@ import { analyzeLibraries, libraryMarkdown, pageProbes, snapshotDetections, type
 import { scanSecrets } from "../security/secrets";
 import { seoReport } from "../seo";
 import { detectTech } from "../tech";
+import { fetchAgentFiles } from "../agent-files";
+import { analyzeDataLayer } from "../datalayer";
+import { readDataLayer } from "../page/datalayer";
+import { collectLandmarks } from "../page/landmarks";
+import { collectSemantics, collectWebMcp } from "../page/webmcp";
+import { type ReadinessInputs, readinessScore } from "../readiness";
+import { analyzeTools } from "../webmcp";
 import type { CapturedError, ContextPart, PageContext, PageText } from "./context";
 
 /** Reads the parts of the page an AI call needs. Parts that fail are left out, not fatal. */
@@ -36,8 +44,14 @@ export async function gatherContext(
       return undefined;
     }
   };
-  const needsMeta = want("meta") || want("seo") || want("jsonld");
+  const needsMeta = want("meta") || want("seo") || want("jsonld") || want("readiness");
   const needsHeaders = want("headers") || want("security") || want("tech");
+  // Started with the reads below, awaited after them.
+  const later = Promise.all([
+    want("landmarks") ? safe(() => readLandmarks(tabId)) : undefined,
+    want("datalayer") ? safe(() => runInTab(tabId, readDataLayer, [], "MAIN")) : undefined,
+    want("readiness") ? safe(() => readReadiness(tabId, url)) : undefined,
+  ]);
   const [page, selection, meta, signals, headers, perf, errors, a11y, screenshot, secrets, libraries, headings] = await Promise.all([
     want("text") ? safe(() => readPage(tabId)) : undefined,
     want("selection") ? (extra.selection ? Promise.resolve(extra.selection) : safe(() => runInTab(tabId, collectSelection))) : undefined,
@@ -61,11 +75,32 @@ export async function gatherContext(
     ctx.meta = meta;
     ctx.title ||= meta.title;
     if (want("seo")) ctx.seo = seoReport(meta);
-    if (want("jsonld")) ctx.jsonld = analyzeJsonLd(meta.jsonLd);
+    if (want("jsonld"))
+      ctx.jsonld = analyzeJsonLd(meta.jsonLd, { vocab: await safe(() => loadSchemaVocab(browser.runtime.getURL("/schema-vocab.json"))) });
   }
   if (headers) {
     ctx.headers = headers.headers;
     if (want("security")) ctx.security = securityReport(headers.headers, headers.url).checks;
+  }
+  const [landmarks, dataLayer, readiness] = await later;
+  if (landmarks) ctx.landmarks = landmarks;
+  // Masked here, before anything is rendered: the raw snapshot never leaves this function.
+  if (dataLayer) ctx.datalayer = analyzeDataLayer(dataLayer);
+  if (readiness) {
+    // As the Agent readiness panel scores it: the JSON-LD without the vocabulary check, the files when fetched.
+    const files = readiness.files;
+    const inputs: ReadinessInputs = {
+      jsonLd: meta ? analyzeJsonLd(meta.jsonLd) : null,
+      webmcp: readiness.webmcp,
+      tools: readiness.webmcp ? analyzeTools(readiness.webmcp.tools) : [],
+      semantics: readiness.semantics,
+      llms: files ? files.llms : undefined,
+      llmsFull: files ? files.llmsFull : undefined,
+      aiTxt: files ? files.aiTxt : undefined,
+      crawlers: files?.crawlers,
+      sitemap: files ? files.sitemap : undefined,
+    };
+    ctx.readiness = { score: readinessScore(inputs), inputs };
   }
   if (signals) ctx.tech = detectTech(signals, headers?.headers);
   if (perf) ctx.perf = perf;
@@ -114,6 +149,23 @@ async function readLibraries(tabId: number, url: string): Promise<string> {
         .replace(/^### Advisories/gm, "#### Advisories"),
     ),
   ].join("\n\n");
+}
+
+/** The page's landmarks, with its headings for the "outside every landmark" check. */
+async function readLandmarks(tabId: number): Promise<PageContext["landmarks"]> {
+  const [snapshot, headings] = await Promise.all([runInTab(tabId, collectLandmarks), runInTab(tabId, collectHeadings).catch(() => null)]);
+  return { snapshot, headings: headings?.headings };
+}
+
+/** What the Agent readiness score needs besides the JSON-LD: WebMCP (MAIN world), semantics, the origin's agent files. */
+async function readReadiness(tabId: number, url: string) {
+  const origin = /^https?:/.test(url) ? new URL(url).origin : "";
+  const [webmcp, semantics, files] = await Promise.all([
+    runInTab(tabId, collectWebMcp, [], "MAIN").catch(() => null),
+    runInTab(tabId, collectSemantics).catch(() => null),
+    origin ? fetchAgentFiles(origin, url).catch(() => null) : null,
+  ]);
+  return { webmcp, semantics, files };
 }
 
 /** The page's headings, and the one the Headings panel asked about (read once). */

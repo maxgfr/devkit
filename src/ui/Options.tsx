@@ -2,11 +2,14 @@ import { lazy, Suspense } from "react";
 import { browser } from "wxt/browser";
 import { ENVS_KEY } from "../lib/envs";
 import { loadRules, RULES_KEY, saveRules } from "../lib/dnr";
-import { ALL_SITES } from "../lib/permissions";
+import { JSON_VIEWER_FILE, JSON_VIEWER_SCRIPT_ID, JSON_VIEWER_SCRIPT_IDS } from "../lib/json-viewer";
+import { ALL_SITES, ensurePermission } from "../lib/permissions";
 import { Button, download, Notice, Section, ToastProvider, useToast } from "./components";
 import { useAsync } from "./hooks";
 import { disableErrorCapture, enableErrorCapture } from "./panels/inspect";
+import { CruxSettings } from "./panels/crux";
 import { ERROR_SCRIPT_IDS } from "../lib/page/errors";
+import { disableRepoDepsBox, enableRepoDepsBox, repoDepsBoxEnabled } from "../lib/repo-deps-box";
 
 const AiSettings = lazy(() => import("./panels/ai").then((m) => ({ default: m.AiSettings })));
 
@@ -14,6 +17,8 @@ const OPTIONAL = [
   ["browsingData", "Clear cache and site data"],
   ["cookies", "Cookie editor"],
   ["contentSettings", "Block JavaScript per site"],
+  ["webRequest", "Redirect path: watch navigations hop by hop (read-only)"],
+  ["webNavigation", "Redirect path: tell client redirects (meta refresh, JavaScript) apart"],
 ] as const;
 
 function Permissions() {
@@ -153,6 +158,92 @@ function Capture() {
   );
 }
 
+async function enableJsonViewer(): Promise<boolean> {
+  if (!(await ensurePermission({ origins: [ALL_SITES] }))) return false;
+  const existing = await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS });
+  if (existing.length) return true;
+  await browser.scripting.registerContentScripts([
+    {
+      id: JSON_VIEWER_SCRIPT_ID,
+      js: [JSON_VIEWER_FILE],
+      matches: ["<all_urls>"],
+      runAt: "document_end",
+      allFrames: false,
+      persistAcrossSessions: true,
+    },
+  ] as never);
+  return true;
+}
+
+async function disableJsonViewer(): Promise<void> {
+  const existing = await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS });
+  if (existing.length) await browser.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
+}
+
+function JsonViewer() {
+  const toast = useToast();
+  const state = useAsync(async () => (await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS })).length > 0, []);
+  return (
+    <Section
+      title="Data page viewer"
+      hint="Formats data documents opened in a tab: JSON (API responses, .json files) and YAML as a collapsible tree, XML, RSS and Atom as an element tree with a feed summary, CSV and TSV as a sortable table, JSON Lines as one tree per line; with a filter, copyable paths and a download. Without it, the palette's “Format this data page” formats the current tab on demand, with no site access."
+    >
+      <div className="row">
+        <span className="grow">Format data pages (JSON, XML, CSV, YAML): {state.data ? "On" : "Off"}</span>
+        {state.data ? (
+          <Button
+            onClick={async () => {
+              await disableJsonViewer();
+              state.run();
+            }}
+          >
+            Turn off
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={async () => ((await enableJsonViewer()) ? state.run() : toast("Needs access to all sites.", true))}
+          >
+            Turn on
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+function RepoDepsBox() {
+  const toast = useToast();
+  const state = useAsync(repoDepsBoxEnabled, []);
+  return (
+    <Section
+      title="Dependencies on GitHub / GitLab"
+      hint="Adds a Dependencies box below the README of github.com and gitlab.com repositories and folders, like npmhub: npm, PyPI, crates.io, Go, Packagist and RubyGems packages with their descriptions and links. Needs access to those two sites only."
+    >
+      <div className="row">
+        <span className="grow">{state.data ? "On" : "Off"}</span>
+        {state.data ? (
+          <Button
+            onClick={async () => {
+              await disableRepoDepsBox();
+              state.run();
+            }}
+          >
+            Turn off
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={async () => ((await enableRepoDepsBox()) ? state.run() : toast("Needs access to github.com and gitlab.com.", true))}
+          >
+            Turn on
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function Backup() {
   const toast = useToast();
   return (
@@ -207,8 +298,11 @@ export function OptionsApp() {
         <Suspense fallback={<p className="muted">Loading…</p>}>
           <AiSettings />
         </Suspense>
+        <CruxSettings />
         <Permissions />
         <Capture />
+        <JsonViewer />
+        <RepoDepsBox />
         <Backup />
         <Section title="Keyboard shortcuts">
           <Notice>

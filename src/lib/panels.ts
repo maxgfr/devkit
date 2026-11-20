@@ -41,7 +41,8 @@ export const PANELS: PanelDef[] = [
     category: "cache",
     title: "Cookies",
     description: "View, edit, export and import cookies, and audit their flags",
-    keywords: "cookie editor session audit flags httponly secure samesite",
+    keywords:
+      "cookie editor session audit flags httponly secure samesite cookies.txt netscape curl wget yt-dlp export header partitioned chips",
   },
   {
     id: "storage",
@@ -50,6 +51,22 @@ export const PANELS: PanelDef[] = [
     short: "Storage",
     description: "View and edit Web Storage keys",
     keywords: "localstorage sessionstorage",
+  },
+  {
+    id: "indexeddb",
+    category: "cache",
+    title: "IndexedDB",
+    short: "IndexedDB",
+    description: "Browse, edit and export IndexedDB databases, object stores and records",
+    keywords: "indexeddb idb database object store records index key range cursor dexie localforage offline pwa",
+  },
+  {
+    id: "cache-storage",
+    category: "cache",
+    title: "Cache Storage",
+    short: "Caches",
+    description: "Service worker caches: cached requests, headers and bodies, delete and export",
+    keywords: "cache storage caches service worker cache sw workbox pwa offline cached responses",
   },
 
   {
@@ -65,17 +82,28 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "SEO & meta",
     short: "SEO",
-    description: "Title, description, canonical, Open Graph, headings",
-    keywords: "meta tags og twitter card",
+    description: "Meta lengths, Open Graph / Twitter checklist and share previews, hreflang, indexability, headings",
+    keywords:
+      "meta tags og open graph twitter card social share preview facebook linkedin whatsapp slack hreflang indexability noindex alt links words",
   },
   {
     id: "headings",
     category: "inspect",
-    title: "Headings outline",
+    title: "Headings & landmarks",
     short: "Headings",
-    description: "h1–h6 as a tree: skipped levels, missing h1, hidden headings, badges in the page, table of contents, AI rewrite",
+    description:
+      "h1–h6 and ARIA landmarks as trees: skipped levels, missing h1 or main, hidden headings, badges in the page, table of contents, AI rewrite",
     keywords:
-      "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles",
+      "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles landmarks aria banner navigation main region contentinfo complementary",
+  },
+  {
+    id: "rendered-source",
+    category: "inspect",
+    title: "Served vs rendered",
+    short: "Rendered",
+    description: "The HTML the server sends next to the DOM after JavaScript: what crawlers that do not render miss, and a source diff",
+    keywords:
+      "view source rendered raw html view rendered source javascript seo ssr csr client-side rendering hydration diff crawler googlebot dom",
   },
   {
     id: "jsonld",
@@ -83,7 +111,25 @@ export const PANELS: PanelDef[] = [
     title: "Structured data (JSON-LD)",
     short: "JSON-LD",
     description: "Validate JSON-LD against schema.org and rich results",
-    keywords: "schema.org json-ld microdata rich results structured data",
+    keywords: "schema.org json-ld microdata rich results structured data vocabulary canonical x-robots-tag",
+  },
+  {
+    id: "datalayer",
+    category: "inspect",
+    title: "dataLayer inspector",
+    short: "dataLayer",
+    description: "GA4 events, Consent Mode and GTM containers: validation, PII warnings, snapshots",
+    keywords:
+      "datalayer data layer gtm ga4 google analytics tag manager gtag consent mode events ecommerce purchase transaction_id pii snapshot",
+  },
+  {
+    id: "consent",
+    category: "inspect",
+    title: "Consent check",
+    short: "Consent",
+    description: "What the site sets and loads before you answer its cookie banner, cross-checked with Consent Mode",
+    keywords:
+      "gdpr rgpd cookie banner consent cmp tracking eprivacy consent mode cookies before consent trackers onetrust cookiebot didomi axeptio tcf",
   },
   {
     id: "headers",
@@ -98,7 +144,7 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "Performance",
     description: "Web Vitals, navigation timeline, resource waterfall",
-    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources",
+    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources crux field data real users chrome ux report",
   },
   {
     id: "responsiveness",
@@ -149,12 +195,45 @@ export const PANELS: PanelDef[] = [
     keywords: "robots sitemap pwa manifest crawl",
   },
   {
+    id: "crawl",
+    category: "inspect",
+    title: "Site crawl",
+    short: "Crawl",
+    description: "SEO and JSON-LD checks over many pages from the sitemap: duplicates, missing tags, errors, noindex",
+    keywords: "crawl sitemap bulk multiple pages seo audit jsonld audit spider site audit duplicate titles screaming frog",
+  },
+  {
+    id: "repo-deps",
+    category: "inspect",
+    title: "Repo dependencies",
+    short: "Deps",
+    description: "Packages a GitHub or GitLab folder declares, with descriptions and registry links",
+    keywords:
+      "npmhub dependencies package.json npm pypi requirements pyproject poetry cargo crates go.mod composer packagist gemfile rubygems github gitlab repository",
+  },
+  {
+    id: "agent-tools",
+    category: "inspect",
+    title: "Agent tools (WebMCP)",
+    short: "Agent tools",
+    description: "WebMCP tools the page exposes to AI agents: schemas, annotations, risk, a safe tester",
+    keywords: "webmcp modelcontext model context agent tools mcp ai agents registertool toolname declarative tester",
+  },
+  {
+    id: "agent-readiness",
+    category: "inspect",
+    title: "Agent readiness",
+    short: "Readiness",
+    description: "0–100 score for AI agents, llms.txt, ai.txt, AI crawlers in robots.txt, sitemap",
+    keywords: "llms.txt ai.txt ai crawlers gptbot claudebot perplexitybot google-extended ccbot robots readiness score agents geo",
+  },
+  {
     id: "external",
     category: "inspect",
     title: "Open in external tools",
     short: "External",
-    description: "PageSpeed, validators, SSL Labs, Wayback…",
-    keywords: "pagespeed lighthouse validator w3c ssl",
+    description: "PageSpeed, GTmetrix, W3C, WAVE, Facebook and LinkedIn debuggers, Ahrefs, Sistrix, WHOIS…",
+    keywords: "pagespeed lighthouse gtmetrix validator w3c css wave facebook debugger linkedin post inspector ahrefs sistrix whois ssl",
   },
 
   {
@@ -283,6 +362,14 @@ export const PANELS: PanelDef[] = [
     title: "Environments",
     description: "Jump between local, staging and prod; ribbon on prod",
     keywords: "environment staging production localhost switch",
+  },
+  {
+    id: "redirects",
+    category: "network",
+    title: "Redirect path",
+    short: "Redirects",
+    description: "Every hop of a navigation: 301/302/307/308, meta refresh and JavaScript redirects, with status, Location and headers",
+    keywords: "redirect redirects 301 302 303 307 308 meta refresh javascript redirect chain hops location loop trace hsts redirect path",
   },
 
   {

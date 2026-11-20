@@ -125,11 +125,55 @@ try {
   check("SEO: Open the outline goes to the Headings panel", t.includes("Skipped level: h2 → h4") && t.includes("Page map"));
 
   await open("Inspect", "Structured data");
+  const jsonldMode = (name) => panel.locator('fieldset[aria-label="Validate"] button', { hasText: name }).click();
+  const expandFindings = async () => {
+    const closed = panel.locator("details.jl-findings:not([open]) > summary");
+    for (let n = await closed.count(); n > 0; n--) await closed.first().click();
+    await panel.waitForTimeout(200);
+  };
+  await jsonldMode("Rich Results");
+  await panel.getByText("X-Robots-Tag").waitFor();
+  await panel.waitForTimeout(400);
   t = await text();
   check("JSON-LD: invalid block reported with a line", /Invalid JSON, line \d+/.test(t), t.match(/Invalid JSON[^\n]*/)?.[0]);
-  check("JSON-LD: bad price reported", t.includes('price "€12,50" must be a plain number'));
+  check(
+    "JSON-LD: header shows canonical, robots and X-Robots-Tag",
+    /Canonical\s*http:\/\/127\.0\.0\.1:\d+\//.test(t) && /Robots\s*None/.test(t) && /X-Robots-Tag\s*noarchive/.test(t),
+    t.match(/X-Robots-Tag[^\n]*\n?[^\n]*/)?.[0],
+  );
+  check("JSON-LD: every block has a status badge", (await panel.locator(".jl-block").count()) === 2 && /Block #1\s*Error/.test(t));
+  check(
+    "JSON-LD: findings start collapsed below the code",
+    !t.includes('price "€12,50" must be a plain number') && t.includes("Findings:"),
+  );
+  await expandFindings();
+  t = await text();
+  check("JSON-LD: bad price reported with the fix", t.includes('price "€12,50" must be a plain number') && t.includes('write "12.50"'));
   check("JSON-LD: relative image reported", t.includes('image "/mug.jpg" is not an absolute URL'));
+  check(
+    "JSON-LD: Rich Results mode keeps vocabulary findings aside",
+    !t.includes("Did you mean") && /more findings? in Schema\.org mode/.test(t),
+  );
+  await jsonldMode("Schema.org");
+  await panel.waitForTimeout(300);
+  await expandFindings();
+  t = await text();
+  check(
+    "JSON-LD: Schema.org mode catches a property typo",
+    t.includes("descripton is not a Schema.org property. Did you mean description?"),
+    t.match(/descripton[^\n]*/)?.[0],
+  );
+  check("JSON-LD: Schema.org mode drops Google's recommendations", !t.includes("missing recommended"));
+  check("JSON-LD: vocabulary source shown", /Schema\.org \d+\.\d+ vocabulary/.test(t));
+  await panel.locator('input[aria-label="Search the blocks"]').fill("acme mug");
+  await panel.waitForTimeout(200);
+  check(
+    "JSON-LD: search filters blocks and marks matches",
+    (await panel.locator(".jl-block").count()) === 1 && (await panel.locator(".jl-block mark.hl").first().innerText()) === "Acme Mug",
+  );
+  await panel.locator('input[aria-label="Search the blocks"]').fill("");
   await shot("inspect-jsonld");
+  await jsonldMode("Rich Results");
 
   await open("Security", "Headers");
   await panel.waitForTimeout(500);
@@ -466,6 +510,69 @@ try {
   t = await text();
   check("cookie editor lists the cookie", t.includes("session") && t.includes("abc123"));
   check("cookie audit: session cookie readable by JS", t.includes("readable by JS") && t.includes("1 risky"));
+
+  // cookies.txt export: an HttpOnly cookie the page cannot set, then Copy in each format.
+  // Chrome caps expiry at 400 days: stay well under it.
+  const authExpiry = Math.floor(Date.now() / 1000) + 86400 * 30;
+  await sw.evaluate(
+    ([u, exp]) => chrome.cookies.set({ url: `${u}/`, name: "auth", value: "t0k3n", httpOnly: true, expirationDate: exp + 0.5 }),
+    [base, authExpiry],
+  );
+  await open("Cache", "Local & session storage");
+  await open("Cache", "Cookies");
+  await panel.evaluate(() => {
+    window.__cookieCopies = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__cookieCopies.push(s);
+    };
+  });
+  const exportBar = panel.locator(".cookie-export");
+  const copyCookies = async (format) => {
+    await exportBar.getByLabel("Export format").selectOption(format);
+    await exportBar.getByRole("button", { name: "Copy", exact: true }).click();
+    await panel.waitForTimeout(200);
+    return panel.evaluate(() => window.__cookieCopies.at(-1) ?? "");
+  };
+  const cookieLines = (text) => text.split("\n").filter((l) => l && !l.startsWith("# "));
+  const txt = await copyCookies("netscape");
+  const txtLines = cookieLines(txt);
+  check(
+    "cookies.txt: Netscape header, tab-separated lines, session expiry 0, #HttpOnly_ prefix",
+    txt.startsWith("# Netscape HTTP Cookie File\n") &&
+      txtLines.includes("127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tabc123") &&
+      txtLines.includes(`#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t${authExpiry}\tauth\tt0k3n`) &&
+      txt.endsWith("\n"),
+    JSON.stringify(txtLines),
+  );
+  const header = await copyCookies("header");
+  check("cookies: Cookie header string", /^(session=abc123; auth=t0k3n|auth=t0k3n; session=abc123)$/.test(header), header);
+  const json = await copyCookies("json");
+  check(
+    "cookies: JSON export of Chrome's cookie fields",
+    JSON.parse(json).some((c) => c.name === "auth" && c.httpOnly === true),
+  );
+  check(
+    "cookies: export format remembered",
+    (await sw.evaluate(() => chrome.storage.local.get("cookies.exportFormat")))["cookies.exportFormat"] === "json",
+  );
+  await exportBar.getByLabel("Export format").selectOption("netscape");
+  await panel.getByLabel("Filter cookies").fill("auth");
+  await panel.getByRole("checkbox", { name: "Table" }).check();
+  await panel.getByRole("checkbox", { name: "Nowrap" }).check();
+  const tableText = await panel.locator(".cookie-table").innerText();
+  check(
+    "cookies: Netscape table view, filtered, with nowrap",
+    tableText.includes("Include Subdomains") &&
+      tableText.includes(String(authExpiry)) &&
+      !tableText.includes("abc123") &&
+      (await panel.locator(".cookie-table-wrap.nowrap").count()) === 1,
+    tableText.replace(/\s+/g, " "),
+  );
+  await shot("cache-cookies-table");
+  check("cookies: export follows the filter", cookieLines(await copyCookies("netscape")).length === 1);
+  await panel.getByRole("checkbox", { name: "Table" }).uncheck();
+  await panel.getByLabel("Filter cookies").fill("");
+  await sw.evaluate((u) => chrome.cookies.remove({ url: `${u}/`, name: "auth" }), base);
 
   await site.evaluate(async () => {
     await new Promise((done, fail) => {
@@ -980,10 +1087,240 @@ try {
   check("utils: cron explained with next runs", t.includes("Next runs") && /15 minutes/.test(t));
   await shot("utils");
 
+  // On-page SEO: counters, Open Graph checklist and previews, hreflang, indexability, reports.
+  await site.goto(`${base}/seo`);
+  await open("Inspect", "SEO");
+  await panel.getByText("robots.txt (Googlebot)").waitFor();
+  await panel.waitForTimeout(800);
+  t = await text();
+  check(
+    "seo: counters strip (issues, words, headings, images with missing alt, internal · external links)",
+    /Issues\s*\d+/.test(t) &&
+      /Words\s*\d+/.test(t) &&
+      /Headings\s*3\b/.test(t) &&
+      /Images\s*3\s*1 ✕ alt/.test(t) &&
+      /Links\s*4\s*3 · 1/.test(t),
+    t.match(/Issues[\s\S]{0,120}/)?.[0]?.replace(/\s+/g, " "),
+  );
+  check(
+    "seo: issues list missing alt, og: tags written with name=, Open Graph extras and x-default",
+    t.includes("1 of 3 images has no alt text.") &&
+      t.includes('og:description use name="…"') &&
+      t.includes("Open Graph could still add: og:locale, og:image:alt.") &&
+      t.includes("No x-default entry — it is the fallback for languages you do not target."),
+  );
+  check("seo: meta lengths shown against their limits", /Title\s*58\/60/.test(t) && /Meta description\s*148\/160/.test(t));
+  check(
+    "seo: Open Graph checklist with essential, recommended and Twitter fallbacks",
+    t.includes("Social (Open Graph / Twitter) · 5/5") &&
+      /og:image:alt\s*missing/.test(t) &&
+      /twitter:title\s*fallback from og:title: Acme Mug guide/.test(t) &&
+      /twitter:card\s*summary_large_image/.test(t),
+  );
+  check(
+    "seo: hreflang table with this page, de_AT, en-UK, relative URL and the return-links note",
+    t.includes("hreflang (4)") &&
+      t.includes("this page") &&
+      t.includes("Use a hyphen, not an underscore: de-AT.") &&
+      t.includes('"UK" is not a country code: use en-GB.') &&
+      t.includes("Relative URL: Google needs a fully qualified URL") &&
+      t.includes("Return links from the other language versions can only be verified"),
+  );
+  check(
+    "seo: images and links stats",
+    /Missing alt\s*1/.test(t) &&
+      /Without title\s*2/.test(t) &&
+      /Internal\s*3/.test(t) &&
+      /External\s*1/.test(t) &&
+      /Unique\s*3/.test(t) &&
+      /Nofollow\s*1/.test(t),
+  );
+  check(
+    "seo: indexability from meta robots, robots.txt for Googlebot and HTTP status",
+    /Indexability\s*index, follow/.test(t) && /robots.txt \(Googlebot\)\s*Allowed/.test(t) && /HTTP status\s*200/.test(t),
+  );
+  const ogHits = async () => Number(await (await fetch(`${base}/og-hits`)).text());
+  check("seo: the share image is not requested before Load preview image", (await ogHits()) === 0);
+  await panel.getByRole("button", { name: "Load preview image" }).click();
+  await panel
+    .getByText(/800×800 is below 1200×630/)
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "seo: Load preview image measures the file (size, ratio, declared size)",
+    (await ogHits()) === 1 &&
+      t.includes("800×800 is below 1200×630") &&
+      t.includes("Aspect ratio 1.00:1") &&
+      t.includes("og:image:width/height say 1200×630, the file is 800×800."),
+  );
+  await panel.locator('fieldset[aria-label="Preview"] button', { hasText: "X (Twitter)" }).click();
+  await panel.waitForTimeout(200);
+  check("seo: X preview uses the large card at 2:1", (await text()).includes("Image ratio 2:1 · large image"));
+  await shot("inspect-seo");
+  await panel.locator('fieldset[aria-label="Preview"] button', { hasText: "LinkedIn" }).click();
+  await panel.locator("summary", { hasText: "All headings" }).click();
+  await panel.getByLabel("Search headings").fill("second");
+  await panel.waitForTimeout(200);
+  const headingItems = await panel.locator(".seo-headings li").allInnerTexts();
+  check(
+    "seo: heading search filters the list",
+    headingItems.length === 1 && headingItems[0].includes("Second thoughts"),
+    headingItems.join(" | "),
+  );
+  const seoReportText = await lastCopy(panel.getByRole("button", { name: "Copy report" }).first());
+  check(
+    "seo: Copy report gives a readable summary of every section",
+    seoReportText.startsWith("# SEO report: Acme Mug guide") &&
+      seoReportText.includes("## Social (Open Graph / Twitter) · 5/5") &&
+      seoReportText.includes("## hreflang (4)") &&
+      seoReportText.includes("- robots.txt (Googlebot): Allowed"),
+    seoReportText.split("\n")[2],
+  );
+  await site.goto(`${base}/`);
+  await open("Security", "Headers");
+  await panel.getByLabel("Search headers").waitFor();
+  await panel.getByLabel("Search headers").fill("express");
+  await panel.waitForTimeout(200);
+  t = await text();
+  check(
+    "headers: search filters the response headers by value",
+    /Response headers \(\d+\)/.test(t) && /\n1 of \d+ match/.test(t) && t.includes("x-powered-by") && !t.includes("speculation-rules"),
+  );
+  const headersReport = await lastCopy(panel.getByRole("button", { name: "Copy report" }));
+  check(
+    "headers: Copy report lists the checks and every header",
+    headersReport.includes("## Security headers") && headersReport.includes("x-powered-by: Express/4.18.2"),
+  );
+  await open("Inspect", "Open in external tools");
+  t = await text();
+  check(
+    "external: tools grouped, with GTmetrix, W3C CSS, WAVE, Facebook, LinkedIn, Ahrefs, Sistrix and WHOIS",
+    ["Structured data", "Performance", "Validation", "Social", "SEO & domain", "Security"].every((g) => t.includes(g)) &&
+      [
+        "GTmetrix",
+        "W3C CSS validator",
+        "WAVE accessibility",
+        "Facebook Sharing Debugger",
+        "LinkedIn Post Inspector",
+        "Ahrefs Site Explorer",
+        "Sistrix Visibility Index",
+        "WHOIS",
+      ].every((n) => t.includes(n)),
+  );
+  const waveHref = await panel.locator("a.action", { hasText: "WAVE accessibility" }).getAttribute("href");
+  check("external: WAVE gets the page URL", waveHref === `https://wave.webaim.org/report#/${base}/`, waveHref);
+  await context.addInitScript(() => {
+    window.print = () => {
+      window.__printed = true;
+    };
+  });
+  await open("Inspect", "Overview");
+  await panel.waitForTimeout(1500);
+  const [printTab] = await Promise.all([
+    context.waitForEvent("page", { timeout: 10000 }),
+    panel.getByRole("button", { name: "Print / Save as PDF" }).click(),
+  ]);
+  await printTab
+    .locator(".print-report h1")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await printTab.waitForTimeout(800);
+  const printText = await printTab
+    .locator("body")
+    .innerText()
+    .catch(() => "");
+  check(
+    "overview: Print / Save as PDF opens a print-ready report page and prints it",
+    printTab.url() === `chrome-extension://${id}/print.html` &&
+      printText.includes("Page report: Acme Mug") &&
+      printText.includes("nothing was uploaded") &&
+      (await printTab.locator(".print-report table").count()) > 0 &&
+      (await printTab.evaluate(() => window.__printed === true)),
+    printText.split("\n").slice(0, 2).join(" / "),
+  );
+  await printTab.close();
+
+  // Site crawl: localhost:<port> is a site of its own (server.mjs crawlRoute) with a robots.txt, a sitemap index
+  // of a plain and a gzipped sitemap, and pages with a duplicate title, a missing description, a noindex, a 404,
+  // a redirect and invalid JSON-LD. Host access comes from the granted <all_urls>, like the other optional ones.
+  {
+    const crawlBase = base.replace("127.0.0.1", "localhost");
+    await site.goto(`${crawlBase}/crawl/`);
+    await open("Inspect", "Site crawl");
+    await panel.getByRole("button", { name: "Find URLs" }).click();
+    const crawlButton = panel.getByRole("button", { name: /^Crawl \d+ pages$/ });
+    await crawlButton.waitFor({ timeout: 10_000 });
+    t = await text();
+    check(
+      "crawl: sitemap index and gzipped sitemap read, other host and robots.txt block skipped",
+      t.includes("9 URLs found in 3 sitemap(s)") &&
+        t.includes("1 on another host") &&
+        t.includes("1 blocked by robots.txt") &&
+        (await crawlButton.innerText()) === "Crawl 7 pages",
+      t.match(/\d+ URLs? found[^\n]*/)?.[0],
+    );
+    await crawlButton.click();
+    await panel.getByText(/Done\. 7 \/ 7 pages/).waitFor({ timeout: 20_000 });
+    t = await text();
+    check(
+      "crawl: findings across pages (error status, noindex in sitemap, JSON-LD errors, duplicate title, missing description, redirect, robots.txt)",
+      [
+        "Pages answering an error",
+        "noindex pages listed in the sitemap",
+        "Duplicate titles",
+        "Missing meta description",
+        "URLs that redirect",
+        "Sitemap URLs blocked by robots.txt (not fetched)",
+      ].every((s) => t.includes(s)) && /JSON-LD errors \((Rich Results|Schema\.org) checks\)/.test(t),
+    );
+    await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).locator("summary").click();
+    const dupText = await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).innerText();
+    check(
+      "crawl: duplicate titles grouped with their pages",
+      dupText.includes("Acme mugs") && dupText.includes("/crawl/a") && dupText.includes("/crawl/b"),
+      dupText.replace(/\n/g, " / "),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("errors");
+    await panel.waitForTimeout(200);
+    const errorRows = await panel.locator(".crawl-table tbody tr").allInnerTexts();
+    check(
+      "crawl: table filtered to the error status",
+      errorRows.length === 1 && errorRows[0].includes("/crawl/gone") && errorRows[0].includes("404"),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("all");
+    await panel.locator(".crawl-table tbody tr", { hasText: "/crawl/jsonld" }).click();
+    await panel.waitForTimeout(300);
+    t = await text();
+    check(
+      "crawl: a row opens the page detail with its JSON-LD types and errors",
+      /JSON-LD\s*Product · [1-9]\d* errors/.test(t) && t.includes("JSON-LD findings"),
+      t.match(/JSON-LD\s*Product[^\n]*/)?.[0],
+    );
+    const [csv] = await Promise.all([
+      panel.waitForEvent("download", { timeout: 10_000 }).catch(() => null),
+      panel.getByRole("button", { name: "CSV", exact: true }).click(),
+    ]);
+    const csvText = csv ? readFileSync(await csv.path(), "utf8") : "";
+    check(
+      "crawl: CSV export, one row per page",
+      csvText.startsWith("url,final_url,status") && csvText.trimEnd().split("\r\n").length === 8 && csvText.includes(",404,"),
+      csv?.suggestedFilename(),
+    );
+    const crawlMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }));
+    check(
+      "crawl: Copy for agent lists the findings with their paths",
+      crawlMd.startsWith("## Site crawl") && crawlMd.includes("`/crawl/gone`") && crawlMd.includes('"Acme mugs"'),
+      crawlMd.split("\n")[2],
+    );
+    await shot("inspect-crawl");
+    await site.goto(`${base}/`);
+  }
+
   // Headings: a page with every heading problem.
   await site.goto(`${base}/headings`);
   await panel.waitForTimeout(800);
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1051,7 +1388,7 @@ try {
   await panel.waitForTimeout(400);
   check("headings: leaving the panel removes the badges", !(await site.evaluate(() => Boolean(document.querySelector("devkit-headings")))));
 
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1096,7 +1433,7 @@ try {
     t.includes("Review the heading outline") && t.includes("Headings section: true") && t.includes("Section text sent: true"),
     t.match(/Headings section[^\n]*/)?.[0],
   );
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1110,7 +1447,802 @@ try {
     "headings: per-heading Ask AI sends the heading in focus",
     t.includes("Fix this heading") && t.includes("Heading in focus: Skipped level"),
   );
+
+  // Landmarks: GitHub's structure, in the Landmarks and All views of the same panel.
+  await site.goto(`${base}/landmarks`);
+  await panel.waitForTimeout(800);
+  await open("Inspect", "Headings & landmarks");
+  await panel
+    .locator(".hd-tree")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  const viewChip = (name) => panel.locator(".hd-views button", { hasText: name });
+  await viewChip("Landmarks").click();
+  await panel
+    .locator(".hd-role")
+    .first()
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  // The tree as text: one line per row, 4 spaces per level, "name [role]" as HeadingsMap shows it.
+  const lmTree = await panel.evaluate(() => {
+    const lines = [];
+    const walk = (ul, depth) => {
+      for (const li of ul.children) {
+        const role = li.querySelector(":scope > .hd-line .hd-role")?.textContent;
+        if (role) {
+          const name = li.querySelector(":scope > .hd-line .hd-text")?.textContent;
+          lines.push(`${"    ".repeat(depth)}${name === "unnamed" ? role : name} [${role}]`);
+        }
+        const sub = li.querySelector(":scope > ul.hd-tree");
+        if (sub) walk(sub, depth + 1);
+      }
+    };
+    const root = document.querySelector("main ul.hd-tree");
+    if (root) walk(root, 0);
+    return lines.join("\n");
+  });
+  check(
+    "landmarks: the Landmarks view lists GitHub's landmarks as HeadingsMap does",
+    lmTree ===
+      [
+        "Global navigation menu [banner]",
+        "    Breadcrumbs [navigation]",
+        "    Repository [navigation]",
+        "main [main]",
+        "    Your main branch isn't protected [region]",
+        "    Repository files [navigation]",
+        "contentinfo [contentinfo]",
+        "    Footer [navigation]",
+      ].join("\n"),
+    lmTree.replace(/\n/g, " | "),
+  );
+  t = await text();
+  check(
+    "landmarks: the heading outside every landmark is noted",
+    t.includes("1 heading outside landmarks") && t.includes("8 landmarks"),
+    t.match(/\d+ landmarks?[^\n]*/)?.[0],
+  );
+  await shot("inspect-landmarks");
+  await panel.locator(".hd-main", { hasText: "Breadcrumbs" }).click();
+  await panel.waitForTimeout(400);
+  check(
+    "landmarks: clicking a landmark outlines it in the page",
+    await site.evaluate(() => Boolean(document.querySelector("devkit-headings-focus"))),
+  );
+  await site.keyboard.press("Escape");
+  await panel.getByRole("button", { name: "Badges in page" }).click();
+  await panel.waitForTimeout(500);
+  check("landmarks: badges drawn on the landmarks", await site.evaluate(() => Boolean(document.querySelector("devkit-headings"))));
+  await panel.getByRole("button", { name: "Hide badges" }).click();
+  await viewChip("All").click();
+  await panel.waitForTimeout(300);
+  // The tree alone: the table of contents and the page map below repeat heading texts.
+  const treeText = () => panel.locator("main ul.hd-tree").first().innerText();
+  t = await treeText();
+  check(
+    "landmarks: All nests the headings under their landmark, the rest outside",
+    t.includes("Folders and files") && t.includes("Outside landmarks") && t.includes("Skip to content") && t.includes("Breadcrumbs"),
+  );
+  await panel.getByRole("button", { name: "Collapse all" }).click();
+  await panel.waitForTimeout(200);
+  t = await treeText();
+  const folded = !t.includes("Breadcrumbs") && !t.includes("Folders and files") && t.includes("Global navigation menu");
+  await panel.getByRole("button", { name: "Expand all" }).click();
+  await panel.waitForTimeout(200);
+  t = await treeText();
+  await shot("inspect-landmarks-all");
+  check("landmarks: Collapse all and Expand all", folded && t.includes("Breadcrumbs") && t.includes("Folders and files"));
+  await panel.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__copied.push(s);
+    };
+  });
+  const lmMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "landmarks: Copy for agent has the landmarks",
+    lmMd.includes("### Landmarks") && lmMd.includes("    Breadcrumbs [navigation] (") && lmMd.includes("8 ARIA landmarks"),
+    lmMd.slice(0, 200),
+  );
+  await open("Inspect", "Overview");
+  await open("Inspect", "Headings & landmarks");
+  await panel
+    .locator(".hd-views")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  check("landmarks: the chosen view is kept", (await viewChip("All").getAttribute("aria-pressed")) === "true");
+  await viewChip("Headings").click();
+
+  // --- Served vs rendered (issue #23): JavaScript changes the title and adds a canonical, JSON-LD, og:image and links.
+  {
+    await site.goto(`${base}/rendered-source`);
+    await panel.waitForTimeout(600);
+    await open("Inspect", "Served vs rendered");
+    await panel
+      .locator("table.rsrc-table")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "rendered source: findings name what JavaScript added or changed",
+      [
+        "Canonical only exists after JavaScript",
+        "1 JSON-LD block injected by JavaScript",
+        "Title changed by JavaScript",
+        "3 links only after JavaScript",
+        "1 share tag only after JavaScript",
+      ].every((s) => t.includes(s)),
+      t.slice(0, 400),
+    );
+    check(
+      "rendered source: field table and added links listed",
+      /Title\s+Loading…\s+Rendered title from JS\s+changed by JS/.test(t) &&
+        t.includes("Links added by JavaScript") &&
+        t.includes(`${base}/js-only-1`) &&
+        t.includes("https://example.org/partner") &&
+        t.includes("JSON-LD added by JavaScript") &&
+        t.includes("Organization"),
+      t.match(/Title[^\n]*\n?[^\n]*/)?.[0],
+    );
+    const sourceText = () => panel.locator(".rsrc-source").innerText();
+    const diffText = await sourceText().catch(() => "");
+    check(
+      "rendered source: the source diff shows the injected canonical",
+      /\+\s+<link rel="canonical"/.test(diffText) && /−\s+<title>Loading…<\/title>/.test(diffText) && /\+\d+\s+−\d+/.test(await text()),
+      diffText.slice(0, 200),
+    );
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Served", exact: true }).click();
+    const servedText = await sourceText().catch(() => "");
+    await panel.getByRole("group", { name: "Show" }).getByRole("button", { name: "Rendered", exact: true }).click();
+    const renderedText = await sourceText().catch(() => "");
+    check(
+      "rendered source: served and rendered views",
+      servedText.includes("<title>Loading…</title>") &&
+        !servedText.includes('<link rel="canonical"') &&
+        renderedText.includes("<title>Rendered title from JS</title>") &&
+        renderedText.includes("JS link two</a>"),
+    );
+    await shot("inspect-rendered-source");
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    const rsMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "rendered source: Copy for agent with findings and fixes",
+      rsMd.startsWith("## Served HTML vs rendered DOM") &&
+        rsMd.includes("Canonical only exists after JavaScript") &&
+        rsMd.includes('Fix: Render `<link rel="canonical">` in the served HTML') &&
+        rsMd.includes("- JSON-LD added: Organization"),
+      rsMd.split("\n").slice(0, 3).join(" / "),
+    );
+  }
+  // --- end Served vs rendered
+
+  // Repo dependencies: a GitHub-like folder served locally (the page's meta tags say GitHub), registries faked.
+  await context.route("https://registry.npmjs.org/**", (route) => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1).replace(/\/latest$/, ""));
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ name, version: "9.9.9", description: `E2E description of ${name}` }),
+    });
+  });
+  await context.route("https://pypi.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ info: { summary: "E2E PyPI summary", version: "3.1.0" } }),
+    }),
+  );
+  await site.goto(`${base}/acme/shop/tree/main/web`);
+  await open("Inspect", "Repo dependencies");
+  await panel
+    .locator(".rd-row")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await panel
+    .locator(".rd-desc", { hasText: "E2E description of react" })
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "repo deps: the folder's package.json and requirements.txt, by kind, with versions",
+    t.includes("acme/shop/web") &&
+      t.includes("web/package.json") &&
+      t.includes("web/requirements.txt") &&
+      /Dependencies \(2\)[\s\S]*react[\s\S]*\^19\.0\.0/.test(t) &&
+      /Development dependencies \(1\)[\s\S]*vitest/.test(t) &&
+      /flask\s*==3\.0\.3/.test(t) &&
+      t.includes("extras: socks"),
+    t.match(/Repo dependencies[^\n]*/)?.[0],
+  );
+  check(
+    "repo deps: descriptions and latest versions from the registries",
+    t.includes("E2E description of react") && t.includes("E2E description of @tanstack/react-query") && t.includes("latest 9.9.9"),
+  );
+  check("repo deps: an unreadable manifest is reported", /Could not read\s*web\/Gemfile\s*\(needs a signed-in session/.test(t));
+  const scoped = await panel.locator(".rd-row", { hasText: "@tanstack/react-query" }).first();
+  const scopedLinks = await scoped.locator("a").evaluateAll((as) => as.map((a) => a.href));
+  check(
+    "repo deps: npm links encode scoped names",
+    scopedLinks.includes("https://www.npmjs.com/package/@tanstack/react-query") &&
+      scopedLinks.includes("https://packagephobia.com/result?p=%40tanstack%2Freact-query") &&
+      scopedLinks.includes("https://unpkg.com/@tanstack/react-query/"),
+    scopedLinks.join(" "),
+  );
+  check(
+    "repo deps: the manifest links to its file",
+    (await panel.locator(".section h2 a", { hasText: "web/package.json" }).getAttribute("href")) ===
+      `${base}/acme/shop/blob/main/web/package.json`,
+  );
+  await panel.getByPlaceholder("Filter by name, group or description").fill("flask");
+  t = await text();
+  check("repo deps: the filter keeps matching packages only", t.includes("flask") && !t.includes("vitest") && t.includes("1 of 2"));
+  await panel.getByPlaceholder("Filter by name, group or description").fill("");
+  const depsMd = await lastCopy(panel.getByRole("button", { name: "Copy as Markdown" }));
+  check(
+    "repo deps: Copy as Markdown lists packages with links and descriptions",
+    depsMd.startsWith("## Dependencies of acme/shop/web at main") &&
+      depsMd.includes("- [react](https://www.npmjs.com/package/react) `^19.0.0` — E2E description of react (latest 9.9.9)") &&
+      depsMd.includes("### [web/requirements.txt]"),
+    depsMd.split("\n")[0],
+  );
+  await shot("inspect-repo-deps");
+
+  // The in-page box: turned on from the panel (registers the content script), run on the fake page.
+  await panel.getByRole("button", { name: "Turn on" }).click();
+  await panel.waitForTimeout(500);
+  const registeredBox = await sw.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).map((s) => s.matches),
+  );
+  check(
+    "repo deps box: turning it on registers the content script for github.com and gitlab.com only",
+    JSON.stringify(registeredBox) === JSON.stringify([["https://github.com/*", "https://gitlab.com/*"]]),
+    JSON.stringify(registeredBox),
+  );
+  await sw.evaluate((id) => chrome.scripting.executeScript({ target: { tabId: id }, files: ["content-scripts/repo-deps.js"] }), tabId);
+  await site
+    .waitForFunction(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("react"), null, { timeout: 8000 })
+    .catch(() => undefined);
+  const box = await site.evaluate(() => {
+    const host = document.querySelector("devkit-repo-deps");
+    return { text: host?.shadowRoot?.textContent ?? "", after: host?.previousElementSibling?.id ?? "" };
+  });
+  check(
+    "repo deps box: injected below the README with the folder's packages",
+    box.after === "readme-box" && box.text.includes("Dependencies") && box.text.includes("web/package.json") && box.text.includes("flask"),
+    `after #${box.after}`,
+  );
+  // The panel's lookups are cached in storage.session: the background answers the box from there.
+  await site
+    .waitForFunction(
+      () => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("E2E description of react"),
+      null,
+      {
+        timeout: 8000,
+      },
+    )
+    .catch(() => undefined);
+  check(
+    "repo deps box: descriptions come through the background",
+    (await site.evaluate(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent ?? "")).includes(
+      "E2E description of react",
+    ),
+  );
+  // In-app navigation: the URL changes and the page re-renders without a reload.
+  await site.evaluate(async () => {
+    const html = await (await fetch("/acme/shop")).text();
+    history.pushState({}, "", "/acme/shop");
+    document.querySelector("main").replaceWith(new DOMParser().parseFromString(html, "text/html").querySelector("main"));
+  });
+  await site
+    .waitForFunction(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent?.includes("express"), null, {
+      timeout: 8000,
+    })
+    .catch(() => undefined);
+  const rootBox = await site.evaluate(() => document.querySelector("devkit-repo-deps")?.shadowRoot?.textContent ?? "");
+  check(
+    "repo deps box: follows in-app navigation to the repository root",
+    rootBox.includes("express") && !rootBox.includes("vitest") && rootBox.includes("Workspaces"),
+  );
+  await panel.getByRole("button", { name: "Turn off" }).click();
+  await panel.waitForTimeout(400);
+  check(
+    "repo deps box: turning it off unregisters the content script",
+    (await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).length)) === 0,
+  );
+
   await site.goto(`${base}/`);
+  await panel.waitForTimeout(800);
+  t = await text();
+  check("repo deps: explains itself off repository pages", t.includes("Open a repository or folder page on GitHub or GitLab"));
+
+  // dataLayer: GA4 events, Consent Mode, PII, JSON-LD cross-check and snapshots on a shop page.
+  await site.goto(`${base}/datalayer`);
+  await panel.waitForTimeout(800);
+  await open("Inspect", "dataLayer inspector");
+  await panel
+    .locator(".dl-counters")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  const counters = (
+    await panel
+      .locator(".dl-counters")
+      .innerText()
+      .catch(() => "")
+  ).replace(/\s+/g, " ");
+  check(
+    "datalayer: counters (issues, events, unique, layers, consent, containers)",
+    counters.includes("Issues 6") &&
+      counters.includes("Events 3") &&
+      counters.includes("Unique events 3") &&
+      counters.includes("Layers 8") &&
+      counters.includes("Consent 2") &&
+      counters.includes("Containers 2"),
+    counters,
+  );
+  t = await text();
+  check(
+    "datalayer: GA4, Consent Mode v2, PII and JSON-LD issues",
+    [
+      "purchase without transaction_id",
+      "value is not numeric",
+      "Consent Mode v2: ad_user_data and ad_personalization missing",
+      "E-mail address in the dataLayer",
+      "SKU differs from the Product markup",
+      "Price differs from the Product markup",
+    ].every((s) => t.includes(s)),
+    t.match(/Issues \(\d+\)[^\n]*/)?.[0],
+  );
+  check("datalayer: PII reported by path, never by value", t.includes("dataLayer[7].user.email") && !t.includes("jane.doe@example.com"));
+  check(
+    "datalayer: containers and consent timeline",
+    t.includes("GTM-E2E1234") && t.includes("G-E2E5678") && t.includes("ad_storage: denied"),
+  );
+  check("datalayer: read-only note", t.includes("events fired later appear after Read again"));
+  check(
+    "datalayer: the page's dataLayer.push is left alone",
+    await site.evaluate(() => window.dataLayer.push === Array.prototype.push && window.dataLayer.length === 8),
+  );
+  await panel.locator(".dl-event summary", { hasText: "login" }).first().click();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check("datalayer: an event opens as a tree, masked", t.includes("j•••@•••.com") && t.includes("[Function"));
+  await shot("inspect-datalayer");
+  await panel.getByRole("button", { name: "JSON view" }).click();
+  await panel.waitForTimeout(200);
+  t = await text();
+  check(
+    "datalayer: JSON view is masked too",
+    t.includes("JSON (masked)") && t.includes("j•••@•••.com") && !t.includes("jane.doe@example.com"),
+  );
+  await panel.getByRole("button", { name: "JSON view" }).click();
+  const dlReport = await lastCopy(panel.getByRole("button", { name: "Copy report" }));
+  check(
+    "datalayer: Copy report",
+    dlReport.startsWith("dataLayer report") && dlReport.includes("Issues: 6") && !dlReport.includes("jane.doe@example.com"),
+    dlReport.split("\n")[1],
+  );
+  const dlMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }));
+  check(
+    "datalayer: Copy for agent with paths and fixes, PII masked",
+    dlMd.startsWith("## dataLayer") &&
+      dlMd.includes("Result: 3 problems, 3 warnings") &&
+      dlMd.includes("Fix: Add `transaction_id`") &&
+      dlMd.includes("Where: `dataLayer[7].user.email`") &&
+      !dlMd.includes("jane.doe@example.com"),
+    dlMd.split("\n")[2],
+  );
+  await panel.getByRole("button", { name: "Save snapshot" }).click();
+  await panel.waitForTimeout(400);
+  t = await text();
+  const stored = await sw.evaluate(async () =>
+    JSON.stringify((await chrome.storage.local.get("datalayerSnapshots")).datalayerSnapshots ?? []),
+  );
+  check(
+    "datalayer: snapshot saved locally, masked",
+    t.includes("Snapshots (1/50)") && stored.includes("j•••@•••.com") && !stored.includes("jane.doe@example.com"),
+    t.match(/Snapshots \([^)]*\)/)?.[0],
+  );
+  await site.evaluate(() => window.dataLayer.push({ event: "late_event", step: 2 }));
+  await panel.getByRole("button", { name: "Read again" }).click();
+  await panel.waitForTimeout(500);
+  check(
+    "datalayer: Read again picks up later events",
+    (await panel.locator(".dl-counters").innerText()).replace(/\s+/g, " ").includes("Events 4"),
+  );
+  await panel.getByRole("button", { name: "Compare with current" }).first().click();
+  await panel.waitForTimeout(300);
+  t = await text();
+  check(
+    "datalayer: snapshot compared with the current read",
+    /1 added · 0 removed · 0 duplicated · 0 changed/.test(t) && t.includes("late_event"),
+  );
+  await panel
+    .getByRole("button", { name: /^Delete the snapshot/ })
+    .first()
+    .click();
+  await panel.waitForTimeout(300);
+  check("datalayer: snapshot deleted", (await text()).includes("Snapshots (0/50)"));
+  await site.goto(`${base}/headings`);
+  await panel.waitForTimeout(1200);
+  check("datalayer: empty state without a dataLayer", (await text()).includes("No dataLayer found on this page."));
+  await site.goto(`${base}/`);
+
+  // Agent tools (WebMCP): a fake navigator.modelContextTesting with a read-only tool and a Critical one.
+  await site.goto(`${base}/agent`);
+  await open("Inspect", "Agent tools");
+  await panel
+    .locator(".wm-tester")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "agent tools: experimental notice, no document.modelContext, testing API found",
+    t.includes("WebMCP is experimental (Chrome origin trial)") &&
+      t.includes("document.modelContext is not available on this page") &&
+      /navigator\.modelContextTesting\s*available · listTools, executeTool/.test(t),
+  );
+  check("agent tools: both tools listed with their risk", /get_store_hours\s*Low\b/.test(t) && /delete_account\s*Critical\b/.test(t));
+  const toolCard = (name) =>
+    panel
+      .locator(".section", { has: panel.locator(".wm-tester") })
+      .filter({ hasText: name })
+      .first();
+  const hours = toolCard("get_store_hours");
+  await hours.locator("select").selectOption("sunday");
+  await hours.getByRole("button", { name: "Run", exact: true }).click();
+  await hours
+    .getByText('"close": "13:00"')
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  check("agent tools: a Low tool runs on one click and shows its result", (await hours.innerText()).includes('"close": "13:00"'));
+  const del = toolCard("delete_account");
+  t = await del.innerText();
+  check(
+    "agent tools: Critical tool blocked by default, with its findings",
+    t.includes("Blocked.") &&
+      (await del.getByRole("button", { name: /^Run/ }).count()) === 0 &&
+      t.includes("No annotations on a sensitive tool") &&
+      !(await site.evaluate(() => Boolean(window.__accountDeleted))),
+  );
+  await del.getByText("Allow critical tools on this site for this session").click();
+  await del
+    .locator("input[type=checkbox]")
+    .first()
+    .waitFor({ timeout: 2000 })
+    .catch(() => undefined);
+  await del.getByRole("checkbox", { name: "confirm" }).check();
+  await del.getByRole("button", { name: "Run…" }).click();
+  await del.getByRole("button", { name: "Continue" }).click();
+  const finalRun = del.getByRole("button", { name: "Run delete_account" });
+  const disabledFirst = await finalRun.isDisabled();
+  await del.getByLabel("Tool name to confirm").fill("delete_acc");
+  const disabledTypo = await finalRun.isDisabled();
+  await del.getByLabel("Tool name to confirm").fill("delete_account");
+  const enabled = !(await finalRun.isDisabled());
+  const notYet = !(await site.evaluate(() => Boolean(window.__accountDeleted)));
+  await finalRun.click();
+  await del
+    .getByText('"deleted": true')
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  check(
+    "agent tools: allowed Critical tool needs two steps, the second typing its name",
+    disabledFirst && disabledTypo && enabled && notYet && (await site.evaluate(() => window.__accountDeleted === true)),
+    JSON.stringify({ disabledFirst, disabledTypo, enabled, notYet }),
+  );
+  t = await text();
+  check("agent tools: run history kept for the site", /Run history \(2\)/.test(t));
+  await del.getByText("Allow critical tools on this site for this session").click();
+  await shot("inspect-agent-tools");
+
+  // Agent readiness on the same page: /llms.txt served, robots.txt blocks GPTBot, an Organization node.
+  await open("Inspect", "Agent readiness");
+  await panel
+    .locator(".ar-score")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await panel.waitForTimeout(500);
+  t = await text();
+  check(
+    "readiness: score and breakdown",
+    /84\s*\/ 100/.test(t) &&
+      /Structured data\s*22\/25/.test(t) &&
+      /Agent tool availability\s*12\/15/.test(t) &&
+      /Safety\s*5\/15/.test(t) &&
+      /Testability\s*10\/10/.test(t) &&
+      t.includes("not a guarantee of compatibility"),
+    t.match(/\d+\s*\/ 100/)?.[0],
+  );
+  check(
+    "readiness: llms.txt found, sitemap found, GPTBot blocked",
+    /llms\.txt\s*Found · \d+ bytes · “Acme”/.test(t) &&
+      t.includes("Open sitemap") &&
+      t.includes("15 allowed · 1 blocked") &&
+      /GPTBot OpenAI\s*Training\s*blocked/.test(t),
+  );
+  check(
+    "readiness: recommendations by impact",
+    t.includes("High impact") && t.includes("Mark delete_account with consequentialHint") && t.includes("1 AI crawler(s) are disallowed"),
+  );
+  await panel.locator(".ar-area", { hasText: "Safety" }).click();
+  t = await text();
+  check(
+    "readiness: tapping an area shows its rules",
+    t.includes("No Critical tool without a consequential/destructive hint") && t.includes("How to improve"),
+  );
+  const readinessMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check("readiness: Copy for agent", readinessMd.startsWith("## Agent readiness") && readinessMd.includes("84/100"));
+  await shot("inspect-agent-readiness");
+
+  // Overview and AI context: landmarks, the dataLayer (an e-mail address in it) and agent readiness on one page.
+  {
+    await site.goto(`${base}/overview-context`);
+    await panel.waitForTimeout(800);
+    await open("Inspect", "Overview");
+    await panel
+      .locator(".report-row", { hasText: "Agent readiness" })
+      .filter({ hasText: /\d+\/100/ })
+      .waitFor({ timeout: 10000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "overview: landmarks, dataLayer and agent readiness rows",
+      /Landmarks\s*5 landmarks · 1 to review/.test(t) &&
+        /dataLayer\s*1 event · Consent Mode: 1 issue · personal data found · 1 to fix, 1 to review/.test(t) &&
+        /Agent readiness\s*\d+\/100 · no WebMCP tool/.test(t),
+      [
+        t.match(/Landmarks[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/dataLayer[^\n]*\n?[^\n]*/)?.[0],
+        t.match(/Agent readiness[^\n]*\n?[^\n]*/)?.[0],
+      ].join(" | "),
+    );
+    const overviewMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+    check(
+      "overview: Copy for agent has the landmarks, dataLayer and readiness reports, the e-mail masked",
+      overviewMd.includes("| Landmarks | 1 warning | Inspect › Headings |") &&
+        overviewMd.includes("## Landmarks") &&
+        overviewMd.includes("## dataLayer (GA4, Consent Mode, GTM)") &&
+        overviewMd.includes("`dataLayer[3].user.email`") &&
+        overviewMd.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        !overviewMd.includes("sam.smith"),
+      overviewMd.split("\n")[2],
+    );
+    await panel.locator(".report-row", { hasText: "dataLayer" }).click();
+    await panel.waitForTimeout(600);
+    check("overview: the dataLayer row opens its panel", (await text()).includes("GTM-") || (await text()).includes("G-OVR1234"));
+
+    await open("AI", "Ask AI");
+    const newChat = panel.getByRole("button", { name: "New chat" });
+    if (await newChat.isVisible().catch(() => false)) await newChat.click();
+    await panel.waitForTimeout(300);
+    await action("Fix plan for the whole page");
+    await panel.waitForSelector(".msg.assistant .markdown", { timeout: 20_000 }).catch(() => undefined);
+    await panel.waitForTimeout(1500);
+    const sent = await (await fetch(`${base}/ai-last-context`)).text();
+    check(
+      "AI: the fix plan context has the landmarks, the masked dataLayer and agent readiness",
+      sent.includes("## Landmarks (devkit panel: Inspect › Headings)") &&
+        sent.includes("2 unnamed navigation") &&
+        sent.includes("## dataLayer (GA4, Consent Mode, GTM) (devkit panel: Inspect › dataLayer)") &&
+        sent.includes("`G-OVR1234`: GA4 measurement ID") &&
+        sent.includes("Consent Mode v2") &&
+        sent.includes("## Agent readiness (devkit panel: Inspect › Agent readiness)") &&
+        /Score: \d+\/100\. A heuristic/.test(sent) &&
+        sent.includes("- llms.txt: present") &&
+        !sent.includes("sam.smith"),
+      `${sent.length} chars`,
+    );
+  }
+  await site.goto(`${base}/`);
+
+  // IndexedDB and Cache Storage viewers (#26): a fixture database and cache, listed, edited and deleted from the panel.
+  {
+    await site.goto(`${base}/databases`);
+    await site.waitForFunction(() => window.__dbReady !== undefined, null, { timeout: 8000 });
+    const ready = await site.evaluate(() => window.__dbReady);
+    const idbGet = (store, key) =>
+      site.evaluate(
+        ([s, k]) =>
+          new Promise((done, fail) => {
+            const req = indexedDB.open("devkit-shop");
+            req.onerror = () => fail(req.error);
+            req.onsuccess = () => {
+              const db = req.result;
+              const r = db.transaction(s).objectStore(s).get(k);
+              r.onerror = () => fail(r.error);
+              r.onsuccess = () => {
+                db.close();
+                const v = r.result;
+                done(
+                  v === undefined
+                    ? null
+                    : {
+                        json: JSON.stringify(v),
+                        dates: Object.entries(v)
+                          .filter(([, x]) => x instanceof Date)
+                          .map(([n, x]) => `${n}=${x.toISOString()}`),
+                      },
+                );
+              };
+            };
+          }),
+        [store, key],
+      );
+
+    await open("Cache", "IndexedDB");
+    await panel.locator(".db-tree").waitFor();
+    t = await text();
+    check(
+      "indexeddb: lists the database, its version and its stores with counts",
+      ready === true && t.includes("devkit-shop") && t.includes("v3") && /users\s*3 records/.test(t) && /settings\s*2 records/.test(t),
+      String(ready),
+    );
+    await panel.locator("button.db-node", { hasText: "users" }).click();
+    await panel.locator(".db-table").waitFor();
+    t = await text();
+    check(
+      "indexeddb: store schema, and records with Date and Map previews",
+      t.includes("id · autoIncrement") &&
+        t.includes("by_email (email, unique)") &&
+        t.includes("by_tags (tags, multiEntry)") &&
+        t.includes("Date(1815-12-10T00:00:00.000Z)") &&
+        t.includes("Map(1)") &&
+        t.includes('{id: 1, name: "Ada", email: "ada@example.com"') &&
+        t.includes("1–3 of 3"),
+      t.match(/Indexes[^\n]*/)?.[0],
+    );
+    const query = async (index, mode, key) => {
+      await panel.getByLabel("Read through").selectOption(index);
+      await panel.getByLabel("Key filter").selectOption(mode);
+      if (mode !== "all") await panel.getByLabel("Key", { exact: true }).fill(key);
+      await panel.getByRole("button", { name: "Apply" }).click();
+      await panel.waitForTimeout(500);
+      return panel.locator(".db-table tbody tr").allInnerTexts();
+    };
+    let rows = await query("by_tags", "equals", "admin");
+    check(
+      "indexeddb: reads through a multiEntry index by key",
+      rows.length === 2 && rows.every((r) => r.includes("admin")),
+      rows.join(" | "),
+    );
+    rows = await query("by_email", "prefix", "gr");
+    check("indexeddb: key prefix on an index", rows.length === 1 && rows[0].includes("Grace"), rows.join(" | "));
+    rows = await query("", "all", "");
+    check("indexeddb: back to every record", rows.length === 3);
+
+    await panel.getByRole("button", { name: "Open record 1", exact: true }).click();
+    await panel.locator(".db-json").waitFor();
+    check("indexeddb: a record opens as a tree", (await panel.locator(".db-json").innerText()).includes("ada@example.com"));
+    await panel.getByRole("button", { name: "Edit", exact: true }).click();
+    const editor = panel.locator(".db-editor textarea");
+    const draft = (await editor.inputValue()).replace('"Ada"', '"Ada Lovelace"');
+    await editor.fill("{ not json");
+    const saveButton = panel.locator(".db-editor").getByRole("button", { name: "Save" });
+    check(
+      "indexeddb: the editor validates JSON before saving",
+      (await panel.locator(".db-editor").innerText()).includes("Invalid JSON") && (await saveButton.isDisabled()),
+    );
+    await editor.fill(draft);
+    await saveButton.click();
+    await panel.waitForTimeout(600);
+    const ada = await idbGet("users", 1);
+    check(
+      "indexeddb: edit a record, its tagged Date written back as a Date",
+      Boolean(ada?.json.includes('"Ada Lovelace"') && ada.dates.includes("born=1815-12-10T00:00:00.000Z")),
+      JSON.stringify(ada),
+    );
+    check(
+      "indexeddb: the table shows the saved record, its keys in their order",
+      (await panel.locator(".db-table").innerText()).includes('{id: 1, name: "Ada Lovelace", email:'),
+    );
+    await shot("cache-indexeddb");
+
+    await panel.locator("button.db-node", { hasText: "settings" }).click();
+    await panel.locator(".db-table").waitFor();
+    await panel.waitForTimeout(300);
+    t = await panel.locator(".db-table").innerText();
+    check(
+      "indexeddb: out-of-line keys, Set, Blob, typed array and BigInt previews",
+      t.includes('"prefs"') &&
+        t.includes("Set(2)") &&
+        t.includes("Blob(image/png, 3 B)") &&
+        t.includes("Uint8Array(3 B)") &&
+        t.includes("10n"),
+      t.replace(/\s+/g, " "),
+    );
+    await panel.getByRole("button", { name: "Add", exact: true }).click();
+    await panel.locator(".db-editor input").fill("lang");
+    await panel.locator(".db-editor textarea").fill('{"code": "fr", "since": {"$type": "Date", "value": "2024-05-01T00:00:00.000Z"}}');
+    await panel.locator(".db-editor").getByRole("button", { name: "Save" }).click();
+    await panel.waitForTimeout(600);
+    const lang = await idbGet("settings", "lang");
+    check(
+      "indexeddb: add a record with an out-of-line key",
+      lang?.json === '{"code":"fr","since":"2024-05-01T00:00:00.000Z"}' && lang.dates.includes("since=2024-05-01T00:00:00.000Z"),
+      JSON.stringify(lang),
+    );
+    await panel.getByRole("button", { name: 'Open record "theme"', exact: true }).click();
+    await panel.getByRole("button", { name: "Delete", exact: true }).click();
+    await panel.getByRole("button", { name: "Confirm delete" }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "indexeddb: delete a record, confirmed in the panel",
+      (await idbGet("settings", "theme")) === null && !(await panel.locator(".db-table").innerText()).includes('"theme"'),
+    );
+    const download = await Promise.all([
+      panel.waitForEvent("download", { timeout: 5000 }),
+      panel.getByRole("button", { name: "Export", exact: true }).click(),
+    ])
+      .then(([d]) => d)
+      .catch(() => null);
+    const exported = download ? JSON.parse(readFileSync(await download.path(), "utf8")) : null;
+    check(
+      "indexeddb: export a store as JSON",
+      download?.suggestedFilename() === "indexeddb-devkit-shop-settings.json" &&
+        exported?.format === "devkit-indexeddb" &&
+        exported.records.length === 2 &&
+        exported.records.some((r) => r.key === "lang" && r.value.since.$type === "Date"),
+      download?.suggestedFilename(),
+    );
+
+    await open("Cache", "Cache Storage");
+    await panel.locator("button.db-node", { hasText: "devkit-shop-v1" }).click();
+    await panel.locator(".db-table").waitFor();
+    await panel.waitForTimeout(300);
+    t = await text();
+    check(
+      "cache storage: lists the cache and its entries",
+      /devkit-shop-v1\s*3 entries/.test(t) &&
+        ["/api/products.json", "/offline.html", "/tile.png", "application/json", "image/png"].every((s) => t.includes(s)),
+      t.match(/devkit-shop-v1[^\n]*/)?.[0],
+    );
+    await panel.getByRole("button", { name: "/api/products.json" }).click();
+    await panel.locator(".db-json").waitFor();
+    t = await text();
+    check(
+      "cache storage: a JSON entry shows its status, headers and body as a tree",
+      (await panel.locator(".db-json").innerText()).includes("Mug") && /Status\s*200/.test(t) && t.includes("Headers (1)"),
+    );
+    await panel.getByRole("button", { name: "/tile.png" }).click();
+    await panel.locator("img.db-image").waitFor();
+    check(
+      "cache storage: an image entry is previewed",
+      ((await panel.locator("img.db-image").getAttribute("src")) ?? "").startsWith("data:image/png;base64,"),
+    );
+    await panel.getByRole("button", { name: "/offline.html" }).click();
+    await panel.waitForTimeout(500);
+    check("cache storage: a text entry shows its body", (await text()).includes("<h1>Offline</h1>"));
+    await panel.getByRole("button", { name: "Delete entry" }).click();
+    await panel.getByRole("button", { name: "Confirm delete" }).click();
+    await panel.waitForTimeout(600);
+    const left = await site.evaluate(async () => (await (await caches.open("devkit-shop-v1")).keys()).map((r) => new URL(r.url).pathname));
+    check(
+      "cache storage: delete an entry",
+      left.length === 2 && !left.includes("/offline.html") && !(await panel.locator(".db-table").innerText()).includes("/offline.html"),
+      left.join(", "),
+    );
+    await shot("cache-storage");
+
+    await site.evaluate(async () => {
+      await caches.delete("devkit-shop-v1");
+      await new Promise((done) => {
+        const r = indexedDB.deleteDatabase("devkit-shop");
+        r.onsuccess = r.onerror = r.onblocked = done;
+      });
+    });
+    await site.goto(`${base}/`);
+  }
 
   // Popup palette
   const popup = await context.newPage();
@@ -1133,15 +2265,200 @@ try {
   await popup.getByLabel("Search commands").fill("measure");
   const measureFirst = await popup.getByRole("option").first().innerText();
   check("palette finds the spacing ruler", /Measure distances/.test(measureFirst), measureFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("yt-dlp");
+  const cookiesTxtFirst = await popup.getByRole("option").first().innerText();
+  check("palette finds Copy cookies.txt", /Copy cookies\.txt/.test(cookiesTxtFirst), cookiesTxtFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("consent mode");
+  const dlItems = await popup.getByRole("option").allInnerTexts();
+  check(
+    "palette finds the dataLayer inspector",
+    dlItems.some((r) => r.startsWith("dataLayer inspector")),
+    dlItems
+      .slice(0, 3)
+      .map((r) => r.split("\n")[0])
+      .join(" | "),
+  );
   await popup.getByLabel("Search commands").fill("hn");
   const hnItems = await popup.getByRole("option").allInnerTexts();
   check(
     "palette finds the headings outline",
-    hnItems.some((r) => r.startsWith("Headings outline")),
+    hnItems.some((r) => r.startsWith("Headings & landmarks")),
     hnItems
       .slice(0, 3)
       .map((r) => r.split("\n")[0])
       .join(" | "),
+  );
+  await popup.getByLabel("Search commands").fill("webmcp");
+  const webmcpFirst = await popup.getByRole("option").first().innerText();
+  await popup.getByLabel("Search commands").fill("llms.txt");
+  const llmsFirst = await popup.getByRole("option").first().innerText();
+  check(
+    "palette finds the agent tools and agent readiness panels",
+    /Agent tools/.test(webmcpFirst) && /Agent readiness/.test(llmsFirst),
+    `${webmcpFirst.split("\n")[0]} | ${llmsFirst.split("\n")[0]}`,
+  );
+
+  // Redirect path: the tab's navigations hop by hop (server, meta refresh, JavaScript), then the URL tracer.
+  // Self-contained: leaves the pinned tab back on the home page.
+  {
+    const tabPath = panel.locator("section", { hasText: "Redirect path" }).first();
+    const hopsOf = async (section) => (await section.locator(".redir-hop").allInnerTexts()).map((h) => h.replace(/\s+/g, " "));
+    const waitHops = (section, n) =>
+      panel
+        .waitForFunction(
+          ([title, count]) =>
+            [...document.querySelectorAll("section")].some(
+              (s) => s.querySelector("h2")?.textContent?.startsWith(title) && s.querySelectorAll(".redir-hop").length === count,
+            ),
+          [section, n],
+          { timeout: 6000 },
+        )
+        .catch(() => undefined);
+    await site.goto(`${base}/r1`);
+    await open("Network", "Redirect path");
+    await waitHops("Redirect path", 3);
+    let hops = await hopsOf(tabPath);
+    check(
+      "redirect path: the tab's navigation hop by hop, 301 then 302 then 200",
+      hops.length === 3 &&
+        /301 Moved Permanently .*\/r1\b.*→ .*\/r2\b/.test(hops[0]) &&
+        /302 Found .*\/r2\b.*→ .*\/final\b/.test(hops[1]) &&
+        /200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    t = await tabPath.innerText();
+    check(
+      "redirect path: summary and findings",
+      /2 redirects · 3 hops/.test(t) && t.includes("2 redirects before the page."),
+      t.slice(0, 200),
+    );
+    await tabPath.locator(".redir-hop").first().locator("summary").click();
+    check(
+      "redirect path: a hop's response headers expand",
+      /x-hop\s*first/.test(await tabPath.locator(".redir-hop").first().locator(".redir-headers").innerText()),
+    );
+    await site.goto(`${base}/meta`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a meta refresh joins the chain as a client hop",
+      hops.length === 2 &&
+        /200 OK .*\/meta\b.*meta refresh.*→ .*\/final\b/.test(hops[0]) &&
+        (await tabPath.innerText()).includes("Client-side redirect"),
+      hops.join(" | "),
+    );
+    await site.goto(`${base}/js-redirect`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a script redirect is named as JavaScript (heuristic)",
+      hops.length === 2 && /\/js-redirect\b.*JavaScript redirect \(heuristic/.test(hops[0]),
+      hops.join(" | "),
+    );
+    check("redirect path: earlier navigations stay listed", (await text()).includes("Earlier in this tab"));
+    await shot("redirect-path");
+
+    const trace = panel.locator("section", { hasText: "Trace a URL" }).first();
+    const runTrace = async (path, n) => {
+      await trace.getByLabel("URL to trace").fill(`${base}${path}`);
+      await trace.getByRole("button", { name: "Trace" }).click();
+      await waitHops("Trace a URL", n);
+      return hopsOf(trace);
+    };
+    hops = await runTrace("/r1", 3);
+    check(
+      "redirect path: Trace follows a URL's redirects from devkit",
+      hops.length === 3 && /^1 301 /.test(hops[0]) && /^2 302 /.test(hops[1]) && /^3 200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/meta", 2);
+    check(
+      "redirect path: Trace follows a meta refresh",
+      hops.length === 2 && /meta refresh.*→ .*\/final\b/.test(hops[0]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/loop-a", 21);
+    t = await trace.innerText();
+    check(
+      "redirect path: Trace stops a redirect loop at 20 redirects",
+      hops.length === 21 && t.includes("Redirect loop") && t.includes("Too many redirects") && t.includes("ERR_TOO_MANY_REDIRECTS"),
+      `${hops.length} hops`,
+    );
+    await site.goto(`${base}/`);
+  }
+
+  // JSON page viewer, on demand: the palette action formats the pinned tab.
+  const jsonTab = await context.newPage();
+  const tabOf = (u) => sw.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, u);
+  const viewer = (p) => p.locator("#devkit-json-viewer");
+  const runFormat = async (tab) => {
+    const pal = await context.newPage();
+    pal.on("pageerror", (e) => extErrors.push(`palette pageerror: ${e.message}`));
+    await pal.goto(`chrome-extension://${id}/popup.html?tab=${tab}`);
+    await pal.getByLabel("Search commands").fill("json formatter");
+    const items = await pal.getByRole("option").allInnerTexts();
+    await pal.getByRole("option").filter({ hasText: "Format this data page" }).first().click();
+    const toastText = await pal
+      .locator(".toast")
+      .first()
+      .innerText({ timeout: 4000 })
+      .catch(() => "");
+    await pal.close().catch(() => undefined);
+    return { items, toast: toastText };
+  };
+  await jsonTab.goto(`${base}/api/posts/1`);
+  check(
+    "json viewer: off by default, the page stays as Chrome shows it",
+    (await viewer(jsonTab).count()) === 0 && (await jsonTab.locator("pre").count()) === 1,
+  );
+  let fmt = await runFormat(await tabOf(`${base}/api/posts/1`));
+  check(
+    "palette finds Format this data page",
+    fmt.items.some((r) => r.startsWith("Format this data page")),
+    fmt.items.map((r) => r.split("\n")[0]).join(" | "),
+  );
+  check("json viewer: the palette action formats the tab", fmt.toast === "JSON formatted.", fmt.toast);
+  await viewer(jsonTab)
+    .locator(".node[data-path='$.author.address.city']")
+    .waitFor({ timeout: 4000 })
+    .catch(() => undefined);
+  check(
+    "json viewer: tree with counts, colors and links",
+    (await viewer(jsonTab).locator(".node[data-path='$'] > .line .count").innerText()) === "{6}" &&
+      (await viewer(jsonTab).locator(".node[data-path='$.tags'] > .line .count").innerText()) === "[3]" &&
+      (await viewer(jsonTab).locator(".node[data-path='$.author.address.city'] .s").innerText()) === '"London"' &&
+      (await viewer(jsonTab).locator(".node[data-path='$.link'] a").getAttribute("href")) === `${base}/ok`,
+  );
+  await viewer(jsonTab).getByRole("button", { name: "Collapse all" }).click();
+  const authorToggle = viewer(jsonTab).locator(".node[data-path='$.author'] > .line .tog");
+  const collapsed = await authorToggle.getAttribute("aria-expanded");
+  await authorToggle.click();
+  check("json viewer: toggles collapse and expand", collapsed === "false" && (await authorToggle.getAttribute("aria-expanded")) === "true");
+  await viewer(jsonTab).getByLabel("Filter keys and values").fill("london");
+  await jsonTab.waitForTimeout(400);
+  check(
+    "json viewer: filter keeps the matches and their parents",
+    (await viewer(jsonTab).locator(".node.hit[data-path='$.author.address.city']").count()) === 1 &&
+      (await viewer(jsonTab).locator(".node[data-path='$.title']").count()) === 0,
+  );
+  fmt = await runFormat(await tabOf(`${base}/api/posts/1`));
+  check("json viewer: running it twice keeps one viewer", (await viewer(jsonTab).count()) === 1, fmt.toast);
+  if (shots) await jsonTab.screenshot({ path: join(shots, "json-viewer.png") });
+  await jsonTab.goto(`${base}/api/plain`);
+  fmt = await runFormat(await tabOf(`${base}/api/plain`));
+  check(
+    "json viewer: the palette action also formats JSON served as text/plain",
+    fmt.toast === "JSON formatted." && (await viewer(jsonTab).locator(".node[data-path='$.items']").count()) === 1,
+    fmt.toast,
+  );
+  await jsonTab.goto(`${base}/`);
+  fmt = await runFormat(await tabOf(`${base}/`));
+  check(
+    "json viewer: leaves HTML pages alone",
+    /not a data document \(text\/html\)/.test(fmt.toast) && (await viewer(jsonTab).count()) === 0,
+    fmt.toast,
   );
 
   // Options
@@ -1155,7 +2472,608 @@ try {
     ot.includes("AI settings") && ot.includes("Permissions") && ot.includes("Error capture"),
   );
 
+  // JSON page viewer, automatic: the Options toggle registers the content script.
+  const jsonSection = options.locator("section", { hasText: "Format data pages" }).last();
+  await jsonSection.getByRole("button", { name: "Turn on" }).click();
+  await options.waitForTimeout(400);
+  const registered = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  check(
+    "json viewer: Options turns on Format data pages",
+    registered.includes("devkit-json-viewer") && (await jsonSection.innerText()).includes("Format data pages (JSON, XML, CSV, YAML): On"),
+    registered.join(", "),
+  );
+  await jsonTab.goto(`${base}/api/posts/1`);
+  await viewer(jsonTab)
+    .locator(".node[data-path='$.author']")
+    .waitFor({ timeout: 4000 })
+    .catch(() => undefined);
+  check(
+    "json viewer: JSON pages open formatted",
+    (await viewer(jsonTab).locator(".node[data-path='$.author.name'] .s").count()) === 1 &&
+      (await jsonTab.locator("pre").first().isHidden()),
+  );
+  await jsonTab.goto(`${base}/api/broken`);
+  const brokenBanner = await viewer(jsonTab)
+    .locator(".banner.error")
+    .innerText({ timeout: 4000 })
+    .catch(() => "");
+  check(
+    "json viewer: invalid JSON shows the raw text and where it breaks",
+    brokenBanner.startsWith("Invalid JSON at line 3, column 8") && (await viewer(jsonTab).locator(".raw").innerText()).includes('"b": }'),
+    brokenBanner,
+  );
+  await jsonTab.goto(`${base}/`);
+  check("json viewer: HTML pages are left alone", (await viewer(jsonTab).count()) === 0);
+
+  // ---- Data page viewer: XML, RSS, CSV, YAML and JSON Lines (issue #27), with Options › Data page viewer on ----
+  await checkDataFormats(jsonTab, viewer, runFormat, tabOf);
+  // ---- end of the data page viewer block ----
+  await jsonSection.getByRole("button", { name: "Turn off" }).click();
+  await options.waitForTimeout(400);
+  const afterOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
+  check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
+  await jsonTab.close();
+
+  // Consent check (#25): what the fixture sets before any interaction, then after Accept, the report, the current state.
+  {
+    await site.goto(`${base}/consent`);
+    await panel.waitForTimeout(800);
+    // A cookie of the site set beforehand: "Check before consent" must clear it.
+    await sw.evaluate((u) => chrome.cookies.set({ url: `${u}/`, name: "devkit_consent_marker", value: "1" }), base);
+    await open("Inspect", "Consent check");
+    await panel.getByRole("button", { name: "Check before consent" }).click();
+    await panel
+      .getByRole("heading", { name: "Before consent", exact: true })
+      .waitFor({ timeout: 25_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: _ga and a Hotjar key flagged before consent",
+      t.includes("1 analytics cookie before consent") &&
+        t.includes("_ga (Google Analytics)") &&
+        t.includes("1 tracking storage key before consent") &&
+        t.includes("_hjSessionUser_42"),
+      t.match(/Before consent[^\n]*\n[^\n]*/)?.[0],
+    );
+    check(
+      "consent: Consent Mode default granted flagged",
+      t.includes("Consent Mode default grants ad_storage, analytics_storage, ad_user_data, ad_personalization"),
+    );
+    check(
+      "consent: hit and script from another origin flagged",
+      t.includes("1 analytics host contacted before consent") &&
+        t.includes("localhost (Google Analytics)") &&
+        t.includes("1 third-party host not in devkit's list"),
+    );
+    check("consent: no banner found (heuristic)", t.includes("No known consent banner found"));
+    check("consent: values never shown", !t.includes("555.777") && !t.includes("e2e-hj-value"));
+    const left = await sw.evaluate(async (u) => (await chrome.cookies.getAll({ url: `${u}/` })).map((c) => c.name), base);
+    check(
+      "consent: the site's cookies were cleared before the reload",
+      !left.includes("devkit_consent_marker") && left.includes("_ga"),
+      left.join(", "),
+    );
+    await shot("inspect-consent");
+
+    await site.locator("#accept").click();
+    await site.waitForTimeout(600);
+    await panel.getByLabel("Your choice in the banner").selectOption("accept");
+    await panel.getByRole("button", { name: "Capture now" }).click();
+    await panel
+      .locator(".consent-compare")
+      .first()
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    const compare = await panel
+      .locator(".consent-compare")
+      .first()
+      .innerText()
+      .catch(() => "");
+    check(
+      "consent: comparison after accepting lists the new cookie and host",
+      compare.includes("Capture after accepting") && compare.includes("_fbp (Meta Pixel)") && compare.includes("localhost (Meta Pixel)"),
+      compare.replace(/\s+/g, " ").slice(0, 300),
+    );
+
+    await panel.evaluate(() => {
+      window.__consentCopies = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__consentCopies.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).click();
+    await panel.waitForTimeout(200);
+    const consentMd = await panel.evaluate(() => window.__consentCopies.at(-1) ?? "");
+    check(
+      "consent: Copy for agent names cookies and the comparison, never values",
+      consentMd.includes("## Consent check (GDPR / ePrivacy)") &&
+        consentMd.includes("`_ga (Google Analytics)`") &&
+        consentMd.includes("Comparison 1: after accepting") &&
+        !consentMd.includes("555.777") &&
+        !consentMd.includes("e2e-fbp-value") &&
+        !consentMd.includes("e2e-hj-value"),
+      consentMd.slice(0, 200),
+    );
+
+    await panel.getByRole("button", { name: "Read current state" }).click();
+    await panel
+      .getByRole("heading", { name: "Current state", exact: true })
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: current state is labeled as such",
+      t.includes("read without clearing anything") && t.includes("1 advertising cookie in the current state"),
+    );
+  }
+
+  // --- CrUX field data (issue #30): a fake key saved in Options, the CrUX API answered from fixtures. ---
+  // The real API is never called: context.route answers chromeuxreport.googleapis.com, and a public-looking host
+  // (CrUX skips local addresses) serves the page. Self-contained: it restores the site tab at the end.
+  {
+    const CRUX_KEY = "AIzaE2eFakeCruxKey000000000000000000000";
+    const CRUX_HOST = "https://shop.crux-fixture.dev";
+    const cruxCalls = [];
+    const bins = (good, poor, d) => [
+      { start: 0, end: good, density: d[0] },
+      { start: good, end: poor, density: d[1] },
+      { start: poor, density: d[2] },
+    ];
+    const cruxRecord = (key) => ({
+      record: {
+        key,
+        metrics: {
+          largest_contentful_paint: { histogram: bins(2500, 4000, [0.78, 0.15, 0.07]), percentiles: { p75: 2380 } },
+          interaction_to_next_paint: { histogram: bins(200, 500, [0.61, 0.27, 0.12]), percentiles: { p75: 312 } },
+          cumulative_layout_shift: {
+            histogram: [
+              { start: "0.00", end: "0.10", density: 0.9 },
+              { start: "0.10", end: "0.25", density: 0.06 },
+              { start: "0.25", density: 0.04 },
+            ],
+            percentiles: { p75: "0.05" },
+          },
+          round_trip_time: { percentiles: { p75: 145 } },
+        },
+        collectionPeriod: { firstDate: { year: 2026, month: 10, day: 19 }, lastDate: { year: 2026, month: 11, day: 15 } },
+      },
+    });
+    const cruxHistory = (key) => ({
+      record: {
+        key,
+        metrics: { largest_contentful_paint: { percentilesTimeseries: { p75s: [2900, 2600, null, 2380] } } },
+        collectionPeriods: [1, 2, 3, 4].map((d) => ({
+          firstDate: { year: 2026, month: 9, day: d },
+          lastDate: { year: 2026, month: 10, day: d },
+        })),
+      },
+    });
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-goog-api-key" };
+    await context.route("https://chromeuxreport.googleapis.com/**", (route) => {
+      const req = route.request();
+      if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      const body = JSON.parse(req.postData() ?? "{}");
+      cruxCalls.push({ url: req.url(), key: req.headers()["x-goog-api-key"], body });
+      const json = (status, data) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(data) });
+      if (req.headers()["x-goog-api-key"] !== CRUX_KEY)
+        return json(400, { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } });
+      if (body.url?.endsWith("/empty"))
+        return json(404, { error: { code: 404, message: "chrome ux report data not found", status: "NOT_FOUND" } });
+      const key = {
+        ...(body.formFactor ? { formFactor: body.formFactor } : {}),
+        ...(body.url ? { url: body.url } : { origin: body.origin }),
+      };
+      return json(200, req.url().endsWith(":queryHistoryRecord") ? cruxHistory(key) : cruxRecord(key));
+    });
+    await context.route(`${CRUX_HOST}/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html lang=en><title>CrUX fixture</title><h1>Field data fixture</h1><p>A page with real-user data.</p></html>",
+      }),
+    );
+    const cruxSection = () => panel.locator("section", { has: panel.getByRole("heading", { name: "Field data (CrUX)" }) });
+    const cruxText = () =>
+      cruxSection()
+        .innerText()
+        .catch(() => "");
+
+    await site.goto(`${CRUX_HOST}/product`);
+    await open("Inspect", "Performance");
+    await cruxSection()
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    check(
+      "crux: without a key, the Performance panel points to Options",
+      (await cruxText()).includes("add a free Chrome UX Report API key in Options") && cruxCalls.length === 0,
+    );
+
+    const cruxOptions = await context.newPage();
+    cruxOptions.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
+    await cruxOptions.goto(`chrome-extension://${id}/options.html`);
+    const keyInput = cruxOptions.getByLabel("CrUX API key");
+    const keySection = cruxOptions.locator("section", { has: keyInput });
+    await keyInput.fill("AIzaWrongKey");
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("not valid")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check("crux: Test key reports an invalid key", (await keySection.innerText()).includes("Google says the CrUX API key is not valid"));
+    await keyInput.fill(CRUX_KEY);
+    await keySection.getByRole("button", { name: "Save" }).click();
+    await keySection
+      .getByText("A key is saved.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("The key works.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    const keyText = await keySection.innerText();
+    check(
+      "crux: Options saves the key, clears the field and tests the saved key",
+      keyText.includes("The key works.") && (await keyInput.inputValue()) === "" && !keyText.includes(CRUX_KEY),
+    );
+    const storedKey = await sw.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)));
+    check("crux: the key is not stored in clear in extension storage", !storedKey.includes("AIzaE2eFakeCruxKey"));
+    await cruxOptions.close();
+
+    await panel.bringToFront();
+    await cruxSection()
+      .getByText("2.38 s")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    let ct = await cruxText();
+    const first = cruxCalls.find((c) => c.key === CRUX_KEY && c.url.endsWith(":queryRecord") && c.body.url);
+    check(
+      "crux: the section shows p75, distribution, period and history",
+      /LCP[\s\S]*2\.38 s[\s\S]*Good/.test(ct) &&
+        ct.includes("78% good") &&
+        ct.includes("Needs improvement") &&
+        ct.includes("Oct 19 – Nov 15, 2026") &&
+        ct.includes("Round trip time p75 145 ms") &&
+        (await cruxSection().locator("svg.crux-spark").count()) === 1,
+      ct.slice(0, 300),
+    );
+    await shot("inspect-performance-crux");
+    check(
+      "crux: the request names the URL and phone, the key only in a header",
+      first?.body.url === `${CRUX_HOST}/product` && first.body.formFactor === "PHONE" && cruxCalls.every((c) => !c.url.includes("key=")),
+      JSON.stringify(first?.body),
+    );
+
+    await cruxSection().getByRole("button", { name: "Desktop", exact: true }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "crux: the device toggle asks for desktop",
+      cruxCalls.some((c) => c.body.formFactor === "DESKTOP"),
+    );
+
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).first().click();
+    await panel.waitForTimeout(300);
+    const cruxMd = await panel.evaluate(() => window.__copied.at(-1) ?? "");
+    check(
+      "crux: Copy for agent includes the field p75",
+      cruxMd.includes("### Field data (CrUX)") && cruxMd.includes("- LCP p75 2.38 s (good)") && !cruxMd.includes(CRUX_KEY),
+      cruxMd.slice(0, 200),
+    );
+
+    await site.goto(`${CRUX_HOST}/empty`);
+    await cruxSection()
+      .getByText("No field data for this URL")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    ct = await cruxText();
+    check(
+      "crux: a URL without data falls back to its origin",
+      ct.includes(`No field data for this URL, showing the origin (${CRUX_HOST})`) && ct.includes("2.38 s"),
+      ct.slice(0, 200),
+    );
+
+    await context.unroute("https://chromeuxreport.googleapis.com/**");
+    await context.unroute(`${CRUX_HOST}/**`);
+    await site.goto(`${base}/`);
+  }
+  // --- end CrUX field data ---
+
+  // ---- DevTools panel › GraphQL (issue #28) ----
+  // Playwright cannot open Chrome DevTools, so devtools-panel.html runs as a page with a stub of
+  // chrome.devtools.network: the HAR entries are fixed, their response bodies come from the
+  // fixture server's /graphql endpoint through getContent(), like the real API hands them out.
+  {
+    const dt = await context.newPage();
+    dt.on("pageerror", (e) => extErrors.push(`devtools pageerror: ${e.message}`));
+    dt.on(
+      "console",
+      (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && extErrors.push(`devtools console: ${m.text()}`),
+    );
+    await dt.addInitScript((origin) => {
+      const entry = (method, path, body) => {
+        const url = origin + path;
+        return {
+          request: {
+            method,
+            url,
+            headers: [{ name: "Content-Type", value: "application/json" }],
+            queryString: [],
+            ...(body ? { postData: { mimeType: "application/json", text: body } } : {}),
+          },
+          response: {
+            status: 200,
+            statusText: "OK",
+            headers: [{ name: "content-type", value: "application/json" }],
+            content: { size: 120, mimeType: "application/json" },
+            _transferSize: 321,
+          },
+          time: 42,
+          startedDateTime: new Date().toISOString(),
+          _resourceType: "fetch",
+          getContent(cb) {
+            fetch(url, { method, headers: body ? { "content-type": "application/json" } : {}, body })
+              .then((r) => r.text())
+              .then((t) => cb(t, ""));
+          },
+        };
+      };
+      const persisted = new URLSearchParams({
+        operationName: "Feed",
+        variables: "{}",
+        extensions: JSON.stringify({
+          persistedQuery: { version: 1, sha256Hash: "ecf4edb46db40b5132295c0291d62fb65d6759a9eedfa4d5d612dd5ec54a6b38" },
+        }),
+      });
+      const entries = [
+        entry("GET", "/api/posts/1"),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify({
+            operationName: "GetUser",
+            query: "query GetUser($id: ID!) { user(id: $id) { id name } }",
+            variables: { id: "7" },
+          }),
+        ),
+        entry(
+          "POST",
+          "/graphql",
+          JSON.stringify([{ query: "query ListPosts { posts { id title } }" }, { query: "mutation { like(id: 1) { ok } }" }]),
+        ),
+        entry("GET", `/graphql?${persisted}`),
+      ];
+      window.__pushHar = (method, path, body) => window.__finished?.(entry(method, path, body));
+      const noop = { addListener() {}, removeListener() {} };
+      const devtools = {
+        inspectedWindow: { tabId: -1 },
+        network: {
+          getHAR: (cb) => setTimeout(() => cb({ entries: entries.map((e) => ({ ...e })) }), 0),
+          onRequestFinished: { addListener: (f) => (window.__finished = f), removeListener() {} },
+          onNavigated: noop,
+        },
+      };
+      // Chromium exposes both `chrome` and a separate `browser` namespace; wxt/browser reads the latter.
+      for (const ns of [globalThis.chrome, globalThis.browser])
+        if (ns) Object.defineProperty(ns, "devtools", { configurable: true, value: devtools });
+    }, base);
+    await dt.setViewportSize({ width: 1100, height: 800 });
+    await dt.goto(`chrome-extension://${id}/devtools-panel.html`);
+    await dt.getByRole("button", { name: /^GraphQL/ }).waitFor();
+    await dt.evaluate(() =>
+      window.__pushHar("POST", "/graphql", JSON.stringify({ query: "mutation SaveDraft($t: String) { saveDraft(title: $t) { id } }" })),
+    );
+    await dt.waitForTimeout(300);
+    const gqlTab = dt.getByRole("button", { name: /^GraphQL/ });
+    check(
+      "devtools graphql: the view counts the operations, live ones included",
+      (await gqlTab.innerText()).replace(/\s+/g, "") === "GraphQL5",
+    );
+    await gqlTab.click();
+    await dt.waitForTimeout(800);
+    const listText = await dt.locator(".gql-list").innerText();
+    check(
+      "devtools graphql: one row per operation with type, batch position and errors",
+      ["GetUser", "ListPosts", "(anonymous)", "Feed", "SaveDraft"].every((n) => listText.includes(n)) &&
+        !listText.includes("/api/posts/1") &&
+        listText.includes("batch 2/2") &&
+        (await dt.locator(".gql-list .pill.t-bad", { hasText: "1 error" }).count()) === 2 &&
+        (await dt.locator(".gql-list .pill.gql-persisted").count()) === 1 &&
+        (await dt.locator(".gql-list .pill.gql-mutation").count()) === 2,
+      listText.replace(/\s+/g, " ").slice(0, 300),
+    );
+    await dt.getByLabel("Operation type").selectOption("mutation");
+    const mutations = await dt.locator(".gql-list tr").count();
+    await dt.getByLabel("Operation type").selectOption("all");
+    await dt.getByLabel("Filter operation name").fill("user");
+    const named = await dt.locator(".gql-list tr").allInnerTexts();
+    check(
+      "devtools graphql: filters by type and by name",
+      mutations === 2 && named.length === 1 && named[0].includes("GetUser"),
+      `${mutations}`,
+    );
+    await dt.getByLabel("Filter operation name").fill("");
+    await dt.locator(".gql-list tr", { hasText: "GetUser" }).click();
+    await dt.waitForTimeout(500);
+    let detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: an operation shows its query pretty-printed, variables and response data",
+      detail.includes("query GetUser($id: ID!) {\n  user(id: $id) {\n    id\n    name") &&
+        /id:\s*"7"/.test(detail) &&
+        detail.includes('"Ada"') &&
+        detail.includes("Request headers"),
+      detail.slice(0, 300),
+    );
+    await dt.evaluate(() => {
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied = s;
+      };
+    });
+    await dt.getByRole("button", { name: "Copy as cURL" }).click();
+    await dt.waitForTimeout(200);
+    const curl = await dt.evaluate(() => window.__copied ?? "");
+    await dt.getByRole("button", { name: "Copy query" }).click();
+    await dt.waitForTimeout(200);
+    const copiedQuery = await dt.evaluate(() => window.__copied ?? "");
+    check(
+      "devtools graphql: copy as cURL replays the request, copy query gives the pretty document",
+      curl.startsWith(`curl '${base}/graphql'`) && curl.includes("--data-raw") && copiedQuery.startsWith("query GetUser($id: ID!) {\n"),
+      curl.slice(0, 120),
+    );
+    await dt.locator(".gql-list tr", { hasText: "(anonymous)" }).click();
+    await dt.waitForTimeout(500);
+    const errorsText = await dt
+      .locator(".gql-errors")
+      .innerText()
+      .catch(() => "");
+    check(
+      "devtools graphql: a batched operation gets its own response, errors highlighted with path and code",
+      errorsText.includes("Not authorized") && errorsText.includes("like") && errorsText.includes("FORBIDDEN"),
+      errorsText,
+    );
+    await dt.locator(".gql-list tr", { hasText: "Feed" }).click();
+    await dt.waitForTimeout(500);
+    detail = await dt.locator(".gql-detail").innerText();
+    check(
+      "devtools graphql: a persisted query shows its hash and the response",
+      detail.includes("Persisted query") && detail.includes("ecf4edb46db40b51") && detail.includes("feed") && detail.includes("extensions"),
+      detail.slice(0, 300),
+    );
+    check(
+      "devtools graphql: WebSocket subscriptions are called out as outside the HAR",
+      (await dt.locator(".gql-hint").innerText()).includes("WebSocket"),
+    );
+    await dt.close();
+  }
+  // ---- end DevTools panel › GraphQL ----
+
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
+
+  /**
+   * The data page viewer on each format, while the Options toggle is on (the gate script asks the
+   * background to inject the viewer), plus the palette action on XML served as text/plain.
+   */
+  async function checkDataFormats(page, viewer, runFormat, tabOf) {
+    const v = viewer(page);
+    const open = async (path, ready) => {
+      await page.goto(`${base}${path}`);
+      await v
+        .locator(ready)
+        .first()
+        .waitFor({ timeout: 5000 })
+        .catch(() => undefined);
+    };
+    const state = async () => ({
+      state: await v.getAttribute("data-state").catch(() => null),
+      format: await v.getAttribute("data-format").catch(() => null),
+    });
+
+    await open("/data/feed.xml", ".feed");
+    const feed = await v
+      .locator(".feed")
+      .innerText()
+      .catch(() => "");
+    check(
+      "data viewer: RSS (shown as text by Chrome) opens with a feed summary and the element tree",
+      /RSS feed · 2 items/.test(feed) &&
+        feed.includes("Acme blog") &&
+        feed.includes("Second post") &&
+        (await v.locator(".node[data-path='/rss/channel/item[1]/title']").innerText()) === "<title>First post</title>",
+      JSON.stringify(await state()),
+    );
+    if (shots) await page.screenshot({ path: join(shots, "data-viewer-rss.png") });
+
+    await open("/data/catalog.xml", ".node[data-path='/catalog']");
+    const product = await v
+      .locator(".node[data-path='/catalog/product[1]'] > .line .tag")
+      .first()
+      .innerText()
+      .catch(() => "");
+    check(
+      "data viewer: XML from Chrome's XML viewer shows attributes, CDATA and comments",
+      (await state()).format === "xml" &&
+        product.startsWith('<product id="p1" href=') &&
+        (await v.locator(".node[data-path='/catalog/product[1]/notes']").innerText()) === "<notes><![CDATA[Holds <350 ml>]]></notes>" &&
+        (await v.locator(".x-comment").first().innerText()) === "<!-- product catalog -->" &&
+        (await page.locator("#webkit-xml-viewer-source-xml").isHidden()),
+      product,
+    );
+    await v.getByLabel("Filter tags, attributes and text").fill("cup");
+    await page.waitForTimeout(400);
+    check(
+      "data viewer: XML filter keeps the matches and their parents",
+      (await v.locator(".node.hit[data-path='/catalog/product[2]/name']").count()) === 1 &&
+        (await v.locator(".node[data-path='/catalog/product[1]']").count()) === 0,
+    );
+
+    await open("/data/broken.xml", ".banner.error");
+    const xmlError = await v
+      .locator(".banner.error")
+      .innerText()
+      .catch(() => "");
+    check("data viewer: invalid XML shows where it breaks", /^Invalid XML at line 2, column \d+/.test(xmlError), xmlError);
+
+    await page.goto(`${base}/data/styled.xml`);
+    await page.waitForTimeout(600);
+    check("data viewer: XML with an xml-stylesheet is left as styled", (await v.count()) === 0);
+
+    await open("/data/people.csv", "table.grid tbody tr");
+    const headers = await v.locator("table.grid thead th").allInnerTexts();
+    const firstCells = async () => (await v.locator("table.grid tbody tr td:first-of-type").allInnerTexts()).map((t) => t.trim());
+    check(
+      "data viewer: CSV opens as a table with a header and quoted fields",
+      headers.map((h) => h.trim()).join("|") === "#|name|score|city" &&
+        (await v.locator("table.grid tbody tr").count()) === 3 &&
+        (await v.locator("table.grid tbody tr").nth(1).innerText()).includes("Paris, France"),
+      headers.join("|"),
+    );
+    await v.locator("thead .sort", { hasText: "score" }).click();
+    const sorted = await firstCells();
+    await v.getByLabel("Filter rows").fill("london");
+    await page.waitForTimeout(400);
+    check(
+      "data viewer: CSV sorts by column and filters rows",
+      sorted.join(",") === "alan,Ada,Grace" && (await v.locator("table.grid tbody tr").count()) === 1,
+      sorted.join(","),
+    );
+    if (shots) await page.screenshot({ path: join(shots, "data-viewer-csv.png") });
+
+    await open("/data/config.yaml", ".node[data-path='$.build.target']");
+    check(
+      "data viewer: YAML opens as a tree",
+      (await state()).format === "yaml" &&
+        (await v.locator(".node[data-path='$.features'] > .line .count").innerText()) === "[2]" &&
+        (await v.locator(".node[data-path='$.build.target'] .s").innerText()) === '"chrome\\n"' &&
+        (await v.locator(".node[data-path='$.version'] .n").innerText()) === "1.2",
+    );
+
+    await open("/data/events.jsonl", ".node[data-path='$[2]']");
+    check(
+      "data viewer: JSON Lines shows one tree per line and flags the invalid one",
+      (await v.locator(".node[data-path='$[0]'] > .line .key").innerText()) === "line 1" &&
+        (await v.locator(".node.bad[data-path='$[1]'] .err").count()) === 1 &&
+        (await v.locator(".banner.error").innerText()).startsWith("Line 2 is not valid JSON"),
+    );
+
+    await page.goto(`${base}/data/note`);
+    await page.waitForTimeout(500);
+    const untouched = (await v.count()) === 0;
+    const fmt = await runFormat(await tabOf(`${base}/data/note`));
+    await v
+      .locator(".node[data-path='/note/to']")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check(
+      "data viewer: XML served as text/plain is formatted only on request",
+      untouched && fmt.toast === "XML formatted." && (await v.locator(".node[data-path='/note/to']").count()) === 1,
+      fmt.toast,
+    );
+  }
 } catch (e) {
   check("run completed", false, e instanceof Error ? e.stack : String(e));
   const last = context.pages().find((p) => p.url().includes("sidepanel.html"));

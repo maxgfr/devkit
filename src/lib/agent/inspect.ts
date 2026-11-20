@@ -4,11 +4,14 @@
 import { agentDoc, clip, code, fence, plural } from "../agent-md";
 import { createRedactor, type ReportError } from "../bug-report";
 import { sourcePath } from "../element";
+import type { DataLayerAnalysis, DataLayerIssue } from "../datalayer";
 import { cachingReport, type Check, type HeaderFetch, securityReport } from "../headers";
 import { type HeadingIssue, headingIssues, headingText, isExposed, levelCounts, outlineLines } from "../headings";
 import { type Finding, type JsonLdBlock, type JsonLdReport, richResultsTestUrl } from "../jsonld";
 import type { FontsColors, MetaSnapshot, PerfSnapshot } from "../page/collect";
+import { isLandmarkExposed, type LandmarkIssue, landmarkFix, landmarkIssues, landmarksOutline } from "../landmarks";
 import type { HeadingsSnapshot, RawHeading } from "../page/headings";
+import type { LandmarksSnapshot } from "../page/landmarks";
 import { jsonLdVerdict } from "../report";
 import { linkHref, metaValue, seoReport } from "../seo";
 import { EXTERNAL_TOOLS, isAllowed, manifestChecks, type Robots, type Sitemap } from "../site-files";
@@ -143,12 +146,35 @@ function seoFix(c: Check, snap: MetaSnapshot): { where: string; fix: string } | 
     }
     case "favicon":
       return { where: "`<head>`", fix: `Add ${code('<link rel="icon" href="/favicon.svg" type="image/svg+xml">')} (or a 32×32 PNG).` };
-    case "hreflang":
+    case "hreflang-x-default":
       return {
         where: '`<link rel="alternate" hreflang>` in `<head>`',
         fix: `Add ${code(`<link rel="alternate" hreflang="x-default" href="${page}">`)} for visitors whose language matches no alternate.`,
       };
+    case "hreflang-self":
+      return {
+        where: '`<link rel="alternate" hreflang>` in `<head>`',
+        fix: `Add ${code(`<link rel="alternate" hreflang="${snap.lang || "en"}" href="${linkHref(snap, "canonical") ?? page}">`)}: every language version lists itself too.`,
+      };
+    case "og-name":
+      return { where: "`<head>`", fix: 'Write Open Graph tags as `<meta property="og:…" content="…">` (property=, not name=).' };
+    case "og-url-canonical":
+      return { where: '`<meta property="og:url">`', fix: `Set og:url to the canonical URL: ${code(linkHref(snap, "canonical") ?? page)}.` };
+    case "images-alt":
+      return {
+        where: "the page's `<img>` elements",
+        fix: 'Give each content image an `alt` describing it, and `alt=""` to decorative ones (Page › Assets lists them).',
+      };
     default:
+      if (c.id.startsWith("og:image") || c.id.startsWith("twitter:image"))
+        return { where: "`<head>`", fix: "Use an absolute `https://` URL for the share image." };
+      if (c.id === "twitter-card")
+        return { where: '`<meta name="twitter:card">`', fix: "Use one of `summary`, `summary_large_image`, `app` or `player`." };
+      if (c.id.startsWith("hreflang"))
+        return {
+          where: '`<link rel="alternate" hreflang>` in `<head>`',
+          fix: "Use ISO 639-1 language codes with an optional ISO 3166-1 region joined by a hyphen (`de-AT`, `en-GB`), absolute URLs, and one URL per language.",
+        };
       return null;
   }
 }
@@ -217,9 +243,54 @@ function headingFix(issue: HeadingIssue, snap: HeadingsSnapshot): string {
 
 const headingWhere = (h: RawHeading) => `${code(h.selector)}: ${code(clip(h.html, 160))}`;
 
-/** Headings panel: the problems of `headingIssues` and the outline they sit in. */
-export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string {
+function landmarkItem(i: LandmarkIssue, landmarks: LandmarksSnapshot | undefined): Item {
+  const at = i.at.map((n) => landmarks?.landmarks[n]).filter((l) => l !== undefined);
+  return {
+    text: `${i.label}: ${clip(i.detail, 240)}`,
+    details: [
+      ...at.slice(0, 6).map((l) => `Where: ${code(l.selector)} (\`<${l.tag}>\`)`),
+      at.length > 6 ? `… and ${at.length - 6} more` : "",
+      `Fix: ${landmarkFix(i)}`,
+    ],
+  };
+}
+
+/** The landmarks alone (the Overview's row; the Headings panel reports them with the outline): issues and tree. */
+export function landmarksMarkdown(snap: LandmarksSnapshot, ctx: AgentCtx, headings?: RawHeading[]): string {
+  const issues = landmarkIssues(snap, headings);
+  const bad = issues.filter((i) => i.level === "bad").map((i) => landmarkItem(i, snap));
+  const warn = issues.filter((i) => i.level === "warn").map((i) => landmarkItem(i, snap));
+  const notes = issues.filter((i) => i.level === "info");
+  const exposed = snap.landmarks.filter(isLandmarkExposed).length;
+  return agentDoc({
+    title: "Landmarks",
+    url: ctx.url,
+    heading: ctx.heading,
+    result: counted(bad.length, warn.length),
+    context: [
+      `${plural(snap.landmarks.length, "ARIA landmark")}${snap.capped ? " (capped)" : ""}, ${exposed} announced by screen readers, as browsers map them (HTML-AAM).`,
+    ],
+    sections: [
+      { title: "To fix", body: list(bad) },
+      { title: "Worth checking", body: list(warn) },
+      {
+        title: "Notes",
+        body: list(
+          notes.map((i) => ({ text: `${i.label}: ${clip(i.detail, 200)}` })),
+          10,
+        ),
+      },
+      { title: "Tree", body: snap.landmarks.length ? fence(landmarksOutline(snap, { hidden: true, selectors: true })) : "" },
+    ],
+    verify:
+      bad.length || warn.length ? "Reload the page and refresh devkit's Headings panel, Landmarks view (Inspect › Headings)." : undefined,
+  });
+}
+
+/** Headings panel: the problems of `headingIssues` (and `landmarkIssues` when given) and the outline they sit in. */
+export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx, landmarks?: LandmarksSnapshot): string {
   const issues = headingIssues(snap);
+  const lmIssues = landmarks ? landmarkIssues(landmarks, snap.headings) : [];
   const item = (i: HeadingIssue): Item => {
     const at = i.at.map((n) => snap.headings[n]).filter((h): h is RawHeading => Boolean(h));
     return {
@@ -231,9 +302,14 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
       ],
     };
   };
-  const bad = issues.filter((i) => i.level === "bad");
-  const warn = issues.filter((i) => i.level === "warn");
-  const notes = issues.filter((i) => i.level === "info");
+  const lmItem = (i: LandmarkIssue) => landmarkItem(i, landmarks);
+  const by = (level: HeadingIssue["level"]) => [
+    ...issues.filter((i) => i.level === level).map(item),
+    ...lmIssues.filter((i) => i.level === level).map(lmItem),
+  ];
+  const bad = by("bad");
+  const warn = by("warn");
+  const notes = [...issues, ...lmIssues].filter((i) => i.level === "info");
   const exposed = snap.headings.filter(isExposed);
   const counts = levelCounts(exposed)
     .map((n, l) => (n ? `h${l + 1} ×${n}` : ""))
@@ -248,10 +324,13 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
     context: [
       `${plural(snap.headings.length, "heading")}${snap.capped ? " (capped)" : ""}, ${exposed.length} announced by screen readers${counts ? ` (${counts})` : ""}.`,
       noId ? `${plural(noId, "visible heading")} without an \`id\`: no link can point to ${noId === 1 ? "it" : "them"}.` : "",
+      landmarks
+        ? `${plural(landmarks.landmarks.length, "ARIA landmark")}${landmarks.capped ? " (capped)" : ""}, as browsers map them (HTML-AAM).`
+        : "",
     ],
     sections: [
-      { title: "To fix", body: list(bad.map(item)) },
-      { title: "Worth checking", body: list(warn.map(item)) },
+      { title: "To fix", body: list(bad) },
+      { title: "Worth checking", body: list(warn) },
       {
         title: "Notes",
         body: list(
@@ -260,6 +339,10 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
         ),
       },
       { title: "Outline", body: outlineLines(snap, issues, { max: 80 }) },
+      {
+        title: "Landmarks",
+        body: landmarks?.landmarks.length ? fence(landmarksOutline(landmarks, { hidden: true, selectors: true })) : "",
+      },
     ],
     verify: bad.length || warn.length ? "Reload the page and refresh devkit's Headings panel (Inspect › Headings)." : undefined,
   });
@@ -290,8 +373,12 @@ function jsonSnippet(raw: string, error: string | undefined): string {
   return fence(out.join("\n"));
 }
 
-function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[]): Item {
-  const where = `Block #${block.index + 1}${types.length ? ` (${types.join(", ")})` : ""}, ${code(f.path)}`;
+function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[], paths: string[] = [f.path]): Item {
+  const more =
+    paths.length > 1
+      ? ` and ${plural(paths.length - 1, "other node")} (×${paths.length}: ${paths.slice(1, 6).map(code).join(", ")}${paths.length > 6 ? ", …" : ""})`
+      : "";
+  const where = `Block #${block.index + 1}${types.length ? ` (${types.join(", ")})` : ""}, ${code(f.path)}${more}`;
   const details: string[] = [];
   let snippet: string | undefined;
   if (!block.ok && block.error && block.error !== "Empty script") {
@@ -303,6 +390,9 @@ function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[]): Item {
   else if (/missing required/.test(f.message))
     details.push("Fix: add the property to this node with the value the page shows; without it the node is not eligible for rich results.");
   else if (/missing recommended/.test(f.message)) details.push("Fix: add it if the page shows that information.");
+  else if (f.rule === "vocab.domain")
+    details.push("Fix: move the property to a node of a type that has it, or change the node's @type; search engines may ignore it here.");
+  else if (f.rule === "vocab.range") details.push("Fix: give it a node of one of the expected types (or plain text where Text is listed).");
   return { text: `${where}: ${f.message}`, details, block: snippet };
 }
 
@@ -316,10 +406,18 @@ export function jsonLdMarkdown(report: JsonLdReport, ctx: AgentCtx): string {
       ...b.findings.map((f) => ({ f, types: b.nodes[0]?.types ?? [] })),
       ...b.nodes.flatMap((n) => n.findings.map((f) => ({ f, types: n.types }))),
     ];
+    // Identical findings on several nodes of the block (four offers with the same bad price) are one item.
+    const groups = new Map<string, { f: Finding; types: string[]; paths: string[] }>();
     for (const { f, types } of entries) {
-      if (f.severity === "error") errors.push(jsonLdItem(b, f, types));
-      else if (f.severity === "warn") warnings.push(jsonLdItem(b, f, types));
-      else notes.set(f.message, [...(notes.get(f.message) ?? []), f.path]);
+      const key = `${f.severity}\u0000${f.rule}\u0000${f.message}`;
+      const g = groups.get(key);
+      if (g) g.paths.push(f.path);
+      else groups.set(key, { f, types, paths: [f.path] });
+    }
+    for (const { f, types, paths } of groups.values()) {
+      if (f.severity === "error") errors.push(jsonLdItem(b, f, types, paths));
+      else if (f.severity === "warn") warnings.push(jsonLdItem(b, f, types, paths));
+      else notes.set(f.message, [...(notes.get(f.message) ?? []), ...paths]);
     }
   }
   const { error, warn } = report.counts;
@@ -337,6 +435,9 @@ export function jsonLdMarkdown(report: JsonLdReport, ctx: AgentCtx): string {
       ? [
           report.types.length ? `Types: ${report.types.map((t) => `${t.type} ×${t.count}`).join(", ")}` : "",
           'Blocks are numbered in document order of the page\'s `<script type="application/ld+json">` tags; a path starts at its block (`#2.offers.price` is `offers.price` in block #2).',
+          report.vocab
+            ? `Checked against Google's rich results rules and, locally, the Schema.org ${report.vocab.version} vocabulary (${report.vocab.date}): unknown types and properties, properties on the wrong type, values of the wrong type, enumeration values, superseded terms.`
+            : "Checked against Google's rich results rules (the Schema.org vocabulary checks did not run).",
         ]
       : [],
     sections: [
@@ -512,7 +613,8 @@ const HEAVY: Record<ResourceKind, { bytes: number; fix: string }> = {
 };
 
 /** Performance panel: Web Vitals, long tasks, navigation phases and resources of `collectPerf`. */
-export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx): string {
+/** `ctx.field`: the CrUX section's Markdown (agent/crux.ts), when it loaded field data. */
+export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx & { field?: string }): string {
   const redactor = createRedactor(p.resources.map((r) => r.name).join("\n"));
   const name = (url: string) => code(clip(redactor.redact(url), 160));
   const bad: Item[] = [];
@@ -582,6 +684,7 @@ export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx): string {
     sections: [
       { title: "To fix", body: list(bad) },
       { title: "Worth checking", body: list(warn, 15) },
+      { title: "Field data (CrUX)", body: ctx.field ?? "" },
       {
         title: "Navigation timing",
         body: nav
@@ -1013,5 +1116,93 @@ export function siteFilesMarkdown(data: SiteFilesData, ctx: AgentCtx): string {
       bad.length || warn.length
         ? "Deploy, then refresh devkit's robots.txt, sitemap, manifest panel; Search Console's robots.txt and sitemap reports show what Google fetched."
         : undefined,
+  });
+}
+
+/* dataLayer */
+
+const DATALAYER_FIX: Record<string, string> = {
+  "transaction-id":
+    "Add `transaction_id` (the order number, unique per order): `ecommerce.transaction_id` in a GTM push, the third argument of `gtag('event', …)` otherwise.",
+  "value-type": 'Send `value` as a number (`value: 129.00`), not a string such as `"129,00"`: convert the amount before pushing it.',
+  "value-zero": "Fill `value` with the order or cart total when the event fires (ignore if the order really is free).",
+  "value-missing": "Add `value` (the order total, a number) and `currency`.",
+  "currency-missing": 'Add `currency` with the ISO 4217 code (e.g. `"EUR"`) next to `value`.',
+  "currency-code": "Replace it with the three-letter ISO 4217 code (`EUR`, `USD`, `GBP`…).",
+  "items-missing": "Add `items: [{ item_id, item_name, price, quantity }]` with the products the event is about.",
+  "items-type": "Make `items` an array of item objects: `items: [{ item_id, item_name, price, quantity }]`.",
+  "items-empty": "Fill `items` with the products the event is about.",
+  "item-id": "Give every item an `item_id` (the SKU) or an `item_name`.",
+  "item-price": "Send the item `price` as a number.",
+  "item-quantity": "Send `quantity` as a positive integer.",
+  "legacy-ua":
+    'Rewrite the push in the GA4 shape, `{ event: "purchase", ecommerce: { transaction_id, value, currency, items: [{ item_id, item_name, price, quantity }] } }`, and point the GTM tags at the new variables.',
+  "ua-config": "Remove the `gtag('config', 'UA-…')` call, or replace it with the GA4 `G-` id.",
+  "ecommerce-not-cleared": "Push `{ ecommerce: null }` right before each ecommerce event.",
+  "event-name": "Rename the event: letters, digits and `_`, starting with a letter, 40 characters at most, not a reserved name.",
+  "duplicate-transaction":
+    "Send purchase once per order: guard it (mark the order as tracked, server-side or in sessionStorage) so a reload of the confirmation page does not send it again.",
+  "duplicate-event": "Find the second trigger (a tag on two triggers, a listener added twice, a component mounting twice) and keep one.",
+  "consent-no-default":
+    "Call `gtag('consent', 'default', { ad_storage: 'denied', analytics_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' })` before the GTM or gtag snippet.",
+  "consent-update-first": "Send the default first, before GTM loads; the CMP sends the update once the visitor chooses.",
+  "consent-default-late":
+    "Move `gtag('consent', 'default', …)` above the tag snippet so it is the first entry of the dataLayer (or set it from a Consent Initialization trigger in GTM).",
+  "consent-v2": "Add `ad_user_data` and `ad_personalization` to the default, and make the CMP's update set them too.",
+  "consent-value": "Use `'granted'` or `'denied'`.",
+  "consent-command": "Use `gtag('consent', 'default', …)` or `gtag('consent', 'update', …)`.",
+  "jsonld-price": "Feed the dataLayer item and the JSON-LD offer from the same product record so the price matches.",
+  "jsonld-currency": "Use the same currency in the dataLayer and in the JSON-LD offer's `priceCurrency`.",
+  "jsonld-sku": "Use the JSON-LD `sku` as `item_id` (or the other way round), so both name the same product.",
+};
+
+/** dataLayer panel: the issues of `analyzeDataLayer`, with containers and the consent sequence. PII stays masked. */
+export function dataLayerMarkdown(a: DataLayerAnalysis, ctx: AgentCtx): string {
+  const fix = (i: DataLayerIssue) =>
+    i.area === "pii"
+      ? "Stop pushing it: remove the field, or send a SHA-256 hash of the normalized value (Google's user-provided data) instead."
+      : (DATALAYER_FIX[i.id] ?? "");
+  const item = (i: DataLayerIssue): Item => ({
+    text: `${i.label}: ${clip(i.detail, 300)}`,
+    details: [i.path ? `Where: ${code(i.path)}` : "", fix(i) ? `Fix: ${fix(i)}` : ""],
+  });
+  const bad = a.issues.filter((i) => i.level === "bad");
+  const warn = a.issues.filter((i) => i.level === "warn");
+  const notes = a.issues.filter((i) => i.level === "info");
+  const c = a.counts;
+  return agentDoc({
+    title: "dataLayer (GA4, Consent Mode, GTM)",
+    url: ctx.url,
+    heading: ctx.heading,
+    result: a.layers.length ? counted(bad.length, warn.length) : "No dataLayer found on this page.",
+    context: [
+      a.layers.length
+        ? `${plural(c.events, "event")} (${c.unique} unique) in ${plural(c.layers, "entry", "entries")} of ${a.layers.map((l) => code(l.name)).join(", ")}, ${plural(c.consent, "consent command")}, ${plural(c.containers, "container")}.`
+        : "",
+      a.truncated ? "The dataLayer was too large: part of it was left out." : "",
+      c.pii ? "Personal data is masked: findings give its path, never its value." : "",
+    ],
+    sections: [
+      { title: "To fix", body: list(bad.map(item)) },
+      { title: "Worth checking", body: list(warn.map(item)) },
+      { title: "Notes", body: list(notes.map((i) => ({ text: `${i.label}: ${clip(i.detail, 200)}` }), 10)) },
+      {
+        title: "Containers",
+        body: a.containers.map(
+          (k) => `- ${code(k.id)}: ${k.kind}${k.layer ? `, reads ${code(k.layer)}` : ""} (seen in ${k.sources.join(", ")})`,
+        ),
+      },
+      {
+        title: "Consent sequence",
+        body: a.consent.map(
+          (s) =>
+            `- ${code(`${s.layer}[${s.index}]`)} ${s.command}: ${Object.entries(s.states)
+              .map(([k, v]) => `${k}=${v}`)
+              .join(", ")}`,
+        ),
+      },
+    ],
+    verify:
+      bad.length || warn.length ? "Reload the page and press Read again in devkit's dataLayer panel (Inspect › dataLayer)." : undefined,
   });
 }

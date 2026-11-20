@@ -1,10 +1,17 @@
 import { type Audit, auditContext } from "../a11y";
+import { filesLines } from "../agent/agents";
+import { dataLayerMarkdown } from "../agent/inspect";
+import { type DataLayerAnalysis, entryPath, paramsPreview } from "../datalayer";
 import type { Check } from "../headers";
-import type { JsonLdReport } from "../jsonld";
+import { blockFindings, groupFindings, type JsonLdReport } from "../jsonld";
 import { headingIssues, headingText, isExposed, outlineLines } from "../headings";
+import { isLandmarkExposed, landmarkIssues, landmarksOutline } from "../landmarks";
 import type { MetaSnapshot, PerfSnapshot } from "../page/collect";
-import type { HeadingsSnapshot } from "../page/headings";
+import type { HeadingsSnapshot, RawHeading } from "../page/headings";
+import type { LandmarksSnapshot } from "../page/landmarks";
+import { IMPACT_TEXT, type Readiness, type ReadinessInputs } from "../readiness";
 import type { Tech } from "../tech";
+import { RISK_TEXT } from "../webmcp";
 
 export interface CapturedError {
   kind: "error" | "rejection" | "console";
@@ -43,7 +50,10 @@ export type ContextPart =
   | "report"
   | "secrets"
   | "libraries"
-  | "headings";
+  | "headings"
+  | "landmarks"
+  | "datalayer"
+  | "readiness";
 
 export const PART_LABELS: Record<ContextPart, string> = {
   text: "Page text",
@@ -63,6 +73,9 @@ export const PART_LABELS: Record<ContextPart, string> = {
   secrets: "Secrets (masked)",
   libraries: "Vulnerable libraries",
   headings: "Headings outline",
+  landmarks: "Landmarks",
+  datalayer: "dataLayer (masked)",
+  readiness: "Agent readiness",
 };
 
 export interface PageContext {
@@ -93,6 +106,12 @@ export interface PageContext {
   libraries?: string;
   /** The Headings panel's snapshot, and the heading the developer asked about. */
   headings?: { snapshot: HeadingsSnapshot; focus?: number };
+  /** The Headings panel's landmarks, and the page's headings for the "outside every landmark" check. */
+  landmarks?: { snapshot: LandmarksSnapshot; headings?: RawHeading[] };
+  /** The dataLayer inspector's analysis: its layers and events are masked (no e-mail, phone, IBAN or card in clear). */
+  datalayer?: DataLayerAnalysis;
+  /** The Agent readiness score and what it was computed from (WebMCP tools, agent files, crawlers). */
+  readiness?: { score: Readiness; inputs: ReadinessInputs };
 }
 
 /** A rough token count: about 4 characters per token for English and code. */
@@ -113,7 +132,111 @@ const PANEL: Record<string, string> = {
   "Structured data (JSON-LD)": "Inspect › JSON-LD",
   "Accessibility (axe-core audit)": "Inspect › A11y",
   "Headings outline": "Inspect › Headings",
+  Landmarks: "Inspect › Headings",
+  "dataLayer (GA4, Consent Mode, GTM)": "Inspect › dataLayer",
+  "Agent readiness": "Inspect › Agent readiness",
 };
+
+const clipLine = (s: string, max = 240) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/** The landmark tree (name [role], hidden ones flagged, selectors) and the landmark issues. */
+export function landmarksContext(lm: NonNullable<PageContext["landmarks"]>): string {
+  const snap = lm.snapshot;
+  const issues = landmarkIssues(snap, lm.headings);
+  const exposed = snap.landmarks.filter(isLandmarkExposed).length;
+  const tree = snap.landmarks.length ? landmarksOutline(snap, { hidden: true, selectors: true }).split("\n") : [];
+  return [
+    `${snap.landmarks.length} ARIA landmarks${snap.capped ? " (capped)" : ""}, ${exposed} announced by screen readers, as browsers map the HTML (HTML-AAM).`,
+    ...(tree.length
+      ? [
+          "Tree (name [role], 4 spaces per level, then the visibility when not visible and the CSS selector):",
+          ...tree.slice(0, 150),
+          ...(tree.length > 150 ? [`… and ${tree.length - 150} more`] : []),
+        ]
+      : []),
+    "Issues found by devkit:",
+    ...(issues.length ? issues.slice(0, 40).map((i) => `- [${i.level}] ${i.label}: ${clipLine(i.detail, 300)}`) : ["- none"]),
+  ].join("\n");
+}
+
+/**
+ * The dataLayer report of the panel (counts, containers, GA4, Consent Mode and the other findings, consent sequence)
+ * and the events, one line each. Built from the masked analysis only: personal data never appears in clear.
+ */
+export function dataLayerContext(a: DataLayerAnalysis): string {
+  // The panel's "Copy for agent" without its "## title" and "Page:" lines: the section heading replaces them.
+  const report = dataLayerMarkdown(a, { url: a.url })
+    .split("\n")
+    .filter((l, i) => !(i === 0 && l.startsWith("## ")) && !(i === 1 && l.startsWith("Page: ")))
+    .join("\n")
+    .trim();
+  const events = a.events.filter((e) => !e.name.startsWith("gtm."));
+  return [
+    report,
+    ...(events.length
+      ? [
+          "",
+          `### Entries (${events.length}, values masked)`,
+          "",
+          ...events.slice(0, 60).map((e) => {
+            const preview = paramsPreview(e);
+            return clipLine(`- ${entryPath(e.layer, e.index)} ${e.name}${e.gtag ? " (gtag)" : ""}${preview ? ` — ${preview}` : ""}`);
+          }),
+          ...(events.length > 60 ? [`… and ${events.length - 60} more`] : []),
+        ]
+      : []),
+    "",
+    "Personal data (e-mails, phone numbers, IBANs, card numbers) is masked by devkit: findings give its path, never its value.",
+  ].join("\n");
+}
+
+/** The readiness score area by area with every rule, the recommendations, the agent files and the WebMCP tools. */
+export function readinessContext(r: NonNullable<PageContext["readiness"]>): string {
+  const { score, inputs } = r;
+  const pts = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  const blocked = (inputs.crawlers ?? []).filter((c) => !c.root.allowed).map((c) => c.agent);
+  const tools = inputs.tools;
+  const w = inputs.webmcp;
+  const apis = w
+    ? [
+        w.apis.document.present ? "document.modelContext" : "",
+        w.apis.navigator.present ? "navigator.modelContext" : "",
+        w.apis.testing.present ? "navigator.modelContextTesting" : "",
+      ].filter(Boolean)
+    : [];
+  return [
+    `Score: ${score.total}/100. A heuristic computed locally by devkit: a technical orientation, not a guarantee of compatibility with any AI agent.`,
+    "Breakdown (points per rule):",
+    ...score.areas.map(
+      (a) => `- ${a.label} ${a.score}/${a.max}: ${a.rules.map((x) => `${x.label} ${pts(x.points)}/${x.max} (${x.detail})`).join("; ")}`,
+    ),
+    "Recommendations, most impact first:",
+    ...(score.recommendations.length
+      ? score.recommendations.slice(0, 15).map((x) => `- [${IMPACT_TEXT[x.impact]}] ${clipLine(x.text, 300)}`)
+      : ["- none"]),
+    ...(filesLines(inputs).length ? ["Agent files:", ...filesLines(inputs)] : ["Agent files: not checked"]),
+    inputs.crawlers
+      ? `AI crawlers blocked on / by robots.txt: ${blocked.length ? blocked.join(", ") : "none"} (of ${inputs.crawlers.length} checked).`
+      : "",
+    `WebMCP APIs on the page: ${apis.length ? apis.join(", ") : "none"}.`,
+    ...(tools.length
+      ? [
+          `WebMCP tools (${tools.length}; risk classes are a heuristic from names, descriptions and annotations; devkit panel: Inspect › Agent tools):`,
+          ...tools.slice(0, 30).map((t) => {
+            const bad = t.findings.filter((f) => f.level === "bad");
+            const warn = t.findings.filter((f) => f.level === "warn");
+            const first = [...bad, ...warn].slice(0, 3).map((f) => `${f.area}: ${f.message}`);
+            return clipLine(
+              `- \`${t.tool.name || "(unnamed)"}\`: ${RISK_TEXT[t.risk]} risk (${t.riskReasons.join("; ")}); ${t.tool.form ? `form ${t.tool.form.selector}` : t.tool.sources.join(", ")}; ${bad.length} problems, ${warn.length} warnings${first.length ? ` — ${first.join(" | ")}` : ""}`,
+              400,
+            );
+          }),
+        ]
+      : []),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 /** The outline with each section's opening (shorter when there are many headings), the issues, and the heading in focus. */
 export function headingsContext(h: NonNullable<PageContext["headings"]>): string {
@@ -220,23 +343,34 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
     );
   if (has("jsonld") && ctx.jsonld) {
     const r = ctx.jsonld;
-    const findings = r.blocks.flatMap((b) => [...b.findings, ...b.nodes.flatMap((n) => n.findings)]);
+    const findings = groupFindings(r.blocks.flatMap(blockFindings));
     out.push(
       section(
         "Structured data (JSON-LD)",
         [
           `Types: ${r.types.map((t) => `${t.type}×${t.count}`).join(", ") || "none"}`,
-          ...findings.slice(0, 60).map((f) => `- [${f.severity}] ${f.path}: ${f.message}`),
+          r.vocab
+            ? `Findings: Google rich results rules, value formats and the Schema.org ${r.vocab.version} vocabulary (checked locally).`
+            : "Findings: Google rich results rules and value formats.",
+          ...findings
+            .slice(0, 60)
+            .map(
+              (f) =>
+                `- [${f.severity}] ${f.paths[0]}${f.paths.length > 1 ? ` (×${f.paths.length}, also ${f.paths.slice(1, 4).join(", ")}${f.paths.length > 4 ? ", …" : ""})` : ""}: ${f.message}`,
+            ),
           ...r.blocks.map((b) => `Block #${b.index + 1}:\n\`\`\`json\n${b.raw.trim().slice(0, 6000)}\n\`\`\``),
         ].join("\n"),
       ),
     );
   }
   if (has("headings") && ctx.headings) out.push(section("Headings outline", headingsContext(ctx.headings)));
+  if (has("landmarks") && ctx.landmarks) out.push(section("Landmarks", landmarksContext(ctx.landmarks)));
   if (has("a11y") && ctx.a11y) out.push(section("Accessibility (axe-core audit)", auditContext(ctx.a11y.audit, ctx.a11y.focus)));
   if (has("secrets") && ctx.secrets)
     out.push(`${ctx.secrets.replace(/^## Secrets/, "## Secrets (devkit panel: Security › Secrets)").trim()}\n`);
   if (has("libraries") && ctx.libraries) out.push(`${ctx.libraries.trim()}\n`);
+  if (has("datalayer") && ctx.datalayer) out.push(section("dataLayer (GA4, Consent Mode, GTM)", dataLayerContext(ctx.datalayer)));
+  if (has("readiness") && ctx.readiness) out.push(section("Agent readiness", readinessContext(ctx.readiness)));
 
   const fixed = out.join("\n");
   if (has("text") && ctx.page) {

@@ -1,10 +1,13 @@
 import { browser } from "wxt/browser";
 import { actionContext, findAction, NO_CACHE_RULE_BASE } from "../lib/actions";
+import { DATA_VIEWER_FILE, DATA_VIEWER_MESSAGE } from "../lib/data-viewer";
 import { loadEnvs, matchEnv, showRibbon } from "../lib/envs";
 import { installMockSession } from "../lib/mock-session";
 import { hasPermission } from "../lib/permissions";
 import { PENDING_ROUTE_KEY, type Route } from "../lib/panels";
 import { registerRecorder } from "../lib/recorder";
+import { registerRedirects } from "../lib/redirects-bg";
+import { loadPackageInfo, type PackageInfoMessage } from "../lib/repo-deps-info";
 
 const MENU = {
   page: "devkit-ask-page",
@@ -64,6 +67,7 @@ export default defineBackground(() => {
   });
   browser.runtime.onStartup.addListener(createMenus);
   registerRecorder();
+  registerRedirects();
 
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (!tab?.windowId) return;
@@ -103,6 +107,22 @@ export default defineBackground(() => {
       errorCounts.set(sender.tab.id, message.count ?? 0);
       refreshBadge(sender.tab.id);
     }
+  });
+
+  // The data page viewer's always-on gate (json-viewer.content.ts) found a data document: inject the viewer itself.
+  browser.runtime.onMessage.addListener((message: { type?: string }, sender) => {
+    if (message?.type !== DATA_VIEWER_MESSAGE || sender.tab?.id === undefined) return;
+    browser.scripting
+      .executeScript({ target: { tabId: sender.tab.id, frameIds: [sender.frameId ?? 0] }, files: [`/${DATA_VIEWER_FILE}` as const] })
+      .catch(() => undefined);
+  });
+
+  // The Dependencies box on GitHub / GitLab pages asks here: the registries allow any origin, and the answers are
+  // cached in storage.session, which content scripts cannot read.
+  browser.runtime.onMessage.addListener((message: PackageInfoMessage, _sender, sendResponse) => {
+    if (message?.type !== "devkit:package-info" || !Array.isArray(message.deps)) return;
+    loadPackageInfo(message.deps).then(sendResponse, () => sendResponse({}));
+    return true;
   });
 
   browser.tabs.onUpdated.addListener((tabId, info, tab) => {

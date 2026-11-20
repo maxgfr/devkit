@@ -24,7 +24,7 @@ const actionsSrc = read("src/lib/actions.ts");
 const actions = [
   ...actionsSrc
     .slice(actionsSrc.indexOf("export const ACTIONS"))
-    .matchAll(/\{\s*id: "[^"]+",[\s\S]*?category: "[^"]+",(?:\s*keywords: "[^"]*",)?/g),
+    .matchAll(/\{\s*id: "[^"]+",[\s\S]*?category: "[^"]+",(?:\s*keywords:\s*"[^"]*",)?/g),
 ].map((m) => ({
   id: field(m[0], "id"),
   kind: "action",

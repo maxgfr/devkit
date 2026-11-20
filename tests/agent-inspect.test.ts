@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   errorsMarkdown,
@@ -13,6 +15,7 @@ import {
 } from "../src/lib/agent/inspect";
 import { analyzeJsonLd } from "../src/lib/jsonld";
 import type { MetaSnapshot, PerfSnapshot } from "../src/lib/page/collect";
+import type { SchemaVocab } from "../src/lib/schema-vocab";
 import { parseRobots, parseSitemap } from "../src/lib/site-files";
 
 const url = "https://ex.com/shop/mug";
@@ -26,7 +29,9 @@ const snap = (over: Partial<MetaSnapshot> = {}): MetaSnapshot => ({
   meta: [
     { key: "description", value: "A description that is long enough to be useful for search engines and users." },
     { key: "viewport", value: "width=device-width" },
-    ...["og:title", "og:description", "og:image", "og:url", "og:type"].map((key) => ({ key, value: "x" })),
+    ...["og:title", "og:description", "og:type"].map((key) => ({ key, value: "x" })),
+    { key: "og:image", value: "https://ex.com/mug.jpg" },
+    { key: "og:url", value: url },
   ],
   links: [
     { rel: "canonical", href: url },
@@ -95,6 +100,19 @@ describe("JSON-LD report for agents", () => {
     expect(md).toMatch(/Block #2, `#2`: Invalid JSON, .*line 5,? column 1/);
     expect(md).toContain('      4 |   "name": "Acme",');
     expect(md).toContain("search.google.com/test/rich-results");
+  });
+
+  it("folds identical findings and carries the Schema.org vocabulary findings", () => {
+    const vocab = JSON.parse(readFileSync(join(__dirname, "../public/schema-vocab.json"), "utf8")) as SchemaVocab;
+    const offer = { "@type": "Offer", price: "€5", priceCurrency: "EUR", availability: "InStok" };
+    const raw = JSON.stringify({ "@context": "https://schema.org", "@type": "Prodcut", name: "Mug", offers: [offer, offer, offer] });
+    const md = jsonLdMarkdown(analyzeJsonLd([{ raw, index: 0 }], { vocab }), { url });
+    expect(md).toContain("Block #1 (Prodcut), `#1`: Prodcut is not a Schema.org type. Did you mean Product?");
+    expect(md).toContain(
+      'Block #1 (Offer), `#1.offers[0].availability` and 2 other nodes (×3: `#1.offers[1].availability`, `#1.offers[2].availability`): availability "InStok" is not a valid ItemAvailability value. Did you mean https://schema.org/InStock?',
+    );
+    expect(md.match(/price "€5" must be a plain number/g)).toHaveLength(1);
+    expect(md).toMatch(new RegExp(`Schema\\.org ${vocab.source.version.replace(".", "\\.")} vocabulary`));
   });
 
   it("says when there is no JSON-LD", () => {

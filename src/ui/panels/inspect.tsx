@@ -17,17 +17,44 @@ import { auditMarkdown } from "../../lib/a11y";
 import { collectSecretSources, collectSurface } from "../../lib/page/security";
 import { parseCsp, starterCsp } from "../../lib/security/csp";
 import { scanSecrets } from "../../lib/security/secrets";
-import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from "../../lib/headers";
+import { cachingReport, fetchHeaders, filterHeaders, type HeaderFetch, headersTextReport, securityReport } from "../../lib/headers";
 import { headingIssues, headingsVerdict } from "../../lib/headings";
 import { runInTab } from "../../lib/inject";
 import { collectHeadings } from "../../lib/page/headings";
-import { analyzeJsonLd, type JsonLdBlock, richResultsTestUrl, schemaValidatorUrl } from "../../lib/jsonld";
+import {
+  analyzeJsonLd,
+  blockBadges,
+  blockFileName,
+  blockFindings,
+  blockJson,
+  type BlockStatus,
+  groupFindings,
+  indexingSignals,
+  inMode,
+  type JsonLdBlock,
+  reportCounts,
+  richResultsTestUrl,
+  schemaDocUrl,
+  schemaValidatorUrl,
+  scriptTag,
+  type ValidateMode,
+} from "../../lib/jsonld";
+import { loadSchemaVocab, type SchemaVocab } from "../../lib/schema-vocab";
 import { collectFontsColors, collectLinks, collectMeta, collectPerf, collectTechSignals, type MetaSnapshot } from "../../lib/page/collect";
 import { clearErrors, ERROR_SCRIPT_IDS, installErrorCapture, readErrors } from "../../lib/page/errors";
 import { ALL_SITES, ensurePermission } from "../../lib/permissions";
-import { errorsVerdict, jsonLdVerdict, securityVerdict, seoVerdict, type Verdict } from "../../lib/report";
-import { seoReport, socialPreview } from "../../lib/seo";
-import { EXTERNAL_TOOLS, isAllowed, manifestChecks, parseRobots, parseSitemap } from "../../lib/site-files";
+import {
+  errorsVerdict,
+  jsonLdVerdict,
+  PRINT_REPORT_KEY,
+  type PrintReport,
+  printReportMarkdown,
+  securityVerdict,
+  seoVerdict,
+  type Verdict,
+} from "../../lib/report";
+import { seoReport } from "../../lib/seo";
+import { EXTERNAL_TOOLS, isAllowed, manifestChecks, parseRobots, parseSitemap, TOOL_GROUPS } from "../../lib/site-files";
 import { detectTech } from "../../lib/tech";
 import { contrast, parseColor, toHex } from "../../lib/utils/color";
 import {
@@ -62,7 +89,9 @@ import {
   copyText,
   Dot,
   Empty,
+  download,
   ErrorText,
+  Highlight,
   JsonTree,
   KV,
   Metric,
@@ -91,6 +120,9 @@ import { type AsyncState, useAsync, useStored } from "../hooks";
 import { useNav } from "../nav";
 import { AccessGate, useInPage, usePage } from "../page";
 import { useA11yReport } from "./a11y";
+import { RedirectHint } from "./redirects";
+import { CruxField } from "./crux";
+import { useOverviewExtras } from "./overview-extras";
 
 export function useHeaders() {
   const page = usePage();
@@ -161,18 +193,19 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
   const errors = useInPage(readErrors, [], "MAIN");
   const headings = useInPage(collectHeadings);
   const a11y = useA11yReport(meta.data?.stats.elements);
+  const extras = useOverviewExtras(meta, headings.data?.headings);
   const page = usePage();
   const toast = useToast();
   const [copying, setCopying] = useState(false);
-  /** Everything Overview measured, plus the in-page security reads (no extra request), as one fix list. */
-  const copyForAgent = async () => {
-    if (page.tabId === undefined) return;
-    setCopying(true);
-    try {
+  const [printing, setPrinting] = useState(false);
+  /** Everything Overview measured, plus the in-page security reads (no extra request), one part per area. */
+  const gatherParts = async (tabId: number): Promise<PagePart[]> => {
+    {
       const ctx = { url: page.url };
-      const [surface, secretSources] = await Promise.all([
-        runInTab(page.tabId, collectSurface).catch(() => null),
-        runInTab(page.tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
+      const [surface, secretSources, vocab] = await Promise.all([
+        runInTab(tabId, collectSurface).catch(() => null),
+        runInTab(tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
+        loadSchemaVocab().catch(() => undefined),
       ]);
       const h = headers.data?.headers ?? {};
       const policies = [
@@ -248,11 +281,19 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
         {
           area: "Structured data",
           panel: "Inspect › JSON-LD",
-          md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd), ctx) : null,
+          md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd, { vocab }), ctx) : null,
           missing: notRead(meta),
         },
+        ...extras.parts(ctx),
       ];
-      const md = pageReportMarkdown(parts, {
+      return parts;
+    }
+  };
+  const copyForAgent = async () => {
+    if (page.tabId === undefined) return;
+    setCopying(true);
+    try {
+      const md = pageReportMarkdown(await gatherParts(page.tabId), {
         url: page.url,
         title: meta.data?.title,
         notCovered: [
@@ -263,12 +304,37 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           "robots.txt, sitemap and manifest (Inspect › Site files)",
           "cookie flags (Cache › Cookies)",
           "image weight and alt text (Page › Assets)",
+          "AI crawlers in robots.txt, ai.txt and the sitemap (Inspect › Agent readiness)",
         ],
       });
       const ok = await copyText(md);
       toast(ok ? "Fix list for your agent copied." : "The clipboard refused the copy.", !ok);
     } finally {
       setCopying(false);
+    }
+  };
+  /** A print-ready page of the report in a new devkit tab (rendered locally; Chrome's dialog saves it as PDF). */
+  const printReport = async () => {
+    if (page.tabId === undefined) return;
+    setPrinting(true);
+    try {
+      const parts = await gatherParts(page.tabId);
+      const report: PrintReport = {
+        title: meta.data?.title?.trim() || page.url,
+        url: page.url,
+        date: new Date().toISOString(),
+        markdown: printReportMarkdown(
+          rows.map((r) => ({ label: r.label, verdict: r.verdict })),
+          parts,
+          { url: page.url, title: meta.data?.title, date: new Date().toLocaleString("en-GB") },
+        ),
+      };
+      await browser.storage.session.set({ [PRINT_REPORT_KEY]: report });
+      await browser.tabs.create({ url: browser.runtime.getURL("/print.html") });
+    } catch (e) {
+      toast(e instanceof Error ? e.message : String(e), true);
+    } finally {
+      setPrinting(false);
     }
   };
   const rows: { panel: string; label: string; state: { loading: boolean; error: unknown }; verdict: Verdict | null }[] = [
@@ -294,6 +360,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
     { panel: "errors", label: "Console errors", state: errors, verdict: errors.data ? errorsVerdict(errors.data) : null },
     { panel: "a11y", label: "Accessibility", state: meta.error ? meta : a11y.state, verdict: a11y.verdict },
     { panel: "perf", label: "Web Vitals", state: perf, verdict: perf.data ? vitalsSummary(perf.data) : null },
+    ...extras.rows,
   ];
   return (
     <Section
@@ -305,9 +372,19 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
           </Button>
           <Button
             size="small"
+            busy={printing}
+            disabled={!meta.data && !headers.data}
+            onClick={printReport}
+            title="Opens a print-ready page of the report; nothing is uploaded"
+          >
+            Print / Save as PDF
+          </Button>
+          <Button
+            size="small"
             onClick={() => {
               for (const s of [meta, headers, perf, errors, headings]) s.run();
               a11y.run();
+              extras.refresh();
             }}
           >
             Refresh
@@ -318,7 +395,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
       <ul className="report" aria-label="Page report">
         {rows.map((r) => (
           <ReportRow
-            key={r.panel}
+            key={r.label}
             label={r.label}
             verdict={r.verdict}
             loading={r.state.loading}
@@ -413,158 +490,235 @@ export function Overview() {
   );
 }
 
-/** og:image of the social card; says so instead of showing a broken image when it is missing or does not load. */
-function SocialImage({ src }: { src: string | undefined }) {
-  const [failed, setFailed] = useState<string | null>(null);
-  if (!src || failed === src) return <div className="social-noimg">{src ? `og:image does not load: ${src}` : "No og:image set."}</div>;
-  return <img src={src} alt="" onError={() => setFailed(src)} />;
-}
+const STATUS_TEXT: Record<BlockStatus, string> = { valid: "Valid", warning: "Warning", error: "Error" };
+const STATUS_LEVEL = { valid: "good", warning: "warn", error: "bad" } as const;
+const MODE_TEXT: Record<ValidateMode, string> = { rich: "Rich Results", schema: "Schema.org" };
+type OpenOn = "code" | "tree";
 
-export function Seo() {
-  const go = useNav();
-  const meta = useInPage(collectMeta);
-  const snap = meta.data;
-  const checks = useMemo(() => (snap ? seoReport(snap) : []), [snap]);
-  const agentMd = useMemo(() => (snap ? seoMarkdown(snap, { url: snap.url }) : ""), [snap]);
-  const social = snap ? socialPreview(snap) : null;
-  return (
-    <AccessGate>
-      <ErrorText error={meta.error} />
-      {snap ? (
-        <>
-          <Section
-            title="SEO checks"
-            actions={
-              <>
-                <Button size="small" onClick={meta.run}>
-                  Refresh
-                </Button>
-                <CopyButton text={agentMd} label="Copy for agent" />
-              </>
-            }
-          >
-            <Checks checks={checks} />
-          </Section>
-          {social ? (
-            <Section title="Social preview">
-              <div className="social">
-                <SocialImage src={social.image} />
-                <div className="body">
-                  <div className="site">{social.site}</div>
-                  <b>{social.title}</b>
-                  <div className="small muted">{social.description.slice(0, 200)}</div>
-                </div>
-              </div>
-            </Section>
-          ) : null}
-          <Section
-            title={`Headings (${snap.headings.length})`}
-            actions={
-              go ? (
-                <Button size="small" onClick={() => go({ panel: "headings" })}>
-                  Open the outline
-                </Button>
-              ) : null
-            }
-          >
-            {snap.headings.length ? (
-              <p className="small" style={{ margin: 0 }}>
-                {[1, 2, 3, 4, 5, 6]
-                  .map((l) => [l, snap.headings.filter((h) => h.level === l).length] as const)
-                  .filter(([, n]) => n)
-                  .map(([l, n]) => `h${l} ×${n}`)
-                  .join(" · ")}
-                {snap.headings[0] ? (
-                  <span className="muted">
-                    {" "}
-                    · first: h{snap.headings[0].level} "{snap.headings[0].text.slice(0, 60) || "(empty)"}"
-                  </span>
-                ) : null}
-              </p>
-            ) : (
-              <Empty>No heading.</Empty>
-            )}
-          </Section>
-          <Section title={`Meta tags (${snap.meta.length})`}>
-            <KV rows={snap.meta.map((m) => [m.key, m.value])} />
-          </Section>
-          <Section title={`Links in <head> (${snap.links.length})`}>
-            <KV rows={snap.links.map((l) => [`${l.rel}${l.hreflang ? ` (${l.hreflang})` : ""}${l.sizes ? ` ${l.sizes}` : ""}`, l.href])} />
-          </Section>
-        </>
-      ) : (
-        <Empty>{meta.loading ? "Reading the page…" : ""}</Empty>
-      )}
-    </AccessGate>
-  );
-}
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-function blockVerdict(block: JsonLdBlock): Verdict {
-  const findings = [...block.findings, ...block.nodes.flatMap((n) => n.findings)];
+function blockVerdict(block: JsonLdBlock, mode: ValidateMode): Verdict {
+  const findings = blockFindings(block).filter((f) => inMode(f, mode));
   const e = findings.filter((f) => f.severity === "error").length;
   const w = findings.filter((f) => f.severity === "warn").length;
-  const parts = [e ? `${e} error${e > 1 ? "s" : ""}` : "", w ? `${w} warning${w > 1 ? "s" : ""}` : ""].filter(Boolean);
+  const parts = [e ? plural(e, "error") : "", w ? plural(w, "warning") : ""].filter(Boolean);
   return { level: e ? "bad" : w ? "warn" : "good", text: parts.join(", ") || "No problem" };
 }
 
-function BlockView({ block, anchor }: { block: JsonLdBlock; anchor?: boolean }) {
-  const [raw, setRaw] = useState(false);
-  const findings = [...block.findings, ...block.nodes.flatMap((n) => n.findings)];
-  const pretty = block.ok ? JSON.stringify(block.value, null, 2) : block.raw;
+/** Pressed-state chips for a small choice (validation mode, how blocks open). */
+export function Choice<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: [T, string][];
+  onChange: (v: T) => void;
+}) {
   return (
-    <div className="card stack" id={anchor ? `jsonld-block-${block.index}` : undefined}>
+    <fieldset className="as-chips jl-choice" aria-label={label}>
+      <span className="small muted" aria-hidden="true">
+        {label}
+      </span>
+      {options.map(([v, text]) => (
+        <button key={v} type="button" className="as-chip" aria-pressed={value === v} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+function BlockView({
+  block,
+  anchor,
+  mode,
+  openOn,
+  query,
+}: {
+  block: JsonLdBlock;
+  anchor?: boolean;
+  mode: ValidateMode;
+  openOn: OpenOn;
+  query?: string;
+}) {
+  const [view, setView] = useState<OpenOn>(openOn);
+  useEffect(() => setView(openOn), [openOn]);
+  const all = blockFindings(block);
+  const shown = all.filter((f) => inMode(f, mode));
+  const hidden = all.filter((f) => !inMode(f, mode) && f.severity !== "info").length;
+  const rank = { error: 0, warn: 1, info: 2 } as const;
+  const groups = groupFindings(shown).sort((a, b) => rank[a.severity] - rank[b.severity]);
+  const badges = blockBadges(block, mode);
+  const pretty = blockJson(block);
+  const e = shown.filter((f) => f.severity === "error").length;
+  const w = shown.filter((f) => f.severity === "warn").length;
+  const n = shown.length - e - w;
+  const types = new Map<string, number>();
+  for (const node of block.nodes) for (const t of node.types) types.set(t, (types.get(t) ?? 0) + 1);
+  const other: ValidateMode = mode === "rich" ? "schema" : "rich";
+  return (
+    <div className="card stack jl-block" id={anchor ? `jsonld-block-${block.index}` : undefined}>
       <div className="row">
         <b>Block #{block.index + 1}</b>
-        {block.nodes.map((n, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: document order
-          <span key={i} className="pill accent">
-            {n.types.join(", ")}
+        <span className={`pill t-${STATUS_LEVEL[badges.status]}`}>
+          <Dot level={STATUS_LEVEL[badges.status]} /> {STATUS_TEXT[badges.status]}
+        </span>
+        {badges.experimental ? (
+          <span className="pill t-warn" title="Uses pending Schema.org terms: they may still change or be dropped.">
+            Experimental
+          </span>
+        ) : null}
+        {badges.unsupported.map((u) => (
+          <span key={u.type} className="pill" title={u.note}>
+            Not supported: {u.type}
           </span>
         ))}
-        <span className="grow" />
-        <Button size="small" onClick={() => setRaw(!raw)}>
-          {raw ? "Tree" : "Source"}
-        </Button>
-        <CopyButton text={pretty} />
+        {Array.from(types.entries()).map(([t, count]) => {
+          const href = schemaDocUrl(t);
+          const text = `${t}${count > 1 ? ` ×${count}` : ""}`;
+          return href ? (
+            <a key={t} className="pill accent" href={href} target="_blank" rel="noreferrer" title={`${t} on schema.org`}>
+              {text}
+            </a>
+          ) : (
+            <span key={t} className="pill accent">
+              {text}
+            </span>
+          );
+        })}
       </div>
-      {findings.length ? (
-        <ul className="list">
-          {findings.map((f, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: findings are ordered
-            <li key={i} className="small">
-              <Dot level={f.severity === "error" ? "bad" : f.severity} /> {f.message} <span className="muted mono">{f.path}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="row">
+        {block.ok ? (
+          <Choice
+            label="View"
+            value={view}
+            options={[
+              ["code", "Code"],
+              ["tree", "Tree"],
+            ]}
+            onChange={setView}
+          />
+        ) : null}
+        <span className="grow" />
+        <CopyButton text={pretty} label="Copy JSON" />
+        <CopyButton text={scriptTag(block)} label="Copy <script>" />
+        <Button size="small" onClick={() => download(blockFileName(block), pretty, block.ok ? "application/ld+json" : "text/plain")}>
+          Download
+        </Button>
+      </div>
+      {!block.ok && block.error ? (
+        <Notice kind="bad">{block.error === "Empty script" ? "The script is empty." : `Invalid JSON, ${block.error}`}</Notice>
+      ) : null}
+      {view === "tree" && block.ok ? (
+        <div className="tree">
+          <JsonTree value={block.value} open={3} highlight={query} />
+        </div>
+      ) : (
+        <div className="code-wrap">
+          <pre className="code jl-code">
+            <Highlight text={pretty} query={query} />
+          </pre>
+        </div>
+      )}
+      {groups.length ? (
+        <details className="jl-findings">
+          <summary>
+            <Dot level={e ? "bad" : w ? "warn" : "info"} />{" "}
+            <span>
+              Findings:{" "}
+              {[e ? plural(e, "error") : "", w ? plural(w, "warning") : "", n ? plural(n, "note") : ""].filter(Boolean).join(", ")}
+            </span>
+          </summary>
+          <ul className="list">
+            {groups.map((g) => (
+              <li key={`${g.rule}|${g.severity}|${g.message}`} className="small">
+                <Dot level={g.severity === "error" ? "bad" : g.severity} /> {g.message}{" "}
+                {g.paths.length > 1 ? (
+                  <details className="jl-paths">
+                    <summary>
+                      <span className="pill">×{g.paths.length}</span>
+                    </summary>
+                    <ul className="mono muted">
+                      {g.paths.map((p, i) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: the same path can repeat
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : (
+                  <span className="muted mono">{g.paths[0]}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : (
         <div className="small t-good">No problem found.</div>
       )}
-      {raw || !block.ok ? (
-        <Code text={pretty} />
-      ) : (
-        <div className="tree">
-          <JsonTree value={block.value} open={3} />
+      {hidden ? (
+        <div className="small muted">
+          {plural(hidden, "more finding")} in {MODE_TEXT[other]} mode.
         </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function VocabNote({ vocab, error }: { vocab: SchemaVocab | undefined; error: unknown }) {
+  if (error) return <Notice kind="warn">The Schema.org vocabulary did not load: the vocabulary checks are off.</Notice>;
+  if (!vocab) return null;
+  return (
+    <p className="small muted" style={{ margin: 0 }}>
+      Checked locally against the{" "}
+      <a href={vocab.source.url} target="_blank" rel="noreferrer">
+        Schema.org
+      </a>{" "}
+      {vocab.source.version} vocabulary ({vocab.source.date}) ·{" "}
+      <a href="/schema-vocab.LICENSE.txt" target="_blank" rel="noreferrer">
+        {vocab.source.license}
+      </a>
+    </p>
   );
 }
 
 export function JsonLd() {
   const page = usePage();
   const meta = useInPage(collectMeta);
+  const headers = useHeaders();
+  const vocab = useAsync(() => loadSchemaVocab(), []);
+  const [mode, setMode] = useStored<ValidateMode>("jsonldMode", "rich");
+  const [openOn, setOpenOn] = useStored<OpenOn>("jsonldOpenOn", "code");
+  const [query, setQuery] = useState("");
   const [paste, setPaste] = useState("");
-  const report = useMemo(() => (meta.data ? analyzeJsonLd(meta.data.jsonLd) : null), [meta.data]);
+  const report = useMemo(() => (meta.data ? analyzeJsonLd(meta.data.jsonLd, { vocab: vocab.data }) : null), [meta.data, vocab.data]);
   const agentMd = useMemo(() => (report ? jsonLdMarkdown(report, { url: page.url }) : ""), [report, page.url]);
   const pasted = useMemo(
-    () => (paste.trim() ? analyzeJsonLd([{ raw: paste.replace(/^\s*<script[^>]*>|<\/script>\s*$/g, ""), index: 0 }]) : null),
-    [paste],
+    () =>
+      paste.trim()
+        ? analyzeJsonLd([{ raw: paste.replace(/^\s*<script[^>]*>|<\/script>\s*$/g, ""), index: 0 }], { vocab: vocab.data })
+        : null,
+    [paste, vocab.data],
+  );
+  const signals = meta.data ? indexingSignals(meta.data, headers.data?.headers) : null;
+  const counts = report ? reportCounts(report, mode) : null;
+  const q = query.trim().toLowerCase();
+  const blocks = report ? report.blocks.filter((b) => !q || blockJson(b).toLowerCase().includes(q)) : [];
+  const none = <span className="muted">None</span>;
+  const xRobots = headers.loading ? (
+    <span className="muted">Reading…</span>
+  ) : headers.error ? (
+    <span className="muted">Not read</span>
+  ) : (
+    (signals?.xRobotsTag ?? none)
   );
   return (
     <>
       <AccessGate>
         <ErrorText error={meta.error} />
-        {report ? (
+        {report && counts && signals ? (
           <Section
             title="Structured data"
             actions={
@@ -582,10 +736,43 @@ export function JsonLd() {
               </>
             }
           >
+            <KV
+              rows={[
+                ["Page URL", page.url],
+                ["Canonical", signals.canonical ?? none],
+                ["Robots", signals.robots ?? none],
+                ["X-Robots-Tag", xRobots],
+              ]}
+            />
+            <div className="row jl-controls">
+              <Choice
+                label="Validate"
+                value={mode}
+                options={[
+                  ["rich", MODE_TEXT.rich],
+                  ["schema", MODE_TEXT.schema],
+                ]}
+                onChange={setMode}
+              />
+              <Choice
+                label="Open blocks on"
+                value={openOn}
+                options={[
+                  ["code", "Code"],
+                  ["tree", "Tree"],
+                ]}
+                onChange={setOpenOn}
+              />
+            </div>
+            <p className="small muted" style={{ margin: 0 }}>
+              {mode === "rich"
+                ? "Google's rich results rules (required and recommended properties) and value formats."
+                : "Every type, property and enumeration value against the Schema.org vocabulary, and value formats."}
+            </p>
             <div className="grid2">
               <Metric label="JSON-LD blocks" value={report.blocks.length} />
-              <Metric label="Errors" value={report.counts.error} level={report.counts.error ? "bad" : "good"} />
-              <Metric label="Warnings" value={report.counts.warn} level={report.counts.warn ? "warn" : "good"} />
+              <Metric label="Errors" value={counts.error} level={counts.error ? "bad" : "good"} />
+              <Metric label="Warnings" value={counts.warn} level={counts.warn ? "warn" : "good"} />
               <Metric label="Microdata types" value={meta.data?.microdataTypes.length ?? 0} />
             </div>
             {report.types.length ? (
@@ -604,7 +791,7 @@ export function JsonLd() {
                   <ReportRow
                     key={b.index}
                     label={`Block #${b.index + 1}${b.nodes.length ? ` · ${b.nodes[0]!.types.join(", ")}` : ""}`}
-                    verdict={blockVerdict(b)}
+                    verdict={blockVerdict(b, mode)}
                     onOpen={() => document.getElementById(`jsonld-block-${b.index}`)?.scrollIntoView({ block: "start" })}
                     openLabel={`Go to block #${b.index + 1}`}
                   />
@@ -612,10 +799,22 @@ export function JsonLd() {
               </ul>
             ) : null}
             {report.blocks.length ? (
-              report.blocks.map((b) => <BlockView key={b.index} block={b} anchor />)
-            ) : (
+              <input
+                type="search"
+                aria-label="Search the blocks"
+                placeholder="Search types, properties and values"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            ) : null}
+            {!report.blocks.length ? (
               <Empty>No JSON-LD on this page. The AI tab can write one for you (“Review structured data”).</Empty>
+            ) : blocks.length ? (
+              blocks.map((b) => <BlockView key={b.index} block={b} anchor mode={mode} openOn={openOn} query={query} />)
+            ) : (
+              <Empty>No block contains “{query.trim()}”.</Empty>
             )}
+            <VocabNote vocab={vocab.data} error={vocab.error} />
           </Section>
         ) : null}
       </AccessGate>
@@ -627,7 +826,7 @@ export function JsonLd() {
           placeholder='{"@context":"https://schema.org","@type":"Product",…}'
           onChange={(e) => setPaste(e.target.value)}
         />
-        {pasted?.blocks[0] ? <BlockView block={pasted.blocks[0]} /> : null}
+        {pasted?.blocks[0] ? <BlockView block={pasted.blocks[0]} mode={mode} openOn={openOn} /> : null}
       </Section>
     </>
   );
@@ -638,11 +837,15 @@ export function Headers() {
   const headers = useHeaders();
   const sec = headers.data ? securityReport(headers.data.headers, headers.data.url) : null;
   const cache = headers.data ? cachingReport(headers.data.headers) : null;
-  const raw = headers.data ? Object.entries(headers.data.headers).sort(([a], [b]) => a.localeCompare(b)) : [];
+  const [query, setQuery] = useState("");
+  const raw = headers.data ? filterHeaders(headers.data.headers, "") : [];
+  const shown = headers.data ? filterHeaders(headers.data.headers, query) : [];
   const agentMd = useMemo(() => (headers.data ? headersMarkdown(headers.data, { url: page.url }) : ""), [headers.data, page.url]);
+  const report = useMemo(() => (headers.data ? headersTextReport(headers.data) : ""), [headers.data]);
   return (
     <AccessGate>
       <ErrorText error={headers.error} />
+      {headers.data?.redirected ? <RedirectHint url={headers.data.url} /> : null}
       {sec && headers.data ? (
         <>
           <Section
@@ -675,9 +878,32 @@ export function Headers() {
           <Section title="Caching & delivery">{cache ? <Checks checks={cache} /> : null}</Section>
           <Section
             title={`Response headers (${raw.length})`}
-            actions={<CopyButton text={raw.map(([k, v]) => `${k}: ${v}`).join("\n")} label="Copy all" />}
+            actions={
+              <>
+                <CopyButton text={raw.map(([k, v]) => `${k}: ${v}`).join("\n")} label="Copy all" />
+                <CopyButton text={report} label="Copy report" />
+              </>
+            }
           >
-            <KV rows={raw} />
+            <input
+              type="search"
+              placeholder="Search headers by name or value"
+              aria-label="Search headers"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            {query.trim() ? (
+              <p className="small muted" style={{ margin: 0 }}>
+                {shown.length} of {raw.length} match
+              </p>
+            ) : null}
+            {shown.length ? (
+              <KV
+                rows={shown.map(([k, v]) => [<Highlight key={k} text={k} query={query} />, <Highlight key={k} text={v} query={query} />])}
+              />
+            ) : (
+              <Empty>No header matches.</Empty>
+            )}
           </Section>
         </>
       ) : (
@@ -747,7 +973,8 @@ export function Perf() {
   const nav = useMemo(() => (p?.navigation ? navigationPhases(p.navigation) : null), [p]);
   const navAxis = nav ? niceTicks(nav.end, 2) : null;
   const breakdown = useMemo(() => resourceBreakdown(p?.resources ?? []), [p]);
-  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url }) : ""), [p, page.url]);
+  const [field, setField] = useState<string>();
+  const agentMd = useMemo(() => (p ? perfMarkdown(p, { url: page.url, field }) : ""), [p, page.url, field]);
   const waterfall = useMemo(
     () =>
       p ? waterfallLayout(p.resources, { sort, limit: all ? undefined : WATERFALL_ROWS, markers: nav?.markers.map((m) => m.at) }) : null,
@@ -791,6 +1018,7 @@ export function Perf() {
               </span>
             </div>
           </Section>
+          <CruxField lab={p} onMarkdown={setField} />
           {p.navigation && nav && navAxis ? (
             <Section title="Navigation timing" hint="The document request, from navigation start.">
               <Timeline
@@ -1361,7 +1589,7 @@ export function Fonts() {
   );
 }
 
-async function fetchText(url: string): Promise<{ status: number; text: string; type: string }> {
+export async function fetchText(url: string): Promise<{ status: number; text: string; type: string }> {
   const res = await fetch(url, { credentials: "omit", cache: "no-store" });
   return { status: res.status, text: await res.text(), type: res.headers.get("content-type") ?? "" };
 }
@@ -1537,17 +1765,42 @@ export function SiteFiles() {
 
 export function External() {
   const page = usePage();
+  const toast = useToast();
   if (!page.origin) return <Empty>Open a web page.</Empty>;
   return (
-    <Section title="Open this page in" hint={page.url}>
-      <div className="grid2">
-        {EXTERNAL_TOOLS.map((t) => (
-          <a key={t.name} className="action" href={t.url(page.url)} target="_blank" rel="noreferrer">
-            <strong>{t.name}</strong>
-            <span>{new URL(t.url(page.url)).host}</span>
-          </a>
-        ))}
-      </div>
-    </Section>
+    <>
+      <p className="muted small break" style={{ margin: 0 }}>
+        Open {page.url} in
+      </p>
+      {TOOL_GROUPS.map((group) => (
+        <Section key={group} title={group}>
+          <div className="grid2">
+            {EXTERNAL_TOOLS.filter((t) => t.group === group).map((t) => (
+              <a
+                key={t.name}
+                className="action"
+                href={t.url(page.url)}
+                target="_blank"
+                rel="noreferrer"
+                onClick={
+                  t.pasteUrl
+                    ? () => {
+                        copyText(page.url).then((ok) => ok && toast(`URL copied: paste it in ${t.name}.`));
+                      }
+                    : undefined
+                }
+              >
+                <strong>{t.name}</strong>
+                <span>
+                  {new URL(t.url(page.url)).host}
+                  {t.pasteUrl ? " · URL copied to paste" : ""}
+                  {t.note ? ` · ${t.note}` : ""}
+                </span>
+              </a>
+            ))}
+          </div>
+        </Section>
+      ))}
+    </>
   );
 }

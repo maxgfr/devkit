@@ -8,9 +8,12 @@ export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   hooks: {
     // WXT turns the matches of runtime-registered content scripts into host_permissions. Those
-    // scripts are registered only after the user grants "<all_urls>" (optional), so drop it here.
+    // scripts are registered only after the user grants their sites ("<all_urls>" for error capture and
+    // the Redirect path probe, github.com and gitlab.com for the Dependencies box), all covered by
+    // optional_host_permissions, so drop them here.
     "build:manifestGenerated": (_wxt, manifest) => {
-      manifest.host_permissions = manifest.host_permissions?.filter((p: string) => p !== "<all_urls>");
+      const runtimeOnly = new Set(["<all_urls>", "https://github.com/*", "https://gitlab.com/*"]);
+      manifest.host_permissions = manifest.host_permissions?.filter((p: string) => !runtimeOnly.has(p));
       if (!manifest.host_permissions?.length) delete manifest.host_permissions;
     },
   },
@@ -20,7 +23,7 @@ export default defineConfig({
       "Dev toolbox: clear a site's cache and data, inspect the page, rewrite requests, utilities, and AI analysis with your own model.",
     minimum_chrome_version: "116",
     permissions: ["activeTab", "scripting", "storage", "sidePanel", "contextMenus", "declarativeNetRequest", "debugger"],
-    optional_permissions: ["browsingData", "cookies", "contentSettings"],
+    optional_permissions: ["browsingData", "cookies", "contentSettings", "webRequest", "webNavigation"],
     optional_host_permissions: ["<all_urls>"],
     action: { default_title: "devkit" },
     commands: {

@@ -1,6 +1,11 @@
 import { browser } from "wxt/browser";
 import { quickReport } from "./bug-report-gather";
+import { readCookies } from "./cookie-jar";
+import { toNetscape } from "./cookies-export";
 import { runInTab } from "./inject";
+import { DATA_VIEWER_FILE, dataViewerMessage } from "./data-viewer";
+import { JSON_VIEWER_HOST_ID } from "./json-viewer";
+import { forceJsonViewer, jsonViewerState } from "./page/json-viewer";
 import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
 import { ALL_SITES, type PermissionNeed } from "./permissions";
@@ -46,7 +51,8 @@ export interface ActionDef {
   run: (ctx: ActionContext) => Promise<ActionResult>;
 }
 
-const ALL_DATA = {
+/** Every kind of site data "Fresh start" removes (the Consent check clears the same). */
+export const ALL_DATA = {
   cache: true,
   cacheStorage: true,
   cookies: true,
@@ -121,6 +127,25 @@ export const ACTIONS: ActionDef[] = [
     run: async ({ origin }) => {
       await removeSiteData(origin, { cookies: true });
       return { message: `Cookies cleared for ${origin}.` };
+    },
+  },
+  {
+    id: "copy-cookies-txt",
+    title: "Copy cookies.txt",
+    description: "This site's cookies in Netscape format, for curl, wget or yt-dlp",
+    category: "cache",
+    keywords: "cookies.txt netscape curl yt-dlp wget export cookie jar",
+    needsPage: true,
+    // Chrome only lists the cookies of hosts devkit can access: ask for this site like the cookie editor.
+    scripts: true,
+    needs: () => ({ permissions: ["cookies"] }),
+    run: async ({ url }) => {
+      const cookies = await readCookies({ url });
+      if (!cookies.length) return { message: "No cookie for this page." };
+      return {
+        message: `cookies.txt copied (${cookies.length} cookie${cookies.length > 1 ? "s" : ""}). It holds session tokens: keep it private.`,
+        copy: toNetscape(cookies),
+      };
     },
   },
   {
@@ -268,6 +293,24 @@ export const ACTIONS: ActionDef[] = [
       browser.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
       await browser.storage.session.set({ [PENDING_ROUTE_KEY]: { panel: "measure", params: { start: "1", at: String(Date.now()) } } });
       return { message: "Hover the page to measure (Esc exits)." };
+    },
+  },
+  {
+    id: "format-json",
+    // The id keeps its JSON name: the action now formats every data format.
+    title: "Format this data page",
+    description:
+      "JSON, XML / RSS / Atom, CSV / TSV, YAML or JSON Lines in this tab: collapsible tree or sortable table, filter, copy and download",
+    category: "utils",
+    keywords:
+      "json formatter pretty viewer beautify api response tree xml rss atom feed csv tsv table yaml yml jsonl ndjson json lines data",
+    needsPage: true,
+    // No `scripts`: the palette's activeTab grant is enough, no site access is asked.
+    run: async ({ tabId }) => {
+      await runInTab(tabId, forceJsonViewer);
+      await browser.scripting.executeScript({ target: { tabId }, files: [`/${DATA_VIEWER_FILE}` as const] });
+      const { state, format, contentType } = await runInTab(tabId, jsonViewerState, [JSON_VIEWER_HOST_ID]);
+      return { message: dataViewerMessage(state, format, contentType) };
     },
   },
   {

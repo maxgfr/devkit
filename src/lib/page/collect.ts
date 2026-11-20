@@ -6,8 +6,10 @@ export interface MetaSnapshot {
   lang: string;
   charset: string;
   doctype: string;
-  meta: { key: string; value: string }[];
-  links: { rel: string; href: string; hreflang?: string; type?: string; sizes?: string }[];
+  /** `attr` is the attribute the key came from (Facebook reads `og:` tags from `property` only). */
+  meta: { key: string; value: string; attr?: MetaAttr }[];
+  /** `href` is resolved by the browser; `rawHref` is the attribute as written (to catch relative URLs). */
+  links: { rel: string; href: string; rawHref?: string; hreflang?: string; type?: string; sizes?: string }[];
   headings: { level: number; text: string }[];
   jsonLd: { raw: string; index: number }[];
   microdataTypes: string[];
@@ -21,23 +23,62 @@ export interface MetaSnapshot {
     domDepth: number;
     htmlBytes: number;
   };
+  /** Body text, images and links for the SEO counters. Absent from snapshots built by hand (tests). */
+  content?: PageContent;
 }
 
-export function collectMeta(): MetaSnapshot {
+export type MetaAttr = "name" | "property" | "http-equiv" | "itemprop" | "charset";
+
+export interface PageContent {
+  /** Words of the rendered body text (`innerText`, so hidden text is left out). */
+  words: number;
+  /** Every `<img>`: `alt` is null when the attribute is missing ("" marks a decorative image). */
+  images: { alt: string | null; title: boolean }[];
+  /** `<a href>` and `<area href>` to http(s) URLs, hash removed, the first 5,000; `anchors` counts them all. */
+  links: { href: string; rel: string }[];
+  anchors: number;
+}
+
+/**
+ * Reads the page's meta data. With `root` and `pageUrl` it reads a parsed document instead (the site crawl's
+ * DOMParser output, served HTML only): links resolve against its `<base>`, and the word count reads every text
+ * node outside script, style, noscript and template, as nothing is rendered there.
+ */
+export function collectMeta(root?: Document, pageUrl?: string): MetaSnapshot {
+  const document = root ?? globalThis.document;
+  // A parsed document resolves nothing against the page: links resolve here, against its <base> or the page URL.
+  let base: string | null = null;
+  if (root && pageUrl) {
+    try {
+      base = new URL(root.querySelector("base[href]")?.getAttribute("href") ?? "", pageUrl).href;
+    } catch {
+      base = pageUrl;
+    }
+  }
+  const hrefOf = (el: HTMLLinkElement | HTMLAnchorElement | HTMLAreaElement) => {
+    if (!base) return el.href;
+    try {
+      return new URL(el.getAttribute("href") ?? "", base).href;
+    } catch {
+      return el.getAttribute("href") ?? "";
+    }
+  };
+  const attrs = ["name", "property", "http-equiv", "itemprop"] as const;
   const meta = Array.from(document.querySelectorAll("meta"))
-    .map((m) => ({
-      key:
-        m.getAttribute("name") ??
-        m.getAttribute("property") ??
-        m.getAttribute("http-equiv") ??
-        m.getAttribute("itemprop") ??
-        (m.hasAttribute("charset") ? "charset" : ""),
-      value: m.getAttribute("content") ?? m.getAttribute("charset") ?? "",
-    }))
+    .map((m) => {
+      const attr: MetaAttr | undefined =
+        attrs.find((a) => m.getAttribute(a) !== null) ?? (m.hasAttribute("charset") ? "charset" : undefined);
+      return {
+        key: attr === "charset" ? "charset" : attr ? (m.getAttribute(attr) ?? "") : "",
+        value: m.getAttribute("content") ?? m.getAttribute("charset") ?? "",
+        attr,
+      };
+    })
     .filter((m) => m.key);
   const links = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel]")).map((l) => ({
     rel: l.rel,
-    href: l.href,
+    href: hrefOf(l),
+    rawHref: l.getAttribute("href") ?? undefined,
     hreflang: l.hreflang || undefined,
     type: l.type || undefined,
     sizes: l.getAttribute("sizes") ?? undefined,
@@ -60,8 +101,31 @@ export function collectMeta(): MetaSnapshot {
   };
   walk(document.documentElement, 1);
   const dt = document.doctype;
+  const parsedText = (body: HTMLElement | null) => {
+    const parts: string[] = [];
+    if (!body) return "";
+    const walker = document.createTreeWalker(body, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let node = walker.nextNode(); node; node = walker.nextNode())
+      if (!node.parentElement?.closest("script, style, noscript, template")) parts.push(node.nodeValue ?? "");
+    return parts.join(" ");
+  };
+  // biome-ignore lint/performance/useDomNodeTextContent: innerText skips hidden text, like a reader
+  const bodyText = root ? parsedText(document.body) : (document.body?.innerText ?? "");
+  const words = (bodyText.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) ?? []).length;
+  const anchors: { href: string; rel: string }[] = [];
+  let anchorCount = 0;
+  for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href], area[href]"))) {
+    const href = hrefOf(a);
+    if (!/^https?:/i.test(href)) continue;
+    anchorCount++;
+    if (anchors.length < 5000) anchors.push({ href: href.split("#")[0]!, rel: a.getAttribute("rel") ?? "" });
+  }
+  const images = Array.from(document.querySelectorAll("img")).map((img) => ({
+    alt: img.getAttribute("alt"),
+    title: img.hasAttribute("title"),
+  }));
   return {
-    url: location.href,
+    url: pageUrl ?? location.href,
     title: document.title,
     lang: document.documentElement.lang,
     charset: document.characterSet,
@@ -75,12 +139,13 @@ export function collectMeta(): MetaSnapshot {
       elements: document.getElementsByTagName("*").length,
       scripts: document.scripts.length,
       stylesheets: document.styleSheets.length,
-      images: document.images.length,
+      images: images.length,
       iframes: document.querySelectorAll("iframe").length,
       forms: document.forms.length,
       domDepth,
       htmlBytes: new Blob([document.documentElement.outerHTML]).size,
     },
+    content: { words, images, links: anchors, anchors: anchorCount },
   };
 }
 

@@ -150,3 +150,26 @@ export function cachingReport(raw: Record<string, string>): Check[] {
   if (h.vary) out.push({ id: "vary", label: "Vary", level: "info", detail: h.vary });
   return out;
 }
+
+/** Response headers whose name or value contains `query` (case-insensitive), sorted by name. */
+export function filterHeaders(raw: Record<string, string>, query: string): [string, string][] {
+  const q = query.trim().toLowerCase();
+  return Object.entries(raw)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .filter(([k, v]) => !q || k.toLowerCase().includes(q) || v.toLowerCase().includes(q));
+}
+
+/** The Headers panel as a report for people (Copy report): status, grade, the checks and every header. */
+export function headersTextReport(f: HeaderFetch): string {
+  const sec = securityReport(f.headers, f.url);
+  const mark: Record<Level, string> = { bad: "✕", warn: "▲", info: "ⓘ", good: "✓" };
+  const checks = (list: Check[]) => list.map((c) => `- ${mark[c.level]} ${c.label}: ${c.detail}`).join("\n");
+  const raw = filterHeaders(f.headers, "");
+  return [
+    `# Response headers: ${f.url}`,
+    `HTTP ${f.status}${f.redirected ? " (redirected)" : ""} · ${f.ms} ms · security grade ${sec.grade} (${sec.score}/100)`,
+    `## Security headers\n\n${checks(sec.checks)}`,
+    `## Caching & delivery\n\n${checks(cachingReport(f.headers))}`,
+    `## Response headers (${raw.length})\n\n${raw.map(([k, v]) => `${k}: ${v}`).join("\n")}`,
+  ].join("\n\n");
+}

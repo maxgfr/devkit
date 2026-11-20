@@ -2,11 +2,23 @@ import { useMemo, useState } from "react";
 import { browser, type Browser } from "wxt/browser";
 import { ACTIONS, isNoCacheOn } from "../../lib/actions";
 import { runInTab } from "../../lib/inject";
-import { ensurePermission } from "../../lib/permissions";
+import { ALL_SITES, ensurePermission } from "../../lib/permissions";
 import { cookiesMarkdown } from "../../lib/agent/security";
+import { plural } from "../../lib/agent-md";
+import { readCookies } from "../../lib/cookie-jar";
+import {
+  cookieKey,
+  cookiesFileName,
+  EXPORT_FORMATS,
+  type ExportFormat,
+  formatCookies,
+  isExportFormat,
+  netscapeRows,
+  parseCookieFile,
+} from "../../lib/cookies-export";
 import { auditCookies } from "../../lib/security/cookies";
-import { Button, Checks, CopyButton, download, Empty, ErrorText, Notice, Section, useToast } from "../components";
-import { useAsync } from "../hooks";
+import { Button, Checks, CopyButton, download, Empty, ErrorText, Notice, Section, saveAs, useToast } from "../components";
+import { useAsync, useStored } from "../hooks";
 import { AccessGate, useInPage, usePage, useRunAction } from "../page";
 
 export function CacheActions() {
@@ -128,11 +140,16 @@ export function Cookies() {
   const toast = useToast();
   const [filter, setFilter] = useState("");
   const [editing, setEditing] = useState<Cookie | null>(null);
+  const [storedFormat, setFormat] = useStored<ExportFormat>("cookies.exportFormat", "netscape");
+  const format = isExportFormat(storedFormat) ? storedFormat : "netscape";
+  const [table, setTable] = useState(false);
+  const [nowrap, setNowrap] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
   const cookies = useAsync(async () => {
     if (!page.url || !page.origin) return null;
     if (!(await browser.permissions.contains({ permissions: ["cookies"] }))) return "no-permission" as const;
     if (!page.canScript) return "no-access" as const;
-    return browser.cookies.getAll({ url: page.url });
+    return readCookies({ url: page.url });
   }, [page.url, page.canScript]);
   const list = Array.isArray(cookies.data) ? cookies.data : [];
   const shown = useMemo(
@@ -142,7 +159,7 @@ export function Cookies() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: list derives from cookies.data
   const audit = useMemo(() => {
     const a = auditCookies(list, page.url);
-    const flags = new Map(list.map((c, i) => [`${c.domain}${c.path}${c.name}`, a.perCookie[i]!]));
+    const flags = new Map(list.map((c, i) => [cookieKey(c), a.perCookie[i]!]));
     return { ...a, flags, bad: a.perCookie.flat().filter((f) => f.level === "bad").length };
   }, [cookies.data, page.url]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: list derives from cookies.data
@@ -163,7 +180,12 @@ export function Cookies() {
   const save = async (c: Cookie, original?: Cookie) => {
     try {
       if (original && (original.name !== c.name || original.domain !== c.domain || original.path !== c.path))
-        await browser.cookies.remove({ url: cookieUrl(original), name: original.name, storeId: original.storeId });
+        await browser.cookies.remove({
+          url: cookieUrl(original),
+          name: original.name,
+          storeId: original.storeId,
+          partitionKey: original.partitionKey,
+        });
       await browser.cookies.set({
         url: cookieUrl(c),
         name: c.name,
@@ -175,6 +197,8 @@ export function Cookies() {
         sameSite: c.sameSite,
         expirationDate: c.session ? undefined : c.expirationDate,
         storeId: c.storeId,
+        // Only set for partitioned cookies, so Chrome versions without CHIPS support never see it.
+        ...(c.partitionKey ? { partitionKey: c.partitionKey } : {}),
       });
       toast(`Saved ${c.name}.`);
       setEditing(null);
@@ -184,27 +208,50 @@ export function Cookies() {
     }
   };
 
+  const host = new URL(page.origin).host;
+  const fmt = EXPORT_FORMATS[format];
+  const exportText = formatCookies(shown, format);
+  const cookiesText = (n: number) => (n === 1 ? "cookie" : plural(n, "cookie"));
+  const exportScope =
+    shown.length === list.length
+      ? `Exports this page's ${cookiesText(list.length)}`
+      : `Exports the ${cookiesText(shown.length)} the filter shows`;
+  const exportAll = async () => {
+    // Chrome only returns the cookies of hosts devkit can access: ask for all sites first.
+    if (!(await ensurePermission({ origins: [ALL_SITES] }))) return toast("Exporting every cookie needs access to all sites.", true);
+    setExportingAll(true);
+    try {
+      const all = await readCookies({});
+      const domains = new Set(all.map((c) => c.domain.replace(/^\./, ""))).size;
+      download(cookiesFileName("all", format), formatCookies(all, format), fmt.mime);
+      toast(`Exported ${all.length} cookies from ${domains} domains.`);
+    } catch (e) {
+      toast(String(e), true);
+    } finally {
+      setExportingAll(false);
+    }
+  };
+  const rows = table ? netscapeRows(shown) : [];
+
   return (
     <Section
       title={`Cookies (${list.length})`}
       actions={
         <>
           {markdown ? <CopyButton text={markdown} label="Copy for agent" /> : null}
-          <Button size="small" onClick={() => download(`cookies-${new URL(page.origin!).host}.json`, JSON.stringify(list, null, 2))}>
-            Export
-          </Button>
           <Button
             size="small"
             onClick={() => {
               const input = document.createElement("input");
               input.type = "file";
-              input.accept = "application/json";
+              input.accept = ".json,.txt,application/json,text/plain";
               input.onchange = async () => {
                 const file = input.files?.[0];
                 if (!file) return;
                 try {
-                  const items = JSON.parse(await file.text()) as Cookie[];
-                  for (const c of items) await save({ ...c, hostOnly: c.hostOnly ?? !c.domain.startsWith(".") });
+                  // A JSON export or a Netscape cookies.txt file.
+                  const items = parseCookieFile(await file.text()) as Cookie[];
+                  for (const c of items) await save(c);
                   toast(`Imported ${items.length} cookies.`);
                 } catch (e) {
                   toast(`Import failed: ${e}`, true);
@@ -249,23 +296,130 @@ export function Cookies() {
           <Checks checks={audit.summary} />
         </details>
       ) : null}
-      <input
-        aria-label="Filter cookies"
-        type="search"
-        placeholder="Filter cookies"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-      />
-      {shown.length ? (
+      {list.length ? (
+        <div className="stack cookie-export">
+          <div className="row">
+            <select
+              aria-label="Export format"
+              value={format}
+              onChange={(e) => isExportFormat(e.target.value) && setFormat(e.target.value)}
+              style={{ width: "auto" }}
+            >
+              {(Object.keys(EXPORT_FORMATS) as ExportFormat[]).map((f) => (
+                <option key={f} value={f}>
+                  {EXPORT_FORMATS[f].label}
+                </option>
+              ))}
+            </select>
+            <CopyButton text={exportText} />
+            <Button size="small" onClick={() => download(cookiesFileName(host, format), exportText, fmt.mime)}>
+              Export
+            </Button>
+            <Button
+              size="small"
+              title="Pick where to save the file"
+              onClick={async () => {
+                try {
+                  const saved = await saveAs(cookiesFileName(host, format), exportText, {
+                    type: fmt.mime,
+                    extension: fmt.extension,
+                    description: fmt.label,
+                  });
+                  if (saved) toast(`Saved ${plural(shown.length, "cookie")}.`);
+                } catch (e) {
+                  toast(String(e), true);
+                }
+              }}
+            >
+              Export As
+            </Button>
+            <Button size="small" busy={exportingAll} onClick={exportAll} title="Every cookie of every site, in the chosen format">
+              Export all cookies
+            </Button>
+          </div>
+          <p className="muted small" style={{ margin: 0 }}>
+            {exportScope}. Export all cookies asks for access to all sites: Chrome only returns the cookies of sites devkit can access.
+          </p>
+          <Notice kind="warn">
+            <span className="small">cookies.txt holds session tokens: anyone with the file can sign in as you.</span>
+          </Notice>
+        </div>
+      ) : null}
+      <div className="row">
+        <input
+          aria-label="Filter cookies"
+          type="search"
+          placeholder="Filter cookies"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="grow"
+        />
+        <label className="check">
+          <input type="checkbox" checked={table} onChange={(e) => setTable(e.target.checked)} /> Table
+        </label>
+        {table ? (
+          <label className="check">
+            <input type="checkbox" checked={nowrap} onChange={(e) => setNowrap(e.target.checked)} /> Nowrap
+          </label>
+        ) : null}
+      </div>
+      {shown.length && table ? (
+        <div className={`cookie-table-wrap${nowrap ? " nowrap" : ""}`}>
+          <table className="cookie-table">
+            <thead>
+              <tr>
+                <th>Domain</th>
+                <th>Include Subdomains</th>
+                <th>Path</th>
+                <th>Secure</th>
+                <th>Expiry</th>
+                <th>Name</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={cookieKey(shown[i]!)}>
+                  <td>
+                    {r.httpOnly ? <span className="muted">#HttpOnly_</span> : null}
+                    {r.domain}
+                  </td>
+                  <td>{r.includeSubdomains}</td>
+                  <td>{r.path}</td>
+                  <td>{r.secure}</td>
+                  <td title={r.expiry ? new Date(r.expiry * 1000).toLocaleString() : "Session cookie"}>{r.expiry}</td>
+                  <td>
+                    {r.name}
+                    {r.partitioned ? (
+                      <span
+                        className="pill"
+                        title={`Partitioned (CHIPS), top-level site ${shown[i]!.partitionKey?.topLevelSite ?? "unknown"}`}
+                      >
+                        Partitioned
+                      </span>
+                    ) : null}
+                  </td>
+                  <td>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : shown.length ? (
         <ul className="list">
           {shown.map((c) => (
-            <li key={`${c.domain}${c.path}${c.name}`}>
+            <li key={cookieKey(c)}>
               <div className="row">
                 <b className="mono grow ellipsis" title={c.name}>
                   {c.name}
                 </b>
                 {c.httpOnly ? <span className="pill">HttpOnly</span> : null}
                 {c.secure ? <span className="pill">Secure</span> : null}
+                {c.partitionKey ? (
+                  <span className="pill" title={`Partitioned (CHIPS), top-level site ${c.partitionKey.topLevelSite ?? "unknown"}`}>
+                    Partitioned
+                  </span>
+                ) : null}
                 <span className="pill" title="SameSite attribute">
                   SameSite: {c.sameSite}
                 </span>
@@ -276,7 +430,7 @@ export function Cookies() {
                   size="small"
                   variant="danger"
                   onClick={async () => {
-                    await browser.cookies.remove({ url: cookieUrl(c), name: c.name, storeId: c.storeId });
+                    await browser.cookies.remove({ url: cookieUrl(c), name: c.name, storeId: c.storeId, partitionKey: c.partitionKey });
                     cookies.run();
                   }}
                 >
@@ -288,9 +442,9 @@ export function Cookies() {
                 {c.domain}
                 {c.path} · {c.session ? "session" : `expires ${new Date((c.expirationDate ?? 0) * 1000).toLocaleString()}`}
               </div>
-              {audit.flags.get(`${c.domain}${c.path}${c.name}`)?.length ? (
+              {audit.flags.get(cookieKey(c))?.length ? (
                 <div className="row cookie-flags">
-                  {audit.flags.get(`${c.domain}${c.path}${c.name}`)!.map((f) => (
+                  {audit.flags.get(cookieKey(c))!.map((f) => (
                     <span key={f.id} className={`pill${f.level === "info" ? "" : ` t-${f.level}`}`} title={f.detail}>
                       {f.label}
                     </span>
