@@ -9,7 +9,7 @@ import { cachingReport, type Check, type HeaderFetch, securityReport } from "../
 import { type HeadingIssue, headingIssues, headingText, isExposed, levelCounts, outlineLines } from "../headings";
 import { type Finding, type JsonLdBlock, type JsonLdReport, richResultsTestUrl } from "../jsonld";
 import type { FontsColors, MetaSnapshot, PerfSnapshot } from "../page/collect";
-import { type LandmarkIssue, landmarkFix, landmarkIssues, landmarksOutline } from "../landmarks";
+import { isLandmarkExposed, type LandmarkIssue, landmarkFix, landmarkIssues, landmarksOutline } from "../landmarks";
 import type { HeadingsSnapshot, RawHeading } from "../page/headings";
 import type { LandmarksSnapshot } from "../page/landmarks";
 import { jsonLdVerdict } from "../report";
@@ -243,6 +243,50 @@ function headingFix(issue: HeadingIssue, snap: HeadingsSnapshot): string {
 
 const headingWhere = (h: RawHeading) => `${code(h.selector)}: ${code(clip(h.html, 160))}`;
 
+function landmarkItem(i: LandmarkIssue, landmarks: LandmarksSnapshot | undefined): Item {
+  const at = i.at.map((n) => landmarks?.landmarks[n]).filter((l) => l !== undefined);
+  return {
+    text: `${i.label}: ${clip(i.detail, 240)}`,
+    details: [
+      ...at.slice(0, 6).map((l) => `Where: ${code(l.selector)} (\`<${l.tag}>\`)`),
+      at.length > 6 ? `… and ${at.length - 6} more` : "",
+      `Fix: ${landmarkFix(i)}`,
+    ],
+  };
+}
+
+/** The landmarks alone (the Overview's row; the Headings panel reports them with the outline): issues and tree. */
+export function landmarksMarkdown(snap: LandmarksSnapshot, ctx: AgentCtx, headings?: RawHeading[]): string {
+  const issues = landmarkIssues(snap, headings);
+  const bad = issues.filter((i) => i.level === "bad").map((i) => landmarkItem(i, snap));
+  const warn = issues.filter((i) => i.level === "warn").map((i) => landmarkItem(i, snap));
+  const notes = issues.filter((i) => i.level === "info");
+  const exposed = snap.landmarks.filter(isLandmarkExposed).length;
+  return agentDoc({
+    title: "Landmarks",
+    url: ctx.url,
+    heading: ctx.heading,
+    result: counted(bad.length, warn.length),
+    context: [
+      `${plural(snap.landmarks.length, "ARIA landmark")}${snap.capped ? " (capped)" : ""}, ${exposed} announced by screen readers, as browsers map them (HTML-AAM).`,
+    ],
+    sections: [
+      { title: "To fix", body: list(bad) },
+      { title: "Worth checking", body: list(warn) },
+      {
+        title: "Notes",
+        body: list(
+          notes.map((i) => ({ text: `${i.label}: ${clip(i.detail, 200)}` })),
+          10,
+        ),
+      },
+      { title: "Tree", body: snap.landmarks.length ? fence(landmarksOutline(snap, { hidden: true, selectors: true })) : "" },
+    ],
+    verify:
+      bad.length || warn.length ? "Reload the page and refresh devkit's Headings panel, Landmarks view (Inspect › Headings)." : undefined,
+  });
+}
+
 /** Headings panel: the problems of `headingIssues` (and `landmarkIssues` when given) and the outline they sit in. */
 export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx, landmarks?: LandmarksSnapshot): string {
   const issues = headingIssues(snap);
@@ -258,17 +302,7 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx, landmark
       ],
     };
   };
-  const lmItem = (i: LandmarkIssue): Item => {
-    const at = i.at.map((n) => landmarks?.landmarks[n]).filter((l) => l !== undefined);
-    return {
-      text: `${i.label}: ${clip(i.detail, 240)}`,
-      details: [
-        ...at.slice(0, 6).map((l) => `Where: ${code(l.selector)} (\`<${l.tag}>\`)`),
-        at.length > 6 ? `… and ${at.length - 6} more` : "",
-        `Fix: ${landmarkFix(i)}`,
-      ],
-    };
-  };
+  const lmItem = (i: LandmarkIssue) => landmarkItem(i, landmarks);
   const by = (level: HeadingIssue["level"]) => [
     ...issues.filter((i) => i.level === level).map(item),
     ...lmIssues.filter((i) => i.level === level).map(lmItem),
