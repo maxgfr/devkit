@@ -8,7 +8,9 @@ import { cachingReport, type Check, type HeaderFetch, securityReport } from "../
 import { type HeadingIssue, headingIssues, headingText, isExposed, levelCounts, outlineLines } from "../headings";
 import { type Finding, type JsonLdBlock, type JsonLdReport, richResultsTestUrl } from "../jsonld";
 import type { FontsColors, MetaSnapshot, PerfSnapshot } from "../page/collect";
+import { type LandmarkIssue, landmarkFix, landmarkIssues, landmarksOutline } from "../landmarks";
 import type { HeadingsSnapshot, RawHeading } from "../page/headings";
+import type { LandmarksSnapshot } from "../page/landmarks";
 import { jsonLdVerdict } from "../report";
 import { linkHref, metaValue, seoReport } from "../seo";
 import { EXTERNAL_TOOLS, isAllowed, manifestChecks, type Robots, type Sitemap } from "../site-files";
@@ -217,9 +219,10 @@ function headingFix(issue: HeadingIssue, snap: HeadingsSnapshot): string {
 
 const headingWhere = (h: RawHeading) => `${code(h.selector)}: ${code(clip(h.html, 160))}`;
 
-/** Headings panel: the problems of `headingIssues` and the outline they sit in. */
-export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string {
+/** Headings panel: the problems of `headingIssues` (and `landmarkIssues` when given) and the outline they sit in. */
+export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx, landmarks?: LandmarksSnapshot): string {
   const issues = headingIssues(snap);
+  const lmIssues = landmarks ? landmarkIssues(landmarks, snap.headings) : [];
   const item = (i: HeadingIssue): Item => {
     const at = i.at.map((n) => snap.headings[n]).filter((h): h is RawHeading => Boolean(h));
     return {
@@ -231,9 +234,24 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
       ],
     };
   };
-  const bad = issues.filter((i) => i.level === "bad");
-  const warn = issues.filter((i) => i.level === "warn");
-  const notes = issues.filter((i) => i.level === "info");
+  const lmItem = (i: LandmarkIssue): Item => {
+    const at = i.at.map((n) => landmarks?.landmarks[n]).filter((l) => l !== undefined);
+    return {
+      text: `${i.label}: ${clip(i.detail, 240)}`,
+      details: [
+        ...at.slice(0, 6).map((l) => `Where: ${code(l.selector)} (\`<${l.tag}>\`)`),
+        at.length > 6 ? `… and ${at.length - 6} more` : "",
+        `Fix: ${landmarkFix(i)}`,
+      ],
+    };
+  };
+  const by = (level: HeadingIssue["level"]) => [
+    ...issues.filter((i) => i.level === level).map(item),
+    ...lmIssues.filter((i) => i.level === level).map(lmItem),
+  ];
+  const bad = by("bad");
+  const warn = by("warn");
+  const notes = [...issues, ...lmIssues].filter((i) => i.level === "info");
   const exposed = snap.headings.filter(isExposed);
   const counts = levelCounts(exposed)
     .map((n, l) => (n ? `h${l + 1} ×${n}` : ""))
@@ -248,10 +266,13 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
     context: [
       `${plural(snap.headings.length, "heading")}${snap.capped ? " (capped)" : ""}, ${exposed.length} announced by screen readers${counts ? ` (${counts})` : ""}.`,
       noId ? `${plural(noId, "visible heading")} without an \`id\`: no link can point to ${noId === 1 ? "it" : "them"}.` : "",
+      landmarks
+        ? `${plural(landmarks.landmarks.length, "ARIA landmark")}${landmarks.capped ? " (capped)" : ""}, as browsers map them (HTML-AAM).`
+        : "",
     ],
     sections: [
-      { title: "To fix", body: list(bad.map(item)) },
-      { title: "Worth checking", body: list(warn.map(item)) },
+      { title: "To fix", body: list(bad) },
+      { title: "Worth checking", body: list(warn) },
       {
         title: "Notes",
         body: list(
@@ -260,6 +281,10 @@ export function headingsMarkdown(snap: HeadingsSnapshot, ctx: AgentCtx): string 
         ),
       },
       { title: "Outline", body: outlineLines(snap, issues, { max: 80 }) },
+      {
+        title: "Landmarks",
+        body: landmarks?.landmarks.length ? fence(landmarksOutline(landmarks, { hidden: true, selectors: true })) : "",
+      },
     ],
     verify: bad.length || warn.length ? "Reload the page and refresh devkit's Headings panel (Inspect › Headings)." : undefined,
   });

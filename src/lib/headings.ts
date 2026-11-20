@@ -246,7 +246,7 @@ export function levelCounts(headings: Pick<RawHeading, "level">[]): number[] {
   return counts;
 }
 
-export function headingsVerdict(issues: Pick<HeadingIssue, "level" | "id">[], total: number): { level: Level; text: string } {
+export function headingsVerdict(issues: Pick<HeadingIssue, "level">[], total: number): { level: Level; text: string } {
   if (!total) return { level: "bad", text: "No heading" };
   const bad = issues.filter((i) => i.level === "bad").length;
   const warn = issues.filter((i) => i.level === "warn").length;

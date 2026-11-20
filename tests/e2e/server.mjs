@@ -134,6 +134,26 @@ const HEADINGS_PAGE = `<!doctype html>
 </main>
 </body></html>`;
 
+// GitHub's landmark structure (a repository page): a named header with two navs, main with a named section and a
+// nav, a footer with a nav, plus an unnamed section, an article header and a heading outside every landmark.
+const LANDMARKS_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>maxgfr/skycmd</title></head><body>
+<header aria-label="Global navigation menu">
+<h2>Navigation Menu</h2>
+<nav aria-label="Breadcrumbs"><a href="#">maxgfr</a> / <a href="#">skycmd</a></nav>
+<nav aria-label="Repository"><a href="#">Code</a> <a href="#">Issues</a></nav>
+</header>
+<div><h2>Skip to content</h2></div>
+<main>
+<h1>skycmd</h1><p>A command palette.</p>
+<section aria-labelledby="protect"><h2 id="protect">Your main branch isn't protected</h2><p>Protect it.</p></section>
+<section><h2>Unnamed section</h2><p>Not a landmark.</p></section>
+<nav aria-label="Repository files"><h2>Folders and files</h2><p>src, tests</p></nav>
+<article><header><h2>README</h2></header><p>Read me.</p></article>
+</main>
+<footer><h2>Footer</h2><nav aria-label="Footer"><a href="#">Terms</a></nav></footer>
+</body></html>`;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
@@ -152,6 +172,7 @@ const server = http.createServer((req, res) => {
   // A click handler that blocks the main thread for 250 ms, and an unload listener that keeps the page out of the
   // back/forward cache: the Responsiveness panel must name both.
   if (url.pathname === "/headings") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(HEADINGS_PAGE);
+  if (url.pathname === "/landmarks") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(LANDMARKS_PAGE);
   if (url.pathname === "/slow.js")
     return res
       .writeHead(200, { "content-type": "text/javascript" })
