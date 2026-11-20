@@ -5,6 +5,7 @@ import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
 import { Seo } from "./seo";
+import { SiteCrawl } from "./crawl";
 import { ElementPicker } from "./element";
 import { Headings } from "./headings";
 import { Mocks } from "./mocks";
@@ -47,6 +48,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  crawl: SiteCrawl,
   "repo-deps": RepoDeps,
   "agent-tools": AgentTools,
   "agent-readiness": AgentReadiness,

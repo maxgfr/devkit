@@ -1241,6 +1241,82 @@ try {
   );
   await printTab.close();
 
+  // Site crawl: localhost:<port> is a site of its own (server.mjs crawlRoute) with a robots.txt, a sitemap index
+  // of a plain and a gzipped sitemap, and pages with a duplicate title, a missing description, a noindex, a 404,
+  // a redirect and invalid JSON-LD. Host access comes from the granted <all_urls>, like the other optional ones.
+  {
+    const crawlBase = base.replace("127.0.0.1", "localhost");
+    await site.goto(`${crawlBase}/crawl/`);
+    await open("Inspect", "Site crawl");
+    await panel.getByRole("button", { name: "Find URLs" }).click();
+    const crawlButton = panel.getByRole("button", { name: /^Crawl \d+ pages$/ });
+    await crawlButton.waitFor({ timeout: 10_000 });
+    t = await text();
+    check(
+      "crawl: sitemap index and gzipped sitemap read, other host and robots.txt block skipped",
+      t.includes("9 URLs found in 3 sitemap(s)") &&
+        t.includes("1 on another host") &&
+        t.includes("1 blocked by robots.txt") &&
+        (await crawlButton.innerText()) === "Crawl 7 pages",
+      t.match(/\d+ URLs? found[^\n]*/)?.[0],
+    );
+    await crawlButton.click();
+    await panel.getByText(/Done\. 7 \/ 7 pages/).waitFor({ timeout: 20_000 });
+    t = await text();
+    check(
+      "crawl: findings across pages (error status, noindex in sitemap, JSON-LD errors, duplicate title, missing description, redirect, robots.txt)",
+      [
+        "Pages answering an error",
+        "noindex pages listed in the sitemap",
+        "Duplicate titles",
+        "Missing meta description",
+        "URLs that redirect",
+        "Sitemap URLs blocked by robots.txt (not fetched)",
+      ].every((s) => t.includes(s)) && /JSON-LD errors \((Rich Results|Schema\.org) checks\)/.test(t),
+    );
+    await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).locator("summary").click();
+    const dupText = await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).innerText();
+    check(
+      "crawl: duplicate titles grouped with their pages",
+      dupText.includes("Acme mugs") && dupText.includes("/crawl/a") && dupText.includes("/crawl/b"),
+      dupText.replace(/\n/g, " / "),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("errors");
+    await panel.waitForTimeout(200);
+    const errorRows = await panel.locator(".crawl-table tbody tr").allInnerTexts();
+    check(
+      "crawl: table filtered to the error status",
+      errorRows.length === 1 && errorRows[0].includes("/crawl/gone") && errorRows[0].includes("404"),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("all");
+    await panel.locator(".crawl-table tbody tr", { hasText: "/crawl/jsonld" }).click();
+    await panel.waitForTimeout(300);
+    t = await text();
+    check(
+      "crawl: a row opens the page detail with its JSON-LD types and errors",
+      /JSON-LD\s*Product · [1-9]\d* errors/.test(t) && t.includes("JSON-LD findings"),
+      t.match(/JSON-LD\s*Product[^\n]*/)?.[0],
+    );
+    const [csv] = await Promise.all([
+      panel.waitForEvent("download", { timeout: 10_000 }).catch(() => null),
+      panel.getByRole("button", { name: "CSV", exact: true }).click(),
+    ]);
+    const csvText = csv ? readFileSync(await csv.path(), "utf8") : "";
+    check(
+      "crawl: CSV export, one row per page",
+      csvText.startsWith("url,final_url,status") && csvText.trimEnd().split("\r\n").length === 8 && csvText.includes(",404,"),
+      csv?.suggestedFilename(),
+    );
+    const crawlMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }));
+    check(
+      "crawl: Copy for agent lists the findings with their paths",
+      crawlMd.startsWith("## Site crawl") && crawlMd.includes("`/crawl/gone`") && crawlMd.includes('"Acme mugs"'),
+      crawlMd.split("\n")[2],
+    );
+    await shot("inspect-crawl");
+    await site.goto(`${base}/`);
+  }
+
   // Headings: a page with every heading problem.
   await site.goto(`${base}/headings`);
   await panel.waitForTimeout(800);

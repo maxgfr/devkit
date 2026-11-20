@@ -1,5 +1,5 @@
 import http from "node:http";
-import { deflateSync } from "node:zlib";
+import { deflateSync, gzipSync } from "node:zlib";
 
 // Fake credential planted for the secrets scanner, assembled at runtime so the repository never holds
 // a string that secret scanners would take for a real key.
@@ -271,6 +271,63 @@ const seoPage = (base) => `<!doctype html>
 <img src="/tile.png" alt="Tile"><img src="/tile.png"><img src="/tile.png" alt="" title="Decor">
 <a href="/">Home</a> <a href="/ok">OK</a> <a href="/ok">OK again</a> <a href="https://example.com/" rel="nofollow">Elsewhere</a>
 </body></html>`;
+// Site crawl: a small site of its own on localhost:<port> (127.0.0.1 keeps its robots.txt and sitemap for the
+// other panels). robots.txt points to a sitemap index of a plain sitemap and a gzipped one (served as a file, so
+// devkit must gunzip it); the pages carry a duplicate title, a missing description, a noindex, a 404, a redirect
+// and invalid JSON-LD; one URL is blocked by robots.txt and one is on another host.
+const CRAWL_DESC = "Acme mugs: ceramic, 350 ml, dishwasher safe, made to last for years of morning coffee.";
+const CRAWL_PAGES = {
+  "/crawl/": {
+    title: "Acme home",
+    description: CRAWL_DESC,
+    jsonld: ['{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}'],
+  },
+  "/crawl/a": { title: "Acme mugs", description: `${CRAWL_DESC} Page A.` },
+  "/crawl/b": { title: "Acme mugs", h1: "Mugs, page B" },
+  "/crawl/noindex": { title: "Acme drafts", description: `${CRAWL_DESC} Drafts.`, robots: "noindex, follow" },
+  "/crawl/jsonld": {
+    title: "Acme product",
+    description: `${CRAWL_DESC} Product.`,
+    jsonld: ['{"@context":"https://schema.org","@type":"Product","name":"Mug"}', '{"@context":"https://schema.org","@type":"Offer",}'],
+  },
+  "/crawl/moved": { title: "Acme moved page", description: `${CRAWL_DESC} Moved.` },
+  "/crawl/other": { title: "Other host page", description: CRAWL_DESC },
+  "/crawl/private/x": { title: "Private", description: CRAWL_DESC },
+};
+const crawlHtml = (base, path, { title, description, robots, jsonld = [], h1 = title }) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${title}</title>
+${description ? `<meta name="description" content="${description}">` : ""}${robots ? `<meta name="robots" content="${robots}">` : ""}
+<link rel="canonical" href="${base}${path}">
+${jsonld.map((j) => `<script type="application/ld+json">${j}</script>`).join("\n")}
+</head><body><h1>${h1}</h1><p>Acme makes mugs for coffee, tea and hot chocolate.</p></body></html>`;
+function crawlRoute(req, url, base) {
+  const xml = (body) => ({ status: 200, headers: { "content-type": "application/xml" }, body });
+  const urlset = (paths) =>
+    `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${paths.map((p) => `<url><loc>${p.startsWith("http") ? p : base + p}</loc></url>`).join("")}</urlset>`;
+  if (/^localhost:/.test(req.headers.host ?? "") && url.pathname === "/robots.txt")
+    return {
+      status: 200,
+      headers: { "content-type": "text/plain" },
+      body: `User-agent: *\nDisallow: /crawl/private\n\nSitemap: ${base}/crawl/sitemap-index.xml\n`,
+    };
+  if (!url.pathname.startsWith("/crawl/")) return null;
+  if (url.pathname === "/crawl/sitemap-index.xml")
+    return xml(
+      `<?xml version="1.0"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>${base}/crawl/sitemap-pages.xml</loc></sitemap><sitemap><loc>${base}/crawl/sitemap-more.xml.gz</loc></sitemap></sitemapindex>`,
+    );
+  if (url.pathname === "/crawl/sitemap-pages.xml")
+    return xml(urlset(["/crawl/", "/crawl/a", "/crawl/b", "/crawl/private/x", `${base.replace("localhost", "127.0.0.1")}/crawl/other`]));
+  if (url.pathname === "/crawl/sitemap-more.xml.gz")
+    return {
+      status: 200,
+      headers: { "content-type": "application/gzip" },
+      body: gzipSync(urlset(["/crawl/noindex", "/crawl/gone", "/crawl/old", "/crawl/jsonld"])),
+    };
+  if (url.pathname === "/crawl/old") return { status: 301, headers: { location: "/crawl/moved" }, body: "" };
+  const spec = CRAWL_PAGES[url.pathname];
+  if (!spec) return { status: 404, headers: { "content-type": "text/html" }, body: "<!doctype html><title>Not found</title>" };
+  return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: crawlHtml(base, url.pathname, spec) };
+}
 let ogImageHits = 0;
 
 // Overview and AI context: landmarks (two unnamed navigation landmarks), a dataLayer with a Consent Mode v1 default
@@ -326,6 +383,8 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, base);
   const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
   if (req.method === "OPTIONS") return res.writeHead(204, cors).end();
+  const crawled = crawlRoute(req, url, base);
+  if (crawled) return res.writeHead(crawled.status, crawled.headers).end(crawled.body);
   if (url.pathname === "/seo") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(seoPage(base));
   if (url.pathname === "/og-hits") return res.writeHead(200, { "content-type": "text/plain" }).end(String(ogImageHits));
   if (url.pathname === "/overview-context")
