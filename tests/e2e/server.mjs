@@ -271,6 +271,36 @@ const seoPage = (base) => `<!doctype html>
 <img src="/tile.png" alt="Tile"><img src="/tile.png"><img src="/tile.png" alt="" title="Decor">
 <a href="/">Home</a> <a href="/ok">OK</a> <a href="/ok">OK again</a> <a href="https://example.com/" rel="nofollow">Elsewhere</a>
 </body></html>`;
+// Data page viewer fixtures: [content type, body]; `{{base}}` becomes the server's origin.
+const DATA_DOCS = {
+  "/data/feed.xml": [
+    "application/rss+xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel><title>Acme blog</title><link>{{base}}/</link><description>News</description>
+<item><title>First post</title><link>{{base}}/ok</link><pubDate>Mon, 02 Nov 2026 10:00:00 GMT</pubDate></item>
+<item><title>Second post</title><link>{{base}}/ok?2</link><pubDate>Tue, 03 Nov 2026 10:00:00 GMT</pubDate></item>
+</channel></rss>`,
+  ],
+  "/data/catalog.xml": [
+    "application/xml",
+    `<?xml version="1.0"?>
+<!-- product catalog -->
+<catalog version="2"><product id="p1" href="{{base}}/ok"><name>Mug</name><notes><![CDATA[Holds <350 ml>]]></notes></product><product id="p2"><name>Cup</name></product></catalog>`,
+  ],
+  "/data/broken.xml": ["application/xml", "<catalog>\n<product></catalog>"],
+  "/data/styled.xml": [
+    "application/xml",
+    '<?xml version="1.0"?><?xml-stylesheet type="text/css" href="/data/style.css"?><note><to>Ada</to></note>',
+  ],
+  "/data/style.css": ["text/css", "note { display: block; color: green; }"],
+  "/data/note": ["text/plain", "<note><to>Ada</to></note>"],
+  "/data/people.csv": ["text/plain; charset=utf-8", 'name,score,city\nAda,10,London\nalan,9,"Paris, France"\nGrace,100,New York\n'],
+  "/data/config.yaml": [
+    "text/yaml",
+    "name: devkit\nversion: 1.2\nfeatures:\n  - json\n  - yaml\nbuild:\n  minify: true\n  target: |\n    chrome\n",
+  ],
+  "/data/events.jsonl": ["text/plain", '{"level":"info","msg":"started"}\n{"level":"error",\n{"level":"warn","msg":"slow"}\n'],
+};
 // IndexedDB and Cache Storage viewer: a database with an in-line key store and an out-of-line one, and a cache
 // with JSON, HTML and image entries. Starts from scratch on every load; window.__dbReady says when it is done.
 const DATABASES_PAGE = `<!doctype html>
@@ -562,6 +592,13 @@ const server = http.createServer((req, res) => {
     );
   if (url.pathname === "/api/broken") return res.writeHead(200, { "content-type": "application/json" }).end('{\n  "a": 1,\n  "b": }');
   if (url.pathname === "/api/plain") return res.writeHead(200, { "content-type": "text/plain" }).end('{"plain":true,"items":[1,2]}');
+  // Data documents for the data page viewer (XML, RSS, CSV, YAML, JSON Lines). Chrome downloads text/csv,
+  // application/yaml and NDJSON instead of showing them, so those are served the way a browser can show
+  // them (text/plain with the file's extension, text/yaml); RSS keeps its type, which Chrome shows as text.
+  if (DATA_DOCS[url.pathname]) {
+    const [type, body] = DATA_DOCS[url.pathname];
+    return res.writeHead(200, { "content-type": type }).end(body.replaceAll("{{base}}", base));
+  }
   if (IMAGES[url.pathname])
     return res.writeHead(200, { "content-type": "image/png", "cache-control": "max-age=60" }).end(IMAGES[url.pathname]);
   // Redirect path: /r1 → 301 → /r2 → 302 → /final, a meta refresh to /final, and a loop.

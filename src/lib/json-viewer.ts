@@ -1,10 +1,11 @@
-// Pure logic of the JSON page viewer (src/entrypoints/json-viewer.content.ts): no browser APIs,
-// so the content script and the tests share it.
+// Pure logic of the data page viewer's JSON tree (src/lib/viewer/json-tree.ts, mounted by src/entrypoints/data-viewer.ts): no
+// browser APIs, so the content script and the tests share it. The other formats are in ./formats and
+// ./data-viewer; the ids keep their JSON names so the Options toggle of earlier versions stays on.
 
-/** Id of the runtime-registered content script that formats JSON pages (Options › JSON viewer). */
+/** Id of the runtime-registered content script that formats data pages (Options › Data page viewer). */
 export const JSON_VIEWER_SCRIPT_ID = "devkit-json-viewer";
 export const JSON_VIEWER_SCRIPT_IDS = [JSON_VIEWER_SCRIPT_ID];
-/** Built file of the content script, for `registerContentScripts` and `executeScript`. */
+/** Built file of the content script, for `registerContentScripts`: the gate that injects the viewer on data pages. */
 export const JSON_VIEWER_FILE = "content-scripts/json-viewer.js";
 /** Id of the element that hosts the viewer's shadow root: present once a page is formatted. */
 export const JSON_VIEWER_HOST_ID = "devkit-json-viewer";
@@ -110,7 +111,8 @@ export function filterJson(value: unknown, query: string): FilterResult | null {
   const matched = new Set<string>();
   const walk = (v: unknown, path: string, key: string | number | null, ancestors: string[]): void => {
     const keyHit = typeof key === "string" && key.toLowerCase().includes(q);
-    const valueHit = !isContainer(v) && String(v).toLowerCase().includes(q);
+    // `undefined` stands for a JSON Lines line that does not parse: it has no value to match.
+    const valueHit = !isContainer(v) && v !== undefined && String(v).toLowerCase().includes(q);
     if (keyHit || valueHit) {
       matched.add(path);
       for (const a of ancestors) visible.add(a);
@@ -124,8 +126,8 @@ export function filterJson(value: unknown, query: string): FilterResult | null {
   return { visible, matched, count: matched.size };
 }
 
-/** `posts-1.json` for /posts/1, `users.json` for /api/users, `data.json` for /data.json, the host for /. */
-export function downloadName(url: string): string {
+/** `posts-1.json` for /posts/1, `users.json` for /api/users, `data.json` for /data.json, the host for /; `ext` changes the extension. */
+export function downloadName(url: string, ext = "json"): string {
   let segments: string[] = [];
   let host = "";
   try {
@@ -147,25 +149,17 @@ export function downloadName(url: string): string {
   let last = segments.at(-1) ?? "";
   if (last && /^\d+$/.test(last) && segments.length > 1) last = `${segments.at(-2)}-${last}`;
   const base = (last || host || "data")
-    .replace(/\.json$/i, "")
+    .replace(/\.(json|geojson|xml|rss|atom|csv|tsv|tab|ya?ml|jsonl|ndjson)$/i, "")
     .replace(/[^\w.-]+/g, "-")
     .replace(/^[-.]+|[-.]+$/g, "")
     .slice(0, 100);
-  return `${base || "data"}.json`;
+  return `${base || "data"}.${ext}`;
 }
 
 export function formatSize(chars: number): string {
   if (chars < 1024) return `${chars} B`;
   if (chars < 1024 * 1024) return `${(chars / 1024).toFixed(1)} KB`;
   return `${(chars / 1024 / 1024).toFixed(1)} MB`;
-}
-
-/** Palette message once the viewer script ran on a tab. */
-export function jsonViewerMessage(state: string | null, contentType: string): string {
-  if (state === "tree" || state === "raw") return "JSON formatted.";
-  if (state === "invalid") return "Invalid JSON: shown as raw text with where it breaks.";
-  if (state === "large") return "Large JSON document: shown as raw text, with a Format anyway button.";
-  return `This tab is not a JSON document (${contentType || "unknown type"}).`;
 }
 
 /** Error banner text for a document that does not parse. */
