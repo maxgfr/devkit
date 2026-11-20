@@ -613,7 +613,8 @@ const HEAVY: Record<ResourceKind, { bytes: number; fix: string }> = {
 };
 
 /** Performance panel: Web Vitals, long tasks, navigation phases and resources of `collectPerf`. */
-export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx): string {
+/** `ctx.field`: the CrUX section's Markdown (agent/crux.ts), when it loaded field data. */
+export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx & { field?: string }): string {
   const redactor = createRedactor(p.resources.map((r) => r.name).join("\n"));
   const name = (url: string) => code(clip(redactor.redact(url), 160));
   const bad: Item[] = [];
@@ -683,6 +684,7 @@ export function perfMarkdown(p: PerfSnapshot, ctx: AgentCtx): string {
     sections: [
       { title: "To fix", body: list(bad) },
       { title: "Worth checking", body: list(warn, 15) },
+      { title: "Field data (CrUX)", body: ctx.field ?? "" },
       {
         title: "Navigation timing",
         body: nav

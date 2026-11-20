@@ -1,6 +1,6 @@
 import { browser } from "wxt/browser";
 
-export type OptionalPermission = "browsingData" | "cookies" | "contentSettings";
+export type OptionalPermission = "browsingData" | "cookies" | "contentSettings" | "webRequest" | "webNavigation";
 
 export interface PermissionNeed {
   permissions?: OptionalPermission[];

@@ -4235,6 +4235,289 @@ html:has(.print-page) {
   }
 }
 
+/* Consent check: counters, tracker tables, before / after comparisons */
+.consent-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.consent-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.consent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.consent-table th,
+.consent-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.consent-table th {
+  background: var(--bg-2);
+  color: var(--fg-2);
+  font-weight: 550;
+}
+.consent-table tr:last-child td {
+  border-bottom: 0;
+}
+.consent-table td .pill {
+  margin-left: 4px;
+}
+.consent-findings .detail .mono {
+  margin-top: 2px;
+}
+.consent-compare {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.consent-compare h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.consent-diff {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+/* Redirect path: numbered hops joined by a rail, status pill, URL, Location and headers. */
+.redir-hops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.redir-hop {
+  position: relative;
+  padding: 6px 0 8px 26px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.redir-hop:last-child {
+  border-bottom: 0;
+}
+.redir-hop:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 26px;
+  bottom: -6px;
+  border-left: 2px solid var(--line);
+}
+.redir-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.redir-n {
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--fg-2);
+  font-size: 11px;
+  font-weight: 650;
+  display: grid;
+  place-items: center;
+}
+.redir-status {
+  display: inline-block;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.pill.redir-status.t-info {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.redir-reason {
+  font-weight: 450;
+}
+.redir-url {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.redir-to {
+  color: var(--fg-2);
+  overflow-wrap: anywhere;
+}
+.redir-headers > summary,
+.redir-earlier > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg-2);
+}
+.redir-headers[open] > summary {
+  margin-bottom: 4px;
+}
+.redir-earlier {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.redir-earlier > summary {
+  overflow-wrap: anywhere;
+}
+.redir-earlier[open] > summary {
+  margin-bottom: 6px;
+}
+/* Site crawl: settings grid, findings as expandable rows, a sortable table that scrolls sideways in the side panel. */
+.crawl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
+  margin: 6px 0;
+}
+.crawl-settings[open] > summary {
+  margin-bottom: 4px;
+}
+.crawl-settings > .row,
+.crawl-settings > label,
+.crawl-settings > fieldset {
+  margin-top: 4px;
+}
+.crawl-metrics {
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+}
+.crawl-findings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.crawl-findings > li + li {
+  border-top: 1px solid var(--line);
+}
+.crawl-finding > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.crawl-finding > div {
+  padding: 0 8px 8px 28px;
+}
+.crawl-group-value {
+  font-weight: 550;
+  overflow-wrap: anywhere;
+  margin-bottom: 2px;
+}
+.crawl-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.crawl-link:hover {
+  text-decoration: underline;
+}
+.crawl-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.crawl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.crawl-table th,
+.crawl-table td {
+  text-align: left;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.crawl-table th {
+  background: var(--bg-2);
+}
+.crawl-table th button {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--fg-2);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+.crawl-table th[aria-sort] button {
+  color: var(--fg);
+}
+.crawl-table td.crawl-url {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crawl-table td.crawl-url .crawl-link {
+  overflow-wrap: normal;
+}
+.crawl-table td .pill {
+  margin-left: 4px;
+}
+.crawl-table tbody tr {
+  cursor: pointer;
+}
+.crawl-table tbody tr:hover,
+.crawl-table tbody tr.selected {
+  background: var(--accent-soft);
+}
+
+/* Field data (CrUX), src/ui/panels/crux.tsx: Web Vitals rows with a distribution bar and a p75 sparkline. */
+.crux-controls {
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+.crux-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-bottom: 8px;
+}
+.crux-dist {
+  font-variant-numeric: tabular-nums;
+}
+.crux-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.crux-spark {
+  flex: none;
+  overflow: visible;
+}
+.crux-spark polyline {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.crux-spark circle {
+  fill: var(--accent);
+}
+.crux-spark circle.last {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
 /* DevTools panel › GraphQL */
 .gql-list .gql-name {
   gap: 6px;

@@ -1241,6 +1241,82 @@ try {
   );
   await printTab.close();
 
+  // Site crawl: localhost:<port> is a site of its own (server.mjs crawlRoute) with a robots.txt, a sitemap index
+  // of a plain and a gzipped sitemap, and pages with a duplicate title, a missing description, a noindex, a 404,
+  // a redirect and invalid JSON-LD. Host access comes from the granted <all_urls>, like the other optional ones.
+  {
+    const crawlBase = base.replace("127.0.0.1", "localhost");
+    await site.goto(`${crawlBase}/crawl/`);
+    await open("Inspect", "Site crawl");
+    await panel.getByRole("button", { name: "Find URLs" }).click();
+    const crawlButton = panel.getByRole("button", { name: /^Crawl \d+ pages$/ });
+    await crawlButton.waitFor({ timeout: 10_000 });
+    t = await text();
+    check(
+      "crawl: sitemap index and gzipped sitemap read, other host and robots.txt block skipped",
+      t.includes("9 URLs found in 3 sitemap(s)") &&
+        t.includes("1 on another host") &&
+        t.includes("1 blocked by robots.txt") &&
+        (await crawlButton.innerText()) === "Crawl 7 pages",
+      t.match(/\d+ URLs? found[^\n]*/)?.[0],
+    );
+    await crawlButton.click();
+    await panel.getByText(/Done\. 7 \/ 7 pages/).waitFor({ timeout: 20_000 });
+    t = await text();
+    check(
+      "crawl: findings across pages (error status, noindex in sitemap, JSON-LD errors, duplicate title, missing description, redirect, robots.txt)",
+      [
+        "Pages answering an error",
+        "noindex pages listed in the sitemap",
+        "Duplicate titles",
+        "Missing meta description",
+        "URLs that redirect",
+        "Sitemap URLs blocked by robots.txt (not fetched)",
+      ].every((s) => t.includes(s)) && /JSON-LD errors \((Rich Results|Schema\.org) checks\)/.test(t),
+    );
+    await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).locator("summary").click();
+    const dupText = await panel.locator(".crawl-finding", { hasText: "Duplicate titles" }).innerText();
+    check(
+      "crawl: duplicate titles grouped with their pages",
+      dupText.includes("Acme mugs") && dupText.includes("/crawl/a") && dupText.includes("/crawl/b"),
+      dupText.replace(/\n/g, " / "),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("errors");
+    await panel.waitForTimeout(200);
+    const errorRows = await panel.locator(".crawl-table tbody tr").allInnerTexts();
+    check(
+      "crawl: table filtered to the error status",
+      errorRows.length === 1 && errorRows[0].includes("/crawl/gone") && errorRows[0].includes("404"),
+    );
+    await panel.getByLabel("Show", { exact: true }).selectOption("all");
+    await panel.locator(".crawl-table tbody tr", { hasText: "/crawl/jsonld" }).click();
+    await panel.waitForTimeout(300);
+    t = await text();
+    check(
+      "crawl: a row opens the page detail with its JSON-LD types and errors",
+      /JSON-LD\s*Product · [1-9]\d* errors/.test(t) && t.includes("JSON-LD findings"),
+      t.match(/JSON-LD\s*Product[^\n]*/)?.[0],
+    );
+    const [csv] = await Promise.all([
+      panel.waitForEvent("download", { timeout: 10_000 }).catch(() => null),
+      panel.getByRole("button", { name: "CSV", exact: true }).click(),
+    ]);
+    const csvText = csv ? readFileSync(await csv.path(), "utf8") : "";
+    check(
+      "crawl: CSV export, one row per page",
+      csvText.startsWith("url,final_url,status") && csvText.trimEnd().split("\r\n").length === 8 && csvText.includes(",404,"),
+      csv?.suggestedFilename(),
+    );
+    const crawlMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }));
+    check(
+      "crawl: Copy for agent lists the findings with their paths",
+      crawlMd.startsWith("## Site crawl") && crawlMd.includes("`/crawl/gone`") && crawlMd.includes('"Acme mugs"'),
+      crawlMd.split("\n")[2],
+    );
+    await shot("inspect-crawl");
+    await site.goto(`${base}/`);
+  }
+
   // Headings: a page with every heading problem.
   await site.goto(`${base}/headings`);
   await panel.waitForTimeout(800);
@@ -2222,6 +2298,97 @@ try {
     `${webmcpFirst.split("\n")[0]} | ${llmsFirst.split("\n")[0]}`,
   );
 
+  // Redirect path: the tab's navigations hop by hop (server, meta refresh, JavaScript), then the URL tracer.
+  // Self-contained: leaves the pinned tab back on the home page.
+  {
+    const tabPath = panel.locator("section", { hasText: "Redirect path" }).first();
+    const hopsOf = async (section) => (await section.locator(".redir-hop").allInnerTexts()).map((h) => h.replace(/\s+/g, " "));
+    const waitHops = (section, n) =>
+      panel
+        .waitForFunction(
+          ([title, count]) =>
+            [...document.querySelectorAll("section")].some(
+              (s) => s.querySelector("h2")?.textContent?.startsWith(title) && s.querySelectorAll(".redir-hop").length === count,
+            ),
+          [section, n],
+          { timeout: 6000 },
+        )
+        .catch(() => undefined);
+    await site.goto(`${base}/r1`);
+    await open("Network", "Redirect path");
+    await waitHops("Redirect path", 3);
+    let hops = await hopsOf(tabPath);
+    check(
+      "redirect path: the tab's navigation hop by hop, 301 then 302 then 200",
+      hops.length === 3 &&
+        /301 Moved Permanently .*\/r1\b.*→ .*\/r2\b/.test(hops[0]) &&
+        /302 Found .*\/r2\b.*→ .*\/final\b/.test(hops[1]) &&
+        /200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    t = await tabPath.innerText();
+    check(
+      "redirect path: summary and findings",
+      /2 redirects · 3 hops/.test(t) && t.includes("2 redirects before the page."),
+      t.slice(0, 200),
+    );
+    await tabPath.locator(".redir-hop").first().locator("summary").click();
+    check(
+      "redirect path: a hop's response headers expand",
+      /x-hop\s*first/.test(await tabPath.locator(".redir-hop").first().locator(".redir-headers").innerText()),
+    );
+    await site.goto(`${base}/meta`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a meta refresh joins the chain as a client hop",
+      hops.length === 2 &&
+        /200 OK .*\/meta\b.*meta refresh.*→ .*\/final\b/.test(hops[0]) &&
+        (await tabPath.innerText()).includes("Client-side redirect"),
+      hops.join(" | "),
+    );
+    await site.goto(`${base}/js-redirect`);
+    await site.waitForURL(/\/final$/);
+    await waitHops("Redirect path", 2);
+    hops = await hopsOf(tabPath);
+    check(
+      "redirect path: a script redirect is named as JavaScript (heuristic)",
+      hops.length === 2 && /\/js-redirect\b.*JavaScript redirect \(heuristic/.test(hops[0]),
+      hops.join(" | "),
+    );
+    check("redirect path: earlier navigations stay listed", (await text()).includes("Earlier in this tab"));
+    await shot("redirect-path");
+
+    const trace = panel.locator("section", { hasText: "Trace a URL" }).first();
+    const runTrace = async (path, n) => {
+      await trace.getByLabel("URL to trace").fill(`${base}${path}`);
+      await trace.getByRole("button", { name: "Trace" }).click();
+      await waitHops("Trace a URL", n);
+      return hopsOf(trace);
+    };
+    hops = await runTrace("/r1", 3);
+    check(
+      "redirect path: Trace follows a URL's redirects from devkit",
+      hops.length === 3 && /^1 301 /.test(hops[0]) && /^2 302 /.test(hops[1]) && /^3 200 OK .*\/final\b/.test(hops[2]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/meta", 2);
+    check(
+      "redirect path: Trace follows a meta refresh",
+      hops.length === 2 && /meta refresh.*→ .*\/final\b/.test(hops[0]),
+      hops.join(" | "),
+    );
+    hops = await runTrace("/loop-a", 21);
+    t = await trace.innerText();
+    check(
+      "redirect path: Trace stops a redirect loop at 20 redirects",
+      hops.length === 21 && t.includes("Redirect loop") && t.includes("Too many redirects") && t.includes("ERR_TOO_MANY_REDIRECTS"),
+      `${hops.length} hops`,
+    );
+    await site.goto(`${base}/`);
+  }
+
   // JSON page viewer, on demand: the palette action formats the pinned tab.
   const jsonTab = await context.newPage();
   const tabOf = (u) => sw.evaluate(async (url) => (await chrome.tabs.query({ url }))[0]?.id, u);
@@ -2342,6 +2509,276 @@ try {
   const afterOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
   check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
   await jsonTab.close();
+
+  // Consent check (#25): what the fixture sets before any interaction, then after Accept, the report, the current state.
+  {
+    await site.goto(`${base}/consent`);
+    await panel.waitForTimeout(800);
+    // A cookie of the site set beforehand: "Check before consent" must clear it.
+    await sw.evaluate((u) => chrome.cookies.set({ url: `${u}/`, name: "devkit_consent_marker", value: "1" }), base);
+    await open("Inspect", "Consent check");
+    await panel.getByRole("button", { name: "Check before consent" }).click();
+    await panel
+      .getByRole("heading", { name: "Before consent", exact: true })
+      .waitFor({ timeout: 25_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: _ga and a Hotjar key flagged before consent",
+      t.includes("1 analytics cookie before consent") &&
+        t.includes("_ga (Google Analytics)") &&
+        t.includes("1 tracking storage key before consent") &&
+        t.includes("_hjSessionUser_42"),
+      t.match(/Before consent[^\n]*\n[^\n]*/)?.[0],
+    );
+    check(
+      "consent: Consent Mode default granted flagged",
+      t.includes("Consent Mode default grants ad_storage, analytics_storage, ad_user_data, ad_personalization"),
+    );
+    check(
+      "consent: hit and script from another origin flagged",
+      t.includes("1 analytics host contacted before consent") &&
+        t.includes("localhost (Google Analytics)") &&
+        t.includes("1 third-party host not in devkit's list"),
+    );
+    check("consent: no banner found (heuristic)", t.includes("No known consent banner found"));
+    check("consent: values never shown", !t.includes("555.777") && !t.includes("e2e-hj-value"));
+    const left = await sw.evaluate(async (u) => (await chrome.cookies.getAll({ url: `${u}/` })).map((c) => c.name), base);
+    check(
+      "consent: the site's cookies were cleared before the reload",
+      !left.includes("devkit_consent_marker") && left.includes("_ga"),
+      left.join(", "),
+    );
+    await shot("inspect-consent");
+
+    await site.locator("#accept").click();
+    await site.waitForTimeout(600);
+    await panel.getByLabel("Your choice in the banner").selectOption("accept");
+    await panel.getByRole("button", { name: "Capture now" }).click();
+    await panel
+      .locator(".consent-compare")
+      .first()
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    const compare = await panel
+      .locator(".consent-compare")
+      .first()
+      .innerText()
+      .catch(() => "");
+    check(
+      "consent: comparison after accepting lists the new cookie and host",
+      compare.includes("Capture after accepting") && compare.includes("_fbp (Meta Pixel)") && compare.includes("localhost (Meta Pixel)"),
+      compare.replace(/\s+/g, " ").slice(0, 300),
+    );
+
+    await panel.evaluate(() => {
+      window.__consentCopies = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__consentCopies.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).click();
+    await panel.waitForTimeout(200);
+    const consentMd = await panel.evaluate(() => window.__consentCopies.at(-1) ?? "");
+    check(
+      "consent: Copy for agent names cookies and the comparison, never values",
+      consentMd.includes("## Consent check (GDPR / ePrivacy)") &&
+        consentMd.includes("`_ga (Google Analytics)`") &&
+        consentMd.includes("Comparison 1: after accepting") &&
+        !consentMd.includes("555.777") &&
+        !consentMd.includes("e2e-fbp-value") &&
+        !consentMd.includes("e2e-hj-value"),
+      consentMd.slice(0, 200),
+    );
+
+    await panel.getByRole("button", { name: "Read current state" }).click();
+    await panel
+      .getByRole("heading", { name: "Current state", exact: true })
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: current state is labeled as such",
+      t.includes("read without clearing anything") && t.includes("1 advertising cookie in the current state"),
+    );
+  }
+
+  // --- CrUX field data (issue #30): a fake key saved in Options, the CrUX API answered from fixtures. ---
+  // The real API is never called: context.route answers chromeuxreport.googleapis.com, and a public-looking host
+  // (CrUX skips local addresses) serves the page. Self-contained: it restores the site tab at the end.
+  {
+    const CRUX_KEY = "AIzaE2eFakeCruxKey000000000000000000000";
+    const CRUX_HOST = "https://shop.crux-fixture.dev";
+    const cruxCalls = [];
+    const bins = (good, poor, d) => [
+      { start: 0, end: good, density: d[0] },
+      { start: good, end: poor, density: d[1] },
+      { start: poor, density: d[2] },
+    ];
+    const cruxRecord = (key) => ({
+      record: {
+        key,
+        metrics: {
+          largest_contentful_paint: { histogram: bins(2500, 4000, [0.78, 0.15, 0.07]), percentiles: { p75: 2380 } },
+          interaction_to_next_paint: { histogram: bins(200, 500, [0.61, 0.27, 0.12]), percentiles: { p75: 312 } },
+          cumulative_layout_shift: {
+            histogram: [
+              { start: "0.00", end: "0.10", density: 0.9 },
+              { start: "0.10", end: "0.25", density: 0.06 },
+              { start: "0.25", density: 0.04 },
+            ],
+            percentiles: { p75: "0.05" },
+          },
+          round_trip_time: { percentiles: { p75: 145 } },
+        },
+        collectionPeriod: { firstDate: { year: 2026, month: 10, day: 19 }, lastDate: { year: 2026, month: 11, day: 15 } },
+      },
+    });
+    const cruxHistory = (key) => ({
+      record: {
+        key,
+        metrics: { largest_contentful_paint: { percentilesTimeseries: { p75s: [2900, 2600, null, 2380] } } },
+        collectionPeriods: [1, 2, 3, 4].map((d) => ({
+          firstDate: { year: 2026, month: 9, day: d },
+          lastDate: { year: 2026, month: 10, day: d },
+        })),
+      },
+    });
+    const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type,x-goog-api-key" };
+    await context.route("https://chromeuxreport.googleapis.com/**", (route) => {
+      const req = route.request();
+      if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+      const body = JSON.parse(req.postData() ?? "{}");
+      cruxCalls.push({ url: req.url(), key: req.headers()["x-goog-api-key"], body });
+      const json = (status, data) => route.fulfill({ status, contentType: "application/json", headers: cors, body: JSON.stringify(data) });
+      if (req.headers()["x-goog-api-key"] !== CRUX_KEY)
+        return json(400, { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } });
+      if (body.url?.endsWith("/empty"))
+        return json(404, { error: { code: 404, message: "chrome ux report data not found", status: "NOT_FOUND" } });
+      const key = {
+        ...(body.formFactor ? { formFactor: body.formFactor } : {}),
+        ...(body.url ? { url: body.url } : { origin: body.origin }),
+      };
+      return json(200, req.url().endsWith(":queryHistoryRecord") ? cruxHistory(key) : cruxRecord(key));
+    });
+    await context.route(`${CRUX_HOST}/**`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><html lang=en><title>CrUX fixture</title><h1>Field data fixture</h1><p>A page with real-user data.</p></html>",
+      }),
+    );
+    const cruxSection = () => panel.locator("section", { has: panel.getByRole("heading", { name: "Field data (CrUX)" }) });
+    const cruxText = () =>
+      cruxSection()
+        .innerText()
+        .catch(() => "");
+
+    await site.goto(`${CRUX_HOST}/product`);
+    await open("Inspect", "Performance");
+    await cruxSection()
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    check(
+      "crux: without a key, the Performance panel points to Options",
+      (await cruxText()).includes("add a free Chrome UX Report API key in Options") && cruxCalls.length === 0,
+    );
+
+    const cruxOptions = await context.newPage();
+    cruxOptions.on("pageerror", (e) => extErrors.push(`options pageerror: ${e.message}`));
+    await cruxOptions.goto(`chrome-extension://${id}/options.html`);
+    const keyInput = cruxOptions.getByLabel("CrUX API key");
+    const keySection = cruxOptions.locator("section", { has: keyInput });
+    await keyInput.fill("AIzaWrongKey");
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("not valid")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check("crux: Test key reports an invalid key", (await keySection.innerText()).includes("Google says the CrUX API key is not valid"));
+    await keyInput.fill(CRUX_KEY);
+    await keySection.getByRole("button", { name: "Save" }).click();
+    await keySection
+      .getByText("A key is saved.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    await keySection.getByRole("button", { name: "Test key" }).click();
+    await keySection
+      .getByText("The key works.")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    const keyText = await keySection.innerText();
+    check(
+      "crux: Options saves the key, clears the field and tests the saved key",
+      keyText.includes("The key works.") && (await keyInput.inputValue()) === "" && !keyText.includes(CRUX_KEY),
+    );
+    const storedKey = await sw.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)));
+    check("crux: the key is not stored in clear in extension storage", !storedKey.includes("AIzaE2eFakeCruxKey"));
+    await cruxOptions.close();
+
+    await panel.bringToFront();
+    await cruxSection()
+      .getByText("2.38 s")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    let ct = await cruxText();
+    const first = cruxCalls.find((c) => c.key === CRUX_KEY && c.url.endsWith(":queryRecord") && c.body.url);
+    check(
+      "crux: the section shows p75, distribution, period and history",
+      /LCP[\s\S]*2\.38 s[\s\S]*Good/.test(ct) &&
+        ct.includes("78% good") &&
+        ct.includes("Needs improvement") &&
+        ct.includes("Oct 19 – Nov 15, 2026") &&
+        ct.includes("Round trip time p75 145 ms") &&
+        (await cruxSection().locator("svg.crux-spark").count()) === 1,
+      ct.slice(0, 300),
+    );
+    await shot("inspect-performance-crux");
+    check(
+      "crux: the request names the URL and phone, the key only in a header",
+      first?.body.url === `${CRUX_HOST}/product` && first.body.formFactor === "PHONE" && cruxCalls.every((c) => !c.url.includes("key=")),
+      JSON.stringify(first?.body),
+    );
+
+    await cruxSection().getByRole("button", { name: "Desktop", exact: true }).click();
+    await panel.waitForTimeout(600);
+    check(
+      "crux: the device toggle asks for desktop",
+      cruxCalls.some((c) => c.body.formFactor === "DESKTOP"),
+    );
+
+    await panel.evaluate(() => {
+      window.__copied = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__copied.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).first().click();
+    await panel.waitForTimeout(300);
+    const cruxMd = await panel.evaluate(() => window.__copied.at(-1) ?? "");
+    check(
+      "crux: Copy for agent includes the field p75",
+      cruxMd.includes("### Field data (CrUX)") && cruxMd.includes("- LCP p75 2.38 s (good)") && !cruxMd.includes(CRUX_KEY),
+      cruxMd.slice(0, 200),
+    );
+
+    await site.goto(`${CRUX_HOST}/empty`);
+    await cruxSection()
+      .getByText("No field data for this URL")
+      .waitFor({ timeout: 8000 })
+      .catch(() => undefined);
+    ct = await cruxText();
+    check(
+      "crux: a URL without data falls back to its origin",
+      ct.includes(`No field data for this URL, showing the origin (${CRUX_HOST})`) && ct.includes("2.38 s"),
+      ct.slice(0, 200),
+    );
+
+    await context.unroute("https://chromeuxreport.googleapis.com/**");
+    await context.unroute(`${CRUX_HOST}/**`);
+    await site.goto(`${base}/`);
+  }
+  // --- end CrUX field data ---
 
   // ---- DevTools panel › GraphQL (issue #28) ----
   // Playwright cannot open Chrome DevTools, so devtools-panel.html runs as a page with a stub of

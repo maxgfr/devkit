@@ -50,7 +50,8 @@ export interface ActionDef {
   run: (ctx: ActionContext) => Promise<ActionResult>;
 }
 
-const ALL_DATA = {
+/** Every kind of site data "Fresh start" removes (the Consent check clears the same). */
+export const ALL_DATA = {
   cache: true,
   cacheStorage: true,
   cookies: true,
