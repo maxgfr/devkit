@@ -39,6 +39,7 @@
       <ul>
         <li>Your settings, request rules, environment groups and the last tool you opened, in Chrome's extension storage.</li>
         <li>Your AI provider key, encrypted with a key kept in the extension's IndexedDB. It is never written to sync storage and never sent anywhere except to the provider it belongs to.</li>
+        <li>Your Chrome UX Report API key, if you add one, encrypted the same way. It is sent only to Google's CrUX API.</li>
         <li>Console errors captured from a page, kept in that page's memory and gone when it reloads or closes.</li>
         <li>
           Steps recorded for a bug report, only after you start the recorder: kept in Chrome's session storage for that tab, gone when the tab
@@ -66,6 +67,12 @@
           <strong>Repository dependencies.</strong> On a GitHub or GitLab repository page, devkit reads its manifest files from that site with your
           session, then asks the public registries (npm, PyPI, crates.io, Packagist, RubyGems) for each package's description by its name. These
           requests carry package names only.
+        </li>
+        <li>
+          <strong>Field data (CrUX).</strong> Only when you have saved a Chrome UX Report API key in Options and open the Performance panel, devkit
+          sends the current page's URL (or its origin, when you pick it) and your key to Google's Chrome UX Report API to read real-user Web
+          Vitals. Local and private addresses are never sent. Answers stay in Chrome's session storage for a day. Google's privacy policy applies
+          to what it receives.
         </li>
         <li>
           <strong>External tools.</strong> "Open in external tools" opens a third-party site (PageSpeed Insights, Rich Results Test and others) with the
