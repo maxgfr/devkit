@@ -39,7 +39,30 @@ export interface PageContent {
   anchors: number;
 }
 
-export function collectMeta(): MetaSnapshot {
+/**
+ * Reads the page's meta data. With `root` and `pageUrl` it reads a parsed document instead (the site crawl's
+ * DOMParser output, served HTML only): links resolve against its `<base>`, and the word count reads every text
+ * node outside script, style, noscript and template, as nothing is rendered there.
+ */
+export function collectMeta(root?: Document, pageUrl?: string): MetaSnapshot {
+  const document = root ?? globalThis.document;
+  // A parsed document resolves nothing against the page: links resolve here, against its <base> or the page URL.
+  let base: string | null = null;
+  if (root && pageUrl) {
+    try {
+      base = new URL(root.querySelector("base[href]")?.getAttribute("href") ?? "", pageUrl).href;
+    } catch {
+      base = pageUrl;
+    }
+  }
+  const hrefOf = (el: HTMLLinkElement | HTMLAnchorElement | HTMLAreaElement) => {
+    if (!base) return el.href;
+    try {
+      return new URL(el.getAttribute("href") ?? "", base).href;
+    } catch {
+      return el.getAttribute("href") ?? "";
+    }
+  };
   const attrs = ["name", "property", "http-equiv", "itemprop"] as const;
   const meta = Array.from(document.querySelectorAll("meta"))
     .map((m) => {
@@ -54,7 +77,7 @@ export function collectMeta(): MetaSnapshot {
     .filter((m) => m.key);
   const links = Array.from(document.querySelectorAll<HTMLLinkElement>("link[rel]")).map((l) => ({
     rel: l.rel,
-    href: l.href,
+    href: hrefOf(l),
     rawHref: l.getAttribute("href") ?? undefined,
     hreflang: l.hreflang || undefined,
     type: l.type || undefined,
@@ -78,22 +101,31 @@ export function collectMeta(): MetaSnapshot {
   };
   walk(document.documentElement, 1);
   const dt = document.doctype;
+  const parsedText = (body: HTMLElement | null) => {
+    const parts: string[] = [];
+    if (!body) return "";
+    const walker = document.createTreeWalker(body, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let node = walker.nextNode(); node; node = walker.nextNode())
+      if (!node.parentElement?.closest("script, style, noscript, template")) parts.push(node.nodeValue ?? "");
+    return parts.join(" ");
+  };
   // biome-ignore lint/performance/useDomNodeTextContent: innerText skips hidden text, like a reader
-  const bodyText = document.body?.innerText ?? "";
+  const bodyText = root ? parsedText(document.body) : (document.body?.innerText ?? "");
   const words = (bodyText.match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu) ?? []).length;
   const anchors: { href: string; rel: string }[] = [];
   let anchorCount = 0;
   for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>("a[href], area[href]"))) {
-    if (!/^https?:/i.test(a.href)) continue;
+    const href = hrefOf(a);
+    if (!/^https?:/i.test(href)) continue;
     anchorCount++;
-    if (anchors.length < 5000) anchors.push({ href: a.href.split("#")[0]!, rel: a.getAttribute("rel") ?? "" });
+    if (anchors.length < 5000) anchors.push({ href: href.split("#")[0]!, rel: a.getAttribute("rel") ?? "" });
   }
   const images = Array.from(document.querySelectorAll("img")).map((img) => ({
     alt: img.getAttribute("alt"),
     title: img.hasAttribute("title"),
   }));
   return {
-    url: location.href,
+    url: pageUrl ?? location.href,
     title: document.title,
     lang: document.documentElement.lang,
     charset: document.characterSet,

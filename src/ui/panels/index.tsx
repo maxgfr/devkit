@@ -6,6 +6,7 @@ import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Consent } from "./consent";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
 import { Seo } from "./seo";
+import { SiteCrawl } from "./crawl";
 import { ElementPicker } from "./element";
 import { Headings } from "./headings";
 import { Mocks } from "./mocks";
@@ -13,7 +14,9 @@ import { Assets } from "./assets";
 import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { RenderedSource } from "./rendered-source";
 import { RepoDeps } from "./repo-deps";
+import { Redirects } from "./redirects";
 import { Responsiveness } from "./responsiveness";
 import { BugReport } from "./report";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -36,6 +39,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   overview: Overview,
   seo: Seo,
   headings: Headings,
+  "rendered-source": RenderedSource,
   jsonld: JsonLd,
   datalayer: DataLayer,
   consent: Consent,
@@ -47,6 +51,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  crawl: SiteCrawl,
   "repo-deps": RepoDeps,
   "agent-tools": AgentTools,
   "agent-readiness": AgentReadiness,
@@ -67,6 +72,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   rules: Rules,
   mocks: Mocks,
   envs: Envs,
+  redirects: Redirects,
   ask: Ask,
   report: BugReport,
   models: Models,

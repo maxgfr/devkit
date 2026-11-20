@@ -53,7 +53,8 @@ export function agentToolsMarkdown(snap: WebMcpSnapshot, tools: ToolAnalysis[], 
 const crawlerLine = (c: CrawlerAccess) =>
   `- ${c.agent} (${c.operator}, ${PURPOSE_TEXT[c.purpose]}): ${c.root.allowed ? "allowed" : "blocked"} on /${c.root.rule ? ` by ${code(c.root.rule)}` : ""}${c.page.allowed !== c.root.allowed ? `, ${c.page.allowed ? "allowed" : "blocked"} on this page` : ""}`;
 
-function filesLines(inputs: ReadinessInputs): string[] {
+/** One line per agent file checked (llms.txt, llms-full.txt, ai.txt, sitemap); files not checked are left out. */
+export function filesLines(inputs: ReadinessInputs): string[] {
   const out: string[] = [];
   const llms = inputs.llms;
   if (llms !== undefined)
