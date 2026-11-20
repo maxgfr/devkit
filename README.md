@@ -51,7 +51,12 @@ Chrome 116 or later.
 | Utils | JSON (format, tree, TypeScript types, paths) · **JSON page viewer**: JSON documents opened in a tab (API responses, `.json` files) as a collapsible, syntax-colored tree with item counts, clickable URLs, click a key to copy its path, filter on keys and values, Parsed / Raw, wrap, copy and download; invalid JSON shows the line and column, very large documents (10 MB+) open raw until you ask; on every JSON page once turned on in the options, or on demand with "Format this JSON page" in the palette · JWT · Base64/URL/HTML/hex/unicode · SHA hashes, HMAC, SRI · UUID v4/v7, nanoid · timestamps · regex tester · text diff · colors · cron explainer · URL & query params (strip tracking) · QR code |
 
 A **DevTools panel** ("devkit") lists the page's requests with copy as cURL / fetch / HTTPie /
-Python, response bodies as JSON trees and HAR export.
+Python, response bodies as JSON trees and HAR export. Its **GraphQL** view lists every operation
+the page sends (POST JSON, batches, automatic persisted queries by hash or id, GET, `application/graphql`
+bodies, multipart uploads) with its name, type, status, errors, duration, size and endpoint; filter by
+name and type, then read the query pretty-printed, the variables and the response as trees with the
+errors (message, path, code) on top, and copy the query, the variables or the request as cURL / fetch.
+Subscriptions over WebSocket are not part of the HAR, so they are not listed.
 
 ## AI
 
