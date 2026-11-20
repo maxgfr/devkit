@@ -1462,6 +1462,11 @@ try {
     (await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts({ ids: ["devkit-repo-deps"] })).length)) === 0,
   );
 
+  await site.goto(`${base}/`);
+  await panel.waitForTimeout(800);
+  t = await text();
+  check("repo deps: explains itself off repository pages", t.includes("Open a repository or folder page on GitHub or GitLab"));
+
   // dataLayer: GA4 events, Consent Mode, PII, JSON-LD cross-check and snapshots on a shop page.
   await site.goto(`${base}/datalayer`);
   await panel.waitForTimeout(800);
@@ -1573,9 +1578,6 @@ try {
   await panel.waitForTimeout(1200);
   check("datalayer: empty state without a dataLayer", (await text()).includes("No dataLayer found on this page."));
   await site.goto(`${base}/`);
-  await panel.waitForTimeout(800);
-  t = await text();
-  check("repo deps: explains itself off repository pages", t.includes("Open a repository or folder page on GitHub or GitLab"));
 
   // Popup palette
   const popup = await context.newPage();
