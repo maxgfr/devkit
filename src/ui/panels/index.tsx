@@ -1,5 +1,6 @@
 import { lazy, type ComponentType } from "react";
 import { A11yAudit } from "./a11y";
+import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, Seo, SiteFiles } from "./inspect";
 import { ElementPicker } from "./element";
@@ -40,6 +41,8 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  "agent-tools": AgentTools,
+  "agent-readiness": AgentReadiness,
   external: External,
   secrets: Secrets,
   exposed: Exposed,

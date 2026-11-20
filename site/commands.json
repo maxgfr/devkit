@@ -256,6 +256,22 @@
     "keywords": "robots sitemap pwa manifest crawl"
   },
   {
+    "id": "agent-tools",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Agent tools (WebMCP)",
+    "description": "WebMCP tools the page exposes to AI agents: schemas, annotations, risk, a safe tester",
+    "keywords": "webmcp modelcontext model context agent tools mcp ai agents registertool toolname declarative tester"
+  },
+  {
+    "id": "agent-readiness",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Agent readiness",
+    "description": "0–100 score for AI agents, llms.txt, ai.txt, AI crawlers in robots.txt, sitemap",
+    "keywords": "llms.txt ai.txt ai crawlers gptbot claudebot perplexitybot google-extended ccbot robots readiness score agents geo"
+  },
+  {
     "id": "external",
     "kind": "panel",
     "category": "inspect",

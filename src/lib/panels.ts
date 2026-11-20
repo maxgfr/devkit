@@ -149,6 +149,22 @@ export const PANELS: PanelDef[] = [
     keywords: "robots sitemap pwa manifest crawl",
   },
   {
+    id: "agent-tools",
+    category: "inspect",
+    title: "Agent tools (WebMCP)",
+    short: "Agent tools",
+    description: "WebMCP tools the page exposes to AI agents: schemas, annotations, risk, a safe tester",
+    keywords: "webmcp modelcontext model context agent tools mcp ai agents registertool toolname declarative tester",
+  },
+  {
+    id: "agent-readiness",
+    category: "inspect",
+    title: "Agent readiness",
+    short: "Readiness",
+    description: "0–100 score for AI agents, llms.txt, ai.txt, AI crawlers in robots.txt, sitemap",
+    keywords: "llms.txt ai.txt ai crawlers gptbot claudebot perplexitybot google-extended ccbot robots readiness score agents geo",
+  },
+  {
     id: "external",
     category: "inspect",
     title: "Open in external tools",
