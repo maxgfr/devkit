@@ -271,6 +271,32 @@ const seoPage = (base) => `<!doctype html>
 <img src="/tile.png" alt="Tile"><img src="/tile.png"><img src="/tile.png" alt="" title="Decor">
 <a href="/">Home</a> <a href="/ok">OK</a> <a href="/ok">OK again</a> <a href="https://example.com/" rel="nofollow">Elsewhere</a>
 </body></html>`;
+// Consent check: before any interaction the page sets `_ga`, loads a script and a GA-shaped hit from another local
+// origin (localhost vs 127.0.0.1) and sets Consent Mode's default to granted. "Accept" adds `_fbp` and a Meta-shaped hit.
+const consentPage = (port) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Consent fixture</title>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "granted", analytics_storage: "granted", ad_user_data: "granted", ad_personalization: "granted" });
+document.cookie = "_ga=GA1.1.555.777; path=/";
+localStorage.setItem("_hjSessionUser_42", "e2e-hj-value");
+</script>
+<script src="http://localhost:${port}/consent/tracker.js"></script>
+</head><body>
+<h1>Consent fixture</h1>
+<img alt="" src="http://localhost:${port}/g/collect?v=2&tid=G-E2ECONSENT&gcs=G111&cid=555.777&en=page_view">
+<button id="accept" type="button">Accept all</button>
+<script>
+document.getElementById("accept").addEventListener("click", () => {
+  gtag("consent", "update", { ad_storage: "granted", analytics_storage: "granted", ad_user_data: "granted", ad_personalization: "granted" });
+  document.cookie = "_fbp=fb.1.e2e-fbp-value; path=/";
+  const img = new Image();
+  img.src = "http://localhost:${port}/tr?id=42&ev=PageView";
+  document.body.append(img);
+});
+</script>
+</body></html>`;
 // Site crawl: a small site of its own on localhost:<port> (127.0.0.1 keeps its robots.txt and sitemap for the
 // other panels). robots.txt points to a sitemap index of a plain sitemap and a gzipped one (served as a file, so
 // devkit must gunzip it); the pages carry a duplicate title, a missing description, a noindex, a 404, a redirect
@@ -427,6 +453,11 @@ const server = http.createServer((req, res) => {
     return res
       .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
       .end(REPO_FILES[url.pathname.slice("/raw-files/acme/shop/main/".length)] ?? "");
+  if (url.pathname === "/consent")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(consentPage(req.socket.localPort));
+  if (url.pathname === "/consent/tracker.js") return res.writeHead(200, { "content-type": "text/javascript" }).end("window.__tracker = 1;");
+  if (url.pathname === "/g/collect" || url.pathname === "/tr")
+    return res.writeHead(200, { "content-type": "image/png" }).end(IMAGES["/tile.png"]);
   if (url.pathname === "/datalayer") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(DATALAYER_PAGE);
   if (url.pathname === "/slow.js")
     return res

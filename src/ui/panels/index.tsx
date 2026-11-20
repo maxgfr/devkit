@@ -3,6 +3,7 @@ import { A11yAudit } from "./a11y";
 import { DataLayer } from "./datalayer";
 import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
+import { Consent } from "./consent";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
 import { Seo } from "./seo";
 import { SiteCrawl } from "./crawl";
@@ -41,6 +42,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   "rendered-source": RenderedSource,
   jsonld: JsonLd,
   datalayer: DataLayer,
+  consent: Consent,
   headers: Headers,
   perf: Perf,
   responsiveness: Responsiveness,

@@ -107,6 +107,15 @@ export const PANELS: PanelDef[] = [
       "datalayer data layer gtm ga4 google analytics tag manager gtag consent mode events ecommerce purchase transaction_id pii snapshot",
   },
   {
+    id: "consent",
+    category: "inspect",
+    title: "Consent check",
+    short: "Consent",
+    description: "What the site sets and loads before you answer its cookie banner, cross-checked with Consent Mode",
+    keywords:
+      "gdpr rgpd cookie banner consent cmp tracking eprivacy consent mode cookies before consent trackers onetrust cookiebot didomi axeptio tcf",
+  },
+  {
     id: "headers",
     category: "security",
     title: "Headers & security",

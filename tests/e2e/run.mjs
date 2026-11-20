@@ -2312,6 +2312,99 @@ try {
   check("json viewer: Options turns it off", !afterOff.includes("devkit-json-viewer"), afterOff.join(", "));
   await jsonTab.close();
 
+  // Consent check (#25): what the fixture sets before any interaction, then after Accept, the report, the current state.
+  {
+    await site.goto(`${base}/consent`);
+    await panel.waitForTimeout(800);
+    // A cookie of the site set beforehand: "Check before consent" must clear it.
+    await sw.evaluate((u) => chrome.cookies.set({ url: `${u}/`, name: "devkit_consent_marker", value: "1" }), base);
+    await open("Inspect", "Consent check");
+    await panel.getByRole("button", { name: "Check before consent" }).click();
+    await panel
+      .getByRole("heading", { name: "Before consent", exact: true })
+      .waitFor({ timeout: 25_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: _ga and a Hotjar key flagged before consent",
+      t.includes("1 analytics cookie before consent") &&
+        t.includes("_ga (Google Analytics)") &&
+        t.includes("1 tracking storage key before consent") &&
+        t.includes("_hjSessionUser_42"),
+      t.match(/Before consent[^\n]*\n[^\n]*/)?.[0],
+    );
+    check(
+      "consent: Consent Mode default granted flagged",
+      t.includes("Consent Mode default grants ad_storage, analytics_storage, ad_user_data, ad_personalization"),
+    );
+    check(
+      "consent: hit and script from another origin flagged",
+      t.includes("1 analytics host contacted before consent") &&
+        t.includes("localhost (Google Analytics)") &&
+        t.includes("1 third-party host not in devkit's list"),
+    );
+    check("consent: no banner found (heuristic)", t.includes("No known consent banner found"));
+    check("consent: values never shown", !t.includes("555.777") && !t.includes("e2e-hj-value"));
+    const left = await sw.evaluate(async (u) => (await chrome.cookies.getAll({ url: `${u}/` })).map((c) => c.name), base);
+    check(
+      "consent: the site's cookies were cleared before the reload",
+      !left.includes("devkit_consent_marker") && left.includes("_ga"),
+      left.join(", "),
+    );
+    await shot("inspect-consent");
+
+    await site.locator("#accept").click();
+    await site.waitForTimeout(600);
+    await panel.getByLabel("Your choice in the banner").selectOption("accept");
+    await panel.getByRole("button", { name: "Capture now" }).click();
+    await panel
+      .locator(".consent-compare")
+      .first()
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    const compare = await panel
+      .locator(".consent-compare")
+      .first()
+      .innerText()
+      .catch(() => "");
+    check(
+      "consent: comparison after accepting lists the new cookie and host",
+      compare.includes("Capture after accepting") && compare.includes("_fbp (Meta Pixel)") && compare.includes("localhost (Meta Pixel)"),
+      compare.replace(/\s+/g, " ").slice(0, 300),
+    );
+
+    await panel.evaluate(() => {
+      window.__consentCopies = [];
+      navigator.clipboard.writeText = async (s) => {
+        window.__consentCopies.push(s);
+      };
+    });
+    await panel.getByRole("button", { name: "Copy for agent" }).click();
+    await panel.waitForTimeout(200);
+    const consentMd = await panel.evaluate(() => window.__consentCopies.at(-1) ?? "");
+    check(
+      "consent: Copy for agent names cookies and the comparison, never values",
+      consentMd.includes("## Consent check (GDPR / ePrivacy)") &&
+        consentMd.includes("`_ga (Google Analytics)`") &&
+        consentMd.includes("Comparison 1: after accepting") &&
+        !consentMd.includes("555.777") &&
+        !consentMd.includes("e2e-fbp-value") &&
+        !consentMd.includes("e2e-hj-value"),
+      consentMd.slice(0, 200),
+    );
+
+    await panel.getByRole("button", { name: "Read current state" }).click();
+    await panel
+      .getByRole("heading", { name: "Current state", exact: true })
+      .waitFor({ timeout: 10_000 })
+      .catch(() => undefined);
+    t = await text();
+    check(
+      "consent: current state is labeled as such",
+      t.includes("read without clearing anything") && t.includes("1 advertising cookie in the current state"),
+    );
+  }
+
   // --- CrUX field data (issue #30): a fake key saved in Options, the CrUX API answered from fixtures. ---
   // The real API is never called: context.route answers chromeuxreport.googleapis.com, and a public-looking host
   // (CrUX skips local addresses) serves the page. Self-contained: it restores the site tab at the end.

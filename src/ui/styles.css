@@ -4234,6 +4234,57 @@ html:has(.print-page) {
     --accent: #0e7490;
   }
 }
+
+/* Consent check: counters, tracker tables, before / after comparisons */
+.consent-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.consent-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.consent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.consent-table th,
+.consent-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.consent-table th {
+  background: var(--bg-2);
+  color: var(--fg-2);
+  font-weight: 550;
+}
+.consent-table tr:last-child td {
+  border-bottom: 0;
+}
+.consent-table td .pill {
+  margin-left: 4px;
+}
+.consent-findings .detail .mono {
+  margin-top: 2px;
+}
+.consent-compare {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.consent-compare h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.consent-diff {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
 /* Redirect path: numbered hops joined by a rail, status pill, URL, Location and headers. */
 .redir-hops {
   list-style: none;
