@@ -243,11 +243,44 @@ const AGENT_PAGE = `<!doctype html>
 <main><h1>Store hours</h1><p>Open every day.</p></main>
 </body></html>`;
 
+// On-page SEO: complete Open Graph (og:description written with name=, og:image 800×800 declared 1200×630),
+// summary_large_image, hreflang with a self-reference, a relative URL, de_AT and en-UK and no x-default,
+// images without alt and title, internal, external and nofollow links.
+const seoPage = (base) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Acme Mug guide – how to pick the right mug for your coffee</title>
+<meta name="description" content="How to pick a mug: size, material and handle. Everything about the Acme mug, the best mug there is for coffee, tea and hot chocolate in the morning.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="${base}/seo">
+<meta property="og:title" content="Acme Mug guide">
+<meta name="og:description" content="How to pick the right mug.">
+<meta property="og:image" content="${base}/big.png?og=1">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:url" content="${base}/seo">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Acme">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="alternate" hreflang="en" href="${base}/seo">
+<link rel="alternate" hreflang="fr" href="/seo/fr">
+<link rel="alternate" hreflang="de_AT" href="${base}/seo/at">
+<link rel="alternate" hreflang="en-UK" href="${base}/seo/uk">
+</head><body>
+<h1>Acme Mug guide</h1><p>Pick a mug you like.</p>
+<h2>First steps</h2><p>Look at the size.</p>
+<h2>Second thoughts</h2><p>Then the handle.</p>
+<img src="/tile.png" alt="Tile"><img src="/tile.png"><img src="/tile.png" alt="" title="Decor">
+<a href="/">Home</a> <a href="/ok">OK</a> <a href="/ok">OK again</a> <a href="https://example.com/" rel="nofollow">Elsewhere</a>
+</body></html>`;
+let ogImageHits = 0;
+
 const server = http.createServer((req, res) => {
   const base = `http://${req.headers.host}`;
   const url = new URL(req.url, base);
   const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*" };
   if (req.method === "OPTIONS") return res.writeHead(204, cors).end();
+  if (url.pathname === "/seo") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(seoPage(base));
+  if (url.pathname === "/og-hits") return res.writeHead(200, { "content-type": "text/plain" }).end(String(ogImageHits));
+  if (url.pathname === "/big.png" && url.searchParams.get("og") === "1") ogImageHits++;
   if (url.pathname === "/") {
     res.writeHead(200, {
       "content-type": "text/html; charset=utf-8",
