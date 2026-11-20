@@ -290,8 +290,12 @@ function jsonSnippet(raw: string, error: string | undefined): string {
   return fence(out.join("\n"));
 }
 
-function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[]): Item {
-  const where = `Block #${block.index + 1}${types.length ? ` (${types.join(", ")})` : ""}, ${code(f.path)}`;
+function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[], paths: string[] = [f.path]): Item {
+  const more =
+    paths.length > 1
+      ? ` and ${plural(paths.length - 1, "other node")} (×${paths.length}: ${paths.slice(1, 6).map(code).join(", ")}${paths.length > 6 ? ", …" : ""})`
+      : "";
+  const where = `Block #${block.index + 1}${types.length ? ` (${types.join(", ")})` : ""}, ${code(f.path)}${more}`;
   const details: string[] = [];
   let snippet: string | undefined;
   if (!block.ok && block.error && block.error !== "Empty script") {
@@ -303,6 +307,9 @@ function jsonLdItem(block: JsonLdBlock, f: Finding, types: string[]): Item {
   else if (/missing required/.test(f.message))
     details.push("Fix: add the property to this node with the value the page shows; without it the node is not eligible for rich results.");
   else if (/missing recommended/.test(f.message)) details.push("Fix: add it if the page shows that information.");
+  else if (f.rule === "vocab.domain")
+    details.push("Fix: move the property to a node of a type that has it, or change the node's @type; search engines may ignore it here.");
+  else if (f.rule === "vocab.range") details.push("Fix: give it a node of one of the expected types (or plain text where Text is listed).");
   return { text: `${where}: ${f.message}`, details, block: snippet };
 }
 
@@ -316,10 +323,18 @@ export function jsonLdMarkdown(report: JsonLdReport, ctx: AgentCtx): string {
       ...b.findings.map((f) => ({ f, types: b.nodes[0]?.types ?? [] })),
       ...b.nodes.flatMap((n) => n.findings.map((f) => ({ f, types: n.types }))),
     ];
+    // Identical findings on several nodes of the block (four offers with the same bad price) are one item.
+    const groups = new Map<string, { f: Finding; types: string[]; paths: string[] }>();
     for (const { f, types } of entries) {
-      if (f.severity === "error") errors.push(jsonLdItem(b, f, types));
-      else if (f.severity === "warn") warnings.push(jsonLdItem(b, f, types));
-      else notes.set(f.message, [...(notes.get(f.message) ?? []), f.path]);
+      const key = `${f.severity}\u0000${f.rule}\u0000${f.message}`;
+      const g = groups.get(key);
+      if (g) g.paths.push(f.path);
+      else groups.set(key, { f, types, paths: [f.path] });
+    }
+    for (const { f, types, paths } of groups.values()) {
+      if (f.severity === "error") errors.push(jsonLdItem(b, f, types, paths));
+      else if (f.severity === "warn") warnings.push(jsonLdItem(b, f, types, paths));
+      else notes.set(f.message, [...(notes.get(f.message) ?? []), ...paths]);
     }
   }
   const { error, warn } = report.counts;
@@ -337,6 +352,9 @@ export function jsonLdMarkdown(report: JsonLdReport, ctx: AgentCtx): string {
       ? [
           report.types.length ? `Types: ${report.types.map((t) => `${t.type} ×${t.count}`).join(", ")}` : "",
           'Blocks are numbered in document order of the page\'s `<script type="application/ld+json">` tags; a path starts at its block (`#2.offers.price` is `offers.price` in block #2).',
+          report.vocab
+            ? `Checked against Google's rich results rules and, locally, the Schema.org ${report.vocab.version} vocabulary (${report.vocab.date}): unknown types and properties, properties on the wrong type, values of the wrong type, enumeration values, superseded terms.`
+            : "Checked against Google's rich results rules (the Schema.org vocabulary checks did not run).",
         ]
       : [],
     sections: [

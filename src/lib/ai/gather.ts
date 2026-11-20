@@ -8,6 +8,7 @@ import { REPORT_HANDOFF_KEY, type ReportHandoff } from "../bug-report";
 import { runInTab } from "../inject";
 import { ELEMENT_HANDOFF_KEY, type ElementHandoff } from "../element";
 import { analyzeJsonLd } from "../jsonld";
+import { loadSchemaVocab } from "../schema-vocab";
 import { collectMeta, collectPerf, collectSelection, collectTechSignals, readBodyText } from "../page/collect";
 import { readErrors } from "../page/errors";
 import { secretsMarkdown } from "../agent/security";
@@ -61,7 +62,8 @@ export async function gatherContext(
     ctx.meta = meta;
     ctx.title ||= meta.title;
     if (want("seo")) ctx.seo = seoReport(meta);
-    if (want("jsonld")) ctx.jsonld = analyzeJsonLd(meta.jsonLd);
+    if (want("jsonld"))
+      ctx.jsonld = analyzeJsonLd(meta.jsonLd, { vocab: await safe(() => loadSchemaVocab(browser.runtime.getURL("/schema-vocab.json"))) });
   }
   if (headers) {
     ctx.headers = headers.headers;
