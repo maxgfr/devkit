@@ -467,6 +467,69 @@ try {
   check("cookie editor lists the cookie", t.includes("session") && t.includes("abc123"));
   check("cookie audit: session cookie readable by JS", t.includes("readable by JS") && t.includes("1 risky"));
 
+  // cookies.txt export: an HttpOnly cookie the page cannot set, then Copy in each format.
+  // Chrome caps expiry at 400 days: stay well under it.
+  const authExpiry = Math.floor(Date.now() / 1000) + 86400 * 30;
+  await sw.evaluate(
+    ([u, exp]) => chrome.cookies.set({ url: `${u}/`, name: "auth", value: "t0k3n", httpOnly: true, expirationDate: exp + 0.5 }),
+    [base, authExpiry],
+  );
+  await open("Cache", "Local & session storage");
+  await open("Cache", "Cookies");
+  await panel.evaluate(() => {
+    window.__cookieCopies = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__cookieCopies.push(s);
+    };
+  });
+  const exportBar = panel.locator(".cookie-export");
+  const copyCookies = async (format) => {
+    await exportBar.getByLabel("Export format").selectOption(format);
+    await exportBar.getByRole("button", { name: "Copy", exact: true }).click();
+    await panel.waitForTimeout(200);
+    return panel.evaluate(() => window.__cookieCopies.at(-1) ?? "");
+  };
+  const cookieLines = (text) => text.split("\n").filter((l) => l && !l.startsWith("# "));
+  const txt = await copyCookies("netscape");
+  const txtLines = cookieLines(txt);
+  check(
+    "cookies.txt: Netscape header, tab-separated lines, session expiry 0, #HttpOnly_ prefix",
+    txt.startsWith("# Netscape HTTP Cookie File\n") &&
+      txtLines.includes("127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tabc123") &&
+      txtLines.includes(`#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t${authExpiry}\tauth\tt0k3n`) &&
+      txt.endsWith("\n"),
+    JSON.stringify(txtLines),
+  );
+  const header = await copyCookies("header");
+  check("cookies: Cookie header string", /^(session=abc123; auth=t0k3n|auth=t0k3n; session=abc123)$/.test(header), header);
+  const json = await copyCookies("json");
+  check(
+    "cookies: JSON export of Chrome's cookie fields",
+    JSON.parse(json).some((c) => c.name === "auth" && c.httpOnly === true),
+  );
+  check(
+    "cookies: export format remembered",
+    (await sw.evaluate(() => chrome.storage.local.get("cookies.exportFormat")))["cookies.exportFormat"] === "json",
+  );
+  await exportBar.getByLabel("Export format").selectOption("netscape");
+  await panel.getByLabel("Filter cookies").fill("auth");
+  await panel.getByRole("checkbox", { name: "Table" }).check();
+  await panel.getByRole("checkbox", { name: "Nowrap" }).check();
+  const tableText = await panel.locator(".cookie-table").innerText();
+  check(
+    "cookies: Netscape table view, filtered, with nowrap",
+    tableText.includes("Include Subdomains") &&
+      tableText.includes(String(authExpiry)) &&
+      !tableText.includes("abc123") &&
+      (await panel.locator(".cookie-table-wrap.nowrap").count()) === 1,
+    tableText.replace(/\s+/g, " "),
+  );
+  await shot("cache-cookies-table");
+  check("cookies: export follows the filter", cookieLines(await copyCookies("netscape")).length === 1);
+  await panel.getByRole("checkbox", { name: "Table" }).uncheck();
+  await panel.getByLabel("Filter cookies").fill("");
+  await sw.evaluate((u) => chrome.cookies.remove({ url: `${u}/`, name: "auth" }), base);
+
   await site.evaluate(async () => {
     await new Promise((done, fail) => {
       const req = indexedDB.open("devkit-e2e-db", 2);
@@ -1240,6 +1303,9 @@ try {
   await popup.getByLabel("Search commands").fill("measure");
   const measureFirst = await popup.getByRole("option").first().innerText();
   check("palette finds the spacing ruler", /Measure distances/.test(measureFirst), measureFirst.split("\n")[0]);
+  await popup.getByLabel("Search commands").fill("yt-dlp");
+  const cookiesTxtFirst = await popup.getByRole("option").first().innerText();
+  check("palette finds Copy cookies.txt", /Copy cookies\.txt/.test(cookiesTxtFirst), cookiesTxtFirst.split("\n")[0]);
   await popup.getByLabel("Search commands").fill("hn");
   const hnItems = await popup.getByRole("option").allInnerTexts();
   check(

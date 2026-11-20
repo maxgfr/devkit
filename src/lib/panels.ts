@@ -41,7 +41,8 @@ export const PANELS: PanelDef[] = [
     category: "cache",
     title: "Cookies",
     description: "View, edit, export and import cookies, and audit their flags",
-    keywords: "cookie editor session audit flags httponly secure samesite",
+    keywords:
+      "cookie editor session audit flags httponly secure samesite cookies.txt netscape curl wget yt-dlp export header partitioned chips",
   },
   {
     id: "storage",
