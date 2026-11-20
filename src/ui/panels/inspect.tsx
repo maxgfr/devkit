@@ -120,6 +120,7 @@ import { type AsyncState, useAsync, useStored } from "../hooks";
 import { useNav } from "../nav";
 import { AccessGate, useInPage, usePage } from "../page";
 import { useA11yReport } from "./a11y";
+import { RedirectHint } from "./redirects";
 
 export function useHeaders() {
   const page = usePage();
@@ -837,6 +838,7 @@ export function Headers() {
   return (
     <AccessGate>
       <ErrorText error={headers.error} />
+      {headers.data?.redirected ? <RedirectHint url={headers.data.url} /> : null}
       {sec && headers.data ? (
         <>
           <Section

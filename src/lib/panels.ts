@@ -321,6 +321,14 @@ export const PANELS: PanelDef[] = [
     description: "Jump between local, staging and prod; ribbon on prod",
     keywords: "environment staging production localhost switch",
   },
+  {
+    id: "redirects",
+    category: "network",
+    title: "Redirect path",
+    short: "Redirects",
+    description: "Every hop of a navigation: 301/302/307/308, meta refresh and JavaScript redirects, with status, Location and headers",
+    keywords: "redirect redirects 301 302 303 307 308 meta refresh javascript redirect chain hops location loop trace hsts redirect path",
+  },
 
   {
     id: "ask",

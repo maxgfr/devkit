@@ -16,6 +16,8 @@ const OPTIONAL = [
   ["browsingData", "Clear cache and site data"],
   ["cookies", "Cookie editor"],
   ["contentSettings", "Block JavaScript per site"],
+  ["webRequest", "Redirect path: watch navigations hop by hop (read-only)"],
+  ["webNavigation", "Redirect path: tell client redirects (meta refresh, JavaScript) apart"],
 ] as const;
 
 function Permissions() {
