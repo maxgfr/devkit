@@ -81,6 +81,15 @@ export const PANELS: PanelDef[] = [
       "headings h1 h2 h3 h4 h5 h6 hn outline hierarchy structure toc table of contents aria-level role heading sections rewrite titles landmarks aria banner navigation main region contentinfo complementary",
   },
   {
+    id: "rendered-source",
+    category: "inspect",
+    title: "Served vs rendered",
+    short: "Rendered",
+    description: "The HTML the server sends next to the DOM after JavaScript: what crawlers that do not render miss, and a source diff",
+    keywords:
+      "view source rendered raw html view rendered source javascript seo ssr csr client-side rendering hydration diff crawler googlebot dom",
+  },
+  {
     id: "jsonld",
     category: "inspect",
     title: "Structured data (JSON-LD)",
@@ -110,7 +119,7 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "Performance",
     description: "Web Vitals, navigation timeline, resource waterfall",
-    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources",
+    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources crux field data real users chrome ux report",
   },
   {
     id: "responsiveness",
@@ -159,6 +168,14 @@ export const PANELS: PanelDef[] = [
     short: "Site files",
     description: "Crawl rules, sitemap URLs, PWA manifest",
     keywords: "robots sitemap pwa manifest crawl",
+  },
+  {
+    id: "crawl",
+    category: "inspect",
+    title: "Site crawl",
+    short: "Crawl",
+    description: "SEO and JSON-LD checks over many pages from the sitemap: duplicates, missing tags, errors, noindex",
+    keywords: "crawl sitemap bulk multiple pages seo audit jsonld audit spider site audit duplicate titles screaming frog",
   },
   {
     id: "repo-deps",

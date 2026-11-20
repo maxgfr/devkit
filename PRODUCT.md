@@ -28,7 +28,7 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 
 - Tabs: Cache, Inspect, Security, Page, Network, AI, Utils, plus a DevTools panel. Full list in README.md.
 - Accessibility audit: axe-core (MPL-2.0) bundled and injected on demand in the isolated world, never fetched remotely; the Overview audits pages of up to 3,000 elements on its own.
-- Install-time permissions: activeTab, scripting, storage, sidePanel, contextMenus, declarativeNetRequest, debugger (the last two cannot be optional in Chrome). browsingData, cookies, contentSettings, webRequest, webNavigation and site access are optional and asked on first use.
+- Install-time permissions: activeTab, scripting, storage, sidePanel, contextMenus, declarativeNetRequest, debugger (the last two cannot be optional in Chrome). browsingData, cookies, contentSettings and site access are optional and asked on first use.
 - AI cost is the user's own provider bill; devkit shows token counts and a cost estimate from llm-models prices.
 - Open decisions: license. The repository is public on GitHub, with the site on GitHub Pages.
 
@@ -41,7 +41,7 @@ Chrome 116+, side panel next to the page, DevTools open on the side, localhost /
 ## Evidence on Hand
 
 - Real screenshots of the extension on Wikipedia and on a local test page (JSON-LD analyzer, headers grade, AI answer, popup palette, options).
-- Verified runs: 632 unit tests, 252 end-to-end checks in Chromium, a real Anthropic analysis of Wikipedia's JSON-LD (≈4k tokens in, 4.5k out, $0.053).
+- Verified runs: 627 unit tests, 248 end-to-end checks in Chromium, a real Anthropic analysis of Wikipedia's JSON-LD (≈4k tokens in, 4.5k out, $0.053).
 - No users, testimonials, download counts or store ratings exist: never invent them.
 
 ## Product Principles

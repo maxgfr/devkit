@@ -5,6 +5,7 @@ import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
 import { Seo } from "./seo";
+import { SiteCrawl } from "./crawl";
 import { ElementPicker } from "./element";
 import { Headings } from "./headings";
 import { Mocks } from "./mocks";
@@ -12,6 +13,7 @@ import { Assets } from "./assets";
 import { Measure } from "./measure";
 import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
+import { RenderedSource } from "./rendered-source";
 import { RepoDeps } from "./repo-deps";
 import { Redirects } from "./redirects";
 import { Responsiveness } from "./responsiveness";
@@ -36,6 +38,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   overview: Overview,
   seo: Seo,
   headings: Headings,
+  "rendered-source": RenderedSource,
   jsonld: JsonLd,
   datalayer: DataLayer,
   headers: Headers,
@@ -46,6 +49,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   fonts: Fonts,
   a11y: A11yAudit,
   "site-files": SiteFiles,
+  crawl: SiteCrawl,
   "repo-deps": RepoDeps,
   "agent-tools": AgentTools,
   "agent-readiness": AgentReadiness,
