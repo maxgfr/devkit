@@ -149,6 +149,15 @@ export const PANELS: PanelDef[] = [
     keywords: "robots sitemap pwa manifest crawl",
   },
   {
+    id: "repo-deps",
+    category: "inspect",
+    title: "Repo dependencies",
+    short: "Deps",
+    description: "Packages a GitHub or GitLab folder declares, with descriptions and registry links",
+    keywords:
+      "npmhub dependencies package.json npm pypi requirements pyproject poetry cargo crates go.mod composer packagist gemfile rubygems github gitlab repository",
+  },
+  {
     id: "external",
     category: "inspect",
     title: "Open in external tools",
