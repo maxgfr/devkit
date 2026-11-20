@@ -1,6 +1,8 @@
 import { browser } from "wxt/browser";
 import { quickReport } from "./bug-report-gather";
 import { runInTab } from "./inject";
+import { JSON_VIEWER_FILE, JSON_VIEWER_HOST_ID, jsonViewerMessage } from "./json-viewer";
+import { forceJsonViewer, jsonViewerState } from "./page/json-viewer";
 import { PENDING_ROUTE_KEY } from "./panels";
 import { clearWebStorage, toggleCss, toggleDesignMode, toggleOutline, unregisterServiceWorkers } from "./page/toggles";
 import { ALL_SITES, type PermissionNeed } from "./permissions";
@@ -268,6 +270,21 @@ export const ACTIONS: ActionDef[] = [
       browser.sidePanel.open({ windowId: tab.windowId }).catch(() => undefined);
       await browser.storage.session.set({ [PENDING_ROUTE_KEY]: { panel: "measure", params: { start: "1", at: String(Date.now()) } } });
       return { message: "Hover the page to measure (Esc exits)." };
+    },
+  },
+  {
+    id: "format-json",
+    title: "Format this JSON page",
+    description: "Collapsible tree, filter, copy paths and download for the JSON document in this tab",
+    category: "utils",
+    keywords: "json formatter pretty viewer beautify api response tree",
+    needsPage: true,
+    // No `scripts`: the palette's activeTab grant is enough, no site access is asked.
+    run: async ({ tabId }) => {
+      await runInTab(tabId, forceJsonViewer);
+      await browser.scripting.executeScript({ target: { tabId }, files: [`/${JSON_VIEWER_FILE}` as const] });
+      const { state, contentType } = await runInTab(tabId, jsonViewerState, [JSON_VIEWER_HOST_ID]);
+      return { message: jsonViewerMessage(state, contentType) };
     },
   },
   {
