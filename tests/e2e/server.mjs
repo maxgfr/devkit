@@ -273,6 +273,25 @@ const seoPage = (base) => `<!doctype html>
 </body></html>`;
 let ogImageHits = 0;
 
+// Overview and AI context: landmarks (two unnamed navigation landmarks), a dataLayer with a Consent Mode v1 default
+// and an e-mail address, and an Organization node. The last AI request's context is kept for /ai-last-context.
+const OVERVIEW_CONTEXT_PAGE = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Acme overview context</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Acme","url":"https://acme.test/"}</script>
+<script>
+window.dataLayer = window.dataLayer || [];
+function gtag() { dataLayer.push(arguments); }
+gtag("consent", "default", { ad_storage: "denied", analytics_storage: "denied" });
+gtag("js", new Date());
+gtag("config", "G-OVR1234");
+dataLayer.push({ event: "sign_up", user: { email: "sam.smith@example.com" } });
+</script></head><body>
+<header><nav><a href="/">Home</a></nav></header>
+<main><h1>Overview context</h1><p>Landmarks and a dataLayer.</p><nav><a href="#more">More links</a></nav></main>
+<footer><p>Footer</p></footer>
+</body></html>`;
+let lastAiContext = "";
+
 // Served vs rendered: JavaScript changes the title and adds a canonical, a JSON-LD block, an og:image and links.
 const RENDERED_SOURCE_PAGE = `<!doctype html>
 <html lang="en"><head>
@@ -309,6 +328,9 @@ const server = http.createServer((req, res) => {
   if (req.method === "OPTIONS") return res.writeHead(204, cors).end();
   if (url.pathname === "/seo") return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(seoPage(base));
   if (url.pathname === "/og-hits") return res.writeHead(200, { "content-type": "text/plain" }).end(String(ogImageHits));
+  if (url.pathname === "/overview-context")
+    return res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(OVERVIEW_CONTEXT_PAGE);
+  if (url.pathname === "/ai-last-context") return res.writeHead(200, { "content-type": "text/plain; charset=utf-8" }).end(lastAiContext);
   if (url.pathname === "/big.png" && url.searchParams.get("og") === "1") ogImageHits++;
   if (url.pathname === "/") {
     res.writeHead(200, {
@@ -436,6 +458,7 @@ const server = http.createServer((req, res) => {
       const json = JSON.parse(body);
       const user = json.messages.filter((m) => m.role === "user").at(-1);
       const content = typeof user.content === "string" ? user.content : user.content.map((p) => p.text ?? "").join("");
+      lastAiContext = content;
       const title = /Title: (.*)/.exec(content)?.[1] ?? "?";
       const hasText = content.includes("best mug");
       const element = /## UI element: `<(\w+)>`/.exec(content)?.[1] ?? "none";
