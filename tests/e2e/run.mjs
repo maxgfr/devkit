@@ -1906,7 +1906,7 @@ try {
     await pal.goto(`chrome-extension://${id}/popup.html?tab=${tab}`);
     await pal.getByLabel("Search commands").fill("json formatter");
     const items = await pal.getByRole("option").allInnerTexts();
-    await pal.getByRole("option").filter({ hasText: "Format this JSON page" }).first().click();
+    await pal.getByRole("option").filter({ hasText: "Format this data page" }).first().click();
     const toastText = await pal
       .locator(".toast")
       .first()
@@ -1922,8 +1922,8 @@ try {
   );
   let fmt = await runFormat(await tabOf(`${base}/api/posts/1`));
   check(
-    "palette finds Format this JSON page",
-    fmt.items.some((r) => r.startsWith("Format this JSON page")),
+    "palette finds Format this data page",
+    fmt.items.some((r) => r.startsWith("Format this data page")),
     fmt.items.map((r) => r.split("\n")[0]).join(" | "),
   );
   check("json viewer: the palette action formats the tab", fmt.toast === "JSON formatted.", fmt.toast);
@@ -1964,7 +1964,7 @@ try {
   fmt = await runFormat(await tabOf(`${base}/`));
   check(
     "json viewer: leaves HTML pages alone",
-    /not a JSON document \(text\/html\)/.test(fmt.toast) && (await viewer(jsonTab).count()) === 0,
+    /not a data document \(text\/html\)/.test(fmt.toast) && (await viewer(jsonTab).count()) === 0,
     fmt.toast,
   );
 
@@ -1980,13 +1980,13 @@ try {
   );
 
   // JSON page viewer, automatic: the Options toggle registers the content script.
-  const jsonSection = options.locator("section", { hasText: "Format JSON pages" }).last();
+  const jsonSection = options.locator("section", { hasText: "Format data pages" }).last();
   await jsonSection.getByRole("button", { name: "Turn on" }).click();
   await options.waitForTimeout(400);
   const registered = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
   check(
-    "json viewer: Options turns on Format JSON pages",
-    registered.includes("devkit-json-viewer") && (await jsonSection.innerText()).includes("Format JSON pages: On"),
+    "json viewer: Options turns on Format data pages",
+    registered.includes("devkit-json-viewer") && (await jsonSection.innerText()).includes("Format data pages (JSON, XML, CSV, YAML): On"),
     registered.join(", "),
   );
   await jsonTab.goto(`${base}/api/posts/1`);
@@ -2011,6 +2011,10 @@ try {
   );
   await jsonTab.goto(`${base}/`);
   check("json viewer: HTML pages are left alone", (await viewer(jsonTab).count()) === 0);
+
+  // ---- Data page viewer: XML, RSS, CSV, YAML and JSON Lines (issue #27), with Options › Data page viewer on ----
+  await checkDataFormats(jsonTab, viewer, runFormat, tabOf);
+  // ---- end of the data page viewer block ----
   await jsonSection.getByRole("button", { name: "Turn off" }).click();
   await options.waitForTimeout(400);
   const afterOff = await sw.evaluate(async () => (await chrome.scripting.getRegisteredContentScripts()).map((s) => s.id));
@@ -2018,6 +2022,127 @@ try {
   await jsonTab.close();
 
   check("no errors in extension pages", extErrors.length === 0, extErrors.slice(0, 5).join(" | "));
+
+  /**
+   * The data page viewer on each format, while the Options toggle is on (the gate script asks the
+   * background to inject the viewer), plus the palette action on XML served as text/plain.
+   */
+  async function checkDataFormats(page, viewer, runFormat, tabOf) {
+    const v = viewer(page);
+    const open = async (path, ready) => {
+      await page.goto(`${base}${path}`);
+      await v
+        .locator(ready)
+        .first()
+        .waitFor({ timeout: 5000 })
+        .catch(() => undefined);
+    };
+    const state = async () => ({
+      state: await v.getAttribute("data-state").catch(() => null),
+      format: await v.getAttribute("data-format").catch(() => null),
+    });
+
+    await open("/data/feed.xml", ".feed");
+    const feed = await v
+      .locator(".feed")
+      .innerText()
+      .catch(() => "");
+    check(
+      "data viewer: RSS (shown as text by Chrome) opens with a feed summary and the element tree",
+      /RSS feed · 2 items/.test(feed) &&
+        feed.includes("Acme blog") &&
+        feed.includes("Second post") &&
+        (await v.locator(".node[data-path='/rss/channel/item[1]/title']").innerText()) === "<title>First post</title>",
+      JSON.stringify(await state()),
+    );
+    if (shots) await page.screenshot({ path: join(shots, "data-viewer-rss.png") });
+
+    await open("/data/catalog.xml", ".node[data-path='/catalog']");
+    const product = await v
+      .locator(".node[data-path='/catalog/product[1]'] > .line .tag")
+      .first()
+      .innerText()
+      .catch(() => "");
+    check(
+      "data viewer: XML from Chrome's XML viewer shows attributes, CDATA and comments",
+      (await state()).format === "xml" &&
+        product.startsWith('<product id="p1" href=') &&
+        (await v.locator(".node[data-path='/catalog/product[1]/notes']").innerText()) === "<notes><![CDATA[Holds <350 ml>]]></notes>" &&
+        (await v.locator(".x-comment").first().innerText()) === "<!-- product catalog -->" &&
+        (await page.locator("#webkit-xml-viewer-source-xml").isHidden()),
+      product,
+    );
+    await v.getByLabel("Filter tags, attributes and text").fill("cup");
+    await page.waitForTimeout(400);
+    check(
+      "data viewer: XML filter keeps the matches and their parents",
+      (await v.locator(".node.hit[data-path='/catalog/product[2]/name']").count()) === 1 &&
+        (await v.locator(".node[data-path='/catalog/product[1]']").count()) === 0,
+    );
+
+    await open("/data/broken.xml", ".banner.error");
+    const xmlError = await v
+      .locator(".banner.error")
+      .innerText()
+      .catch(() => "");
+    check("data viewer: invalid XML shows where it breaks", /^Invalid XML at line 2, column \d+/.test(xmlError), xmlError);
+
+    await page.goto(`${base}/data/styled.xml`);
+    await page.waitForTimeout(600);
+    check("data viewer: XML with an xml-stylesheet is left as styled", (await v.count()) === 0);
+
+    await open("/data/people.csv", "table.grid tbody tr");
+    const headers = await v.locator("table.grid thead th").allInnerTexts();
+    const firstCells = async () => (await v.locator("table.grid tbody tr td:first-of-type").allInnerTexts()).map((t) => t.trim());
+    check(
+      "data viewer: CSV opens as a table with a header and quoted fields",
+      headers.map((h) => h.trim()).join("|") === "#|name|score|city" &&
+        (await v.locator("table.grid tbody tr").count()) === 3 &&
+        (await v.locator("table.grid tbody tr").nth(1).innerText()).includes("Paris, France"),
+      headers.join("|"),
+    );
+    await v.locator("thead .sort", { hasText: "score" }).click();
+    const sorted = await firstCells();
+    await v.getByLabel("Filter rows").fill("london");
+    await page.waitForTimeout(400);
+    check(
+      "data viewer: CSV sorts by column and filters rows",
+      sorted.join(",") === "alan,Ada,Grace" && (await v.locator("table.grid tbody tr").count()) === 1,
+      sorted.join(","),
+    );
+    if (shots) await page.screenshot({ path: join(shots, "data-viewer-csv.png") });
+
+    await open("/data/config.yaml", ".node[data-path='$.build.target']");
+    check(
+      "data viewer: YAML opens as a tree",
+      (await state()).format === "yaml" &&
+        (await v.locator(".node[data-path='$.features'] > .line .count").innerText()) === "[2]" &&
+        (await v.locator(".node[data-path='$.build.target'] .s").innerText()) === '"chrome\\n"' &&
+        (await v.locator(".node[data-path='$.version'] .n").innerText()) === "1.2",
+    );
+
+    await open("/data/events.jsonl", ".node[data-path='$[2]']");
+    check(
+      "data viewer: JSON Lines shows one tree per line and flags the invalid one",
+      (await v.locator(".node[data-path='$[0]'] > .line .key").innerText()) === "line 1" &&
+        (await v.locator(".node.bad[data-path='$[1]'] .err").count()) === 1 &&
+        (await v.locator(".banner.error").innerText()).startsWith("Line 2 is not valid JSON"),
+    );
+
+    await page.goto(`${base}/data/note`);
+    await page.waitForTimeout(500);
+    const untouched = (await v.count()) === 0;
+    const fmt = await runFormat(await tabOf(`${base}/data/note`));
+    await v
+      .locator(".node[data-path='/note/to']")
+      .waitFor({ timeout: 4000 })
+      .catch(() => undefined);
+    check(
+      "data viewer: XML served as text/plain is formatted only on request",
+      untouched && fmt.toast === "XML formatted." && (await v.locator(".node[data-path='/note/to']").count()) === 1,
+      fmt.toast,
+    );
+  }
 } catch (e) {
   check("run completed", false, e instanceof Error ? e.stack : String(e));
   const last = context.pages().find((p) => p.url().includes("sidepanel.html"));
