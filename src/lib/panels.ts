@@ -110,7 +110,7 @@ export const PANELS: PanelDef[] = [
     category: "inspect",
     title: "Performance",
     description: "Web Vitals, navigation timeline, resource waterfall",
-    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources",
+    keywords: "lcp cls inp ttfb fcp web vitals speed waterfall timeline long tasks resources crux field data real users chrome ux report",
   },
   {
     id: "responsiveness",
