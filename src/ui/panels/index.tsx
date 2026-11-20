@@ -1,6 +1,7 @@
 import { lazy, type ComponentType } from "react";
 import { A11yAudit } from "./a11y";
 import { DataLayer } from "./datalayer";
+import { CacheStorageViewer, IndexedDbViewer } from "./databases";
 import { AgentReadiness, AgentTools } from "./agents";
 import { CacheActions, Cookies, SiteData, Storage } from "./cache";
 import { Errors, External, Fonts, Headers, JsonLd, Links, Overview, Perf, SiteFiles } from "./inspect";
@@ -33,6 +34,8 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   "site-data": SiteData,
   cookies: Cookies,
   storage: Storage,
+  indexeddb: IndexedDbViewer,
+  "cache-storage": CacheStorageViewer,
   overview: Overview,
   seo: Seo,
   headings: Headings,

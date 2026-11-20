@@ -52,6 +52,22 @@ export const PANELS: PanelDef[] = [
     description: "View and edit Web Storage keys",
     keywords: "localstorage sessionstorage",
   },
+  {
+    id: "indexeddb",
+    category: "cache",
+    title: "IndexedDB",
+    short: "IndexedDB",
+    description: "Browse, edit and export IndexedDB databases, object stores and records",
+    keywords: "indexeddb idb database object store records index key range cursor dexie localforage offline pwa",
+  },
+  {
+    id: "cache-storage",
+    category: "cache",
+    title: "Cache Storage",
+    short: "Caches",
+    description: "Service worker caches: cached requests, headers and bodies, delete and export",
+    keywords: "cache storage caches service worker cache sw workbox pwa offline cached responses",
+  },
 
   {
     id: "overview",

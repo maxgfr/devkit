@@ -4352,3 +4352,61 @@ table.rsrc-table tr.rsrc-diff td:nth-child(3) {
   background: var(--bg-3);
   font-style: italic;
 }
+
+/* Cache › IndexedDB and Cache Storage */
+.db-stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+button.db-node {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+button.db-node:hover {
+  background: var(--bg-3);
+}
+button.db-node[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.db-query select,
+.db-query input {
+  min-width: 0;
+}
+.db-table tr.open td {
+  background: var(--bg-3);
+}
+.db-table .linklike {
+  overflow-wrap: anywhere;
+}
+.db-table td.db-preview {
+  color: var(--fg-2);
+}
+.db-json {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.db-image {
+  max-width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+}
