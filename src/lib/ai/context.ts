@@ -1,6 +1,6 @@
 import { type Audit, auditContext } from "../a11y";
 import type { Check } from "../headers";
-import type { JsonLdReport } from "../jsonld";
+import { blockFindings, groupFindings, type JsonLdReport } from "../jsonld";
 import { headingIssues, headingText, isExposed, outlineLines } from "../headings";
 import type { MetaSnapshot, PerfSnapshot } from "../page/collect";
 import type { HeadingsSnapshot } from "../page/headings";
@@ -220,13 +220,21 @@ export function renderContext(ctx: PageContext, parts: ContextPart[], maxChars =
     );
   if (has("jsonld") && ctx.jsonld) {
     const r = ctx.jsonld;
-    const findings = r.blocks.flatMap((b) => [...b.findings, ...b.nodes.flatMap((n) => n.findings)]);
+    const findings = groupFindings(r.blocks.flatMap(blockFindings));
     out.push(
       section(
         "Structured data (JSON-LD)",
         [
           `Types: ${r.types.map((t) => `${t.type}×${t.count}`).join(", ") || "none"}`,
-          ...findings.slice(0, 60).map((f) => `- [${f.severity}] ${f.path}: ${f.message}`),
+          r.vocab
+            ? `Findings: Google rich results rules, value formats and the Schema.org ${r.vocab.version} vocabulary (checked locally).`
+            : "Findings: Google rich results rules and value formats.",
+          ...findings
+            .slice(0, 60)
+            .map(
+              (f) =>
+                `- [${f.severity}] ${f.paths[0]}${f.paths.length > 1 ? ` (×${f.paths.length}, also ${f.paths.slice(1, 4).join(", ")}${f.paths.length > 4 ? ", …" : ""})` : ""}: ${f.message}`,
+            ),
           ...r.blocks.map((b) => `Block #${b.index + 1}:\n\`\`\`json\n${b.raw.trim().slice(0, 6000)}\n\`\`\``),
         ].join("\n"),
       ),

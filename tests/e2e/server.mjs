@@ -50,7 +50,7 @@ const page = (base, port) => `<!doctype html>
 <meta property="og:title" content="Acme Mug">
 <meta property="og:image" content="${base}/og.png">
 <link rel="manifest" href="/manifest.json">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Acme Mug","image":"/mug.jpg","offers":{"@type":"Offer","price":"€12,50","priceCurrency":"EUR"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Acme Mug","descripton":"A mug","image":"/mug.jpg","offers":{"@type":"Offer","price":"€12,50","priceCurrency":"EUR"}}</script>
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home"},]}</script>
 <script>window.__NEXT_DATA__ = {}; setTimeout(() => { throw new Error("startup error from test page"); }, 50);</script>
 <script>window.__ENV__ = { STRIPE_KEY: "${FAKE_STRIPE_KEY}", API_URL: "/api" };</script>
@@ -197,6 +197,7 @@ const server = http.createServer((req, res) => {
       "x-powered-by": "Express/4.18.2",
       "cache-control": "no-cache",
       "speculation-rules": '"/speculation.json"',
+      "x-robots-tag": "noarchive",
     });
     return res.end(page(base, req.socket.localPort));
   }

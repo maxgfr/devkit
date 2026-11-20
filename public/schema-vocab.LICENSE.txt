@@ -1,0 +1,14 @@
+public/schema-vocab.json is derived from the Schema.org vocabulary, release 30.1 (2026-09-16),
+downloaded from https://schema.org/version/30.1/schemaorg-current-https.jsonld.
+
+Trimmed by devkit's scripts/schema-vocab.mjs: only schema.org terms are kept, each type with its direct parents (rdfs:subClassOf), each property with its domainIncludes and rangeIncludes, enumeration members with their enumeration, supersededBy and the pending flag; comments, labels, equivalences to other vocabularies, sources and contributors are dropped; the format is devkit's own compact JSON.
+
+Schema.org (https://schema.org) is sponsored by Google, Inc., Yahoo, Inc., Microsoft Corporation and Yandex.
+From the Schema.org Terms of Service (https://schema.org/docs/terms.html):
+
+  "The Sponsors' copyrights in the schema are licensed to website publishers and other third parties
+  under the Creative Commons Attribution-ShareAlike License (version 3.0). To view a copy of this
+  license, please visit http://creativecommons.org/licenses/by-sa/3.0/."
+
+This derived file is shared under the same license, Creative Commons Attribution-ShareAlike 3.0
+Unported (CC BY-SA 3.0): https://creativecommons.org/licenses/by-sa/3.0/legalcode

@@ -21,7 +21,25 @@ import { cachingReport, fetchHeaders, type HeaderFetch, securityReport } from ".
 import { headingIssues, headingsVerdict } from "../../lib/headings";
 import { runInTab } from "../../lib/inject";
 import { collectHeadings } from "../../lib/page/headings";
-import { analyzeJsonLd, type JsonLdBlock, richResultsTestUrl, schemaValidatorUrl } from "../../lib/jsonld";
+import {
+  analyzeJsonLd,
+  blockBadges,
+  blockFileName,
+  blockFindings,
+  blockJson,
+  type BlockStatus,
+  groupFindings,
+  indexingSignals,
+  inMode,
+  type JsonLdBlock,
+  reportCounts,
+  richResultsTestUrl,
+  schemaDocUrl,
+  schemaValidatorUrl,
+  scriptTag,
+  type ValidateMode,
+} from "../../lib/jsonld";
+import { loadSchemaVocab, type SchemaVocab } from "../../lib/schema-vocab";
 import { collectFontsColors, collectLinks, collectMeta, collectPerf, collectTechSignals, type MetaSnapshot } from "../../lib/page/collect";
 import { clearErrors, ERROR_SCRIPT_IDS, installErrorCapture, readErrors } from "../../lib/page/errors";
 import { ALL_SITES, ensurePermission } from "../../lib/permissions";
@@ -62,7 +80,9 @@ import {
   copyText,
   Dot,
   Empty,
+  download,
   ErrorText,
+  Highlight,
   JsonTree,
   KV,
   Metric,
@@ -170,9 +190,10 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
     setCopying(true);
     try {
       const ctx = { url: page.url };
-      const [surface, secretSources] = await Promise.all([
+      const [surface, secretSources, vocab] = await Promise.all([
         runInTab(page.tabId, collectSurface).catch(() => null),
         runInTab(page.tabId, collectSecretSources, [2 * 1024 * 1024], "MAIN").catch(() => null),
+        loadSchemaVocab().catch(() => undefined),
       ]);
       const h = headers.data?.headers ?? {};
       const policies = [
@@ -248,7 +269,7 @@ function PageReport({ meta, headers }: { meta: AsyncState<MetaSnapshot>; headers
         {
           area: "Structured data",
           panel: "Inspect › JSON-LD",
-          md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd), ctx) : null,
+          md: meta.data ? jsonLdMarkdown(analyzeJsonLd(meta.data.jsonLd, { vocab }), ctx) : null,
           missing: notRead(meta),
         },
       ];
@@ -499,72 +520,235 @@ export function Seo() {
   );
 }
 
-function blockVerdict(block: JsonLdBlock): Verdict {
-  const findings = [...block.findings, ...block.nodes.flatMap((n) => n.findings)];
+const STATUS_TEXT: Record<BlockStatus, string> = { valid: "Valid", warning: "Warning", error: "Error" };
+const STATUS_LEVEL = { valid: "good", warning: "warn", error: "bad" } as const;
+const MODE_TEXT: Record<ValidateMode, string> = { rich: "Rich Results", schema: "Schema.org" };
+type OpenOn = "code" | "tree";
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function blockVerdict(block: JsonLdBlock, mode: ValidateMode): Verdict {
+  const findings = blockFindings(block).filter((f) => inMode(f, mode));
   const e = findings.filter((f) => f.severity === "error").length;
   const w = findings.filter((f) => f.severity === "warn").length;
-  const parts = [e ? `${e} error${e > 1 ? "s" : ""}` : "", w ? `${w} warning${w > 1 ? "s" : ""}` : ""].filter(Boolean);
+  const parts = [e ? plural(e, "error") : "", w ? plural(w, "warning") : ""].filter(Boolean);
   return { level: e ? "bad" : w ? "warn" : "good", text: parts.join(", ") || "No problem" };
 }
 
-function BlockView({ block, anchor }: { block: JsonLdBlock; anchor?: boolean }) {
-  const [raw, setRaw] = useState(false);
-  const findings = [...block.findings, ...block.nodes.flatMap((n) => n.findings)];
-  const pretty = block.ok ? JSON.stringify(block.value, null, 2) : block.raw;
+/** Pressed-state chips for a small choice (validation mode, how blocks open). */
+function Choice<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: [T, string][];
+  onChange: (v: T) => void;
+}) {
   return (
-    <div className="card stack" id={anchor ? `jsonld-block-${block.index}` : undefined}>
+    <fieldset className="as-chips jl-choice" aria-label={label}>
+      <span className="small muted" aria-hidden="true">
+        {label}
+      </span>
+      {options.map(([v, text]) => (
+        <button key={v} type="button" className="as-chip" aria-pressed={value === v} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+function BlockView({
+  block,
+  anchor,
+  mode,
+  openOn,
+  query,
+}: {
+  block: JsonLdBlock;
+  anchor?: boolean;
+  mode: ValidateMode;
+  openOn: OpenOn;
+  query?: string;
+}) {
+  const [view, setView] = useState<OpenOn>(openOn);
+  useEffect(() => setView(openOn), [openOn]);
+  const all = blockFindings(block);
+  const shown = all.filter((f) => inMode(f, mode));
+  const hidden = all.filter((f) => !inMode(f, mode) && f.severity !== "info").length;
+  const rank = { error: 0, warn: 1, info: 2 } as const;
+  const groups = groupFindings(shown).sort((a, b) => rank[a.severity] - rank[b.severity]);
+  const badges = blockBadges(block, mode);
+  const pretty = blockJson(block);
+  const e = shown.filter((f) => f.severity === "error").length;
+  const w = shown.filter((f) => f.severity === "warn").length;
+  const n = shown.length - e - w;
+  const types = new Map<string, number>();
+  for (const node of block.nodes) for (const t of node.types) types.set(t, (types.get(t) ?? 0) + 1);
+  const other: ValidateMode = mode === "rich" ? "schema" : "rich";
+  return (
+    <div className="card stack jl-block" id={anchor ? `jsonld-block-${block.index}` : undefined}>
       <div className="row">
         <b>Block #{block.index + 1}</b>
-        {block.nodes.map((n, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: document order
-          <span key={i} className="pill accent">
-            {n.types.join(", ")}
+        <span className={`pill t-${STATUS_LEVEL[badges.status]}`}>
+          <Dot level={STATUS_LEVEL[badges.status]} /> {STATUS_TEXT[badges.status]}
+        </span>
+        {badges.experimental ? (
+          <span className="pill t-warn" title="Uses pending Schema.org terms: they may still change or be dropped.">
+            Experimental
+          </span>
+        ) : null}
+        {badges.unsupported.map((u) => (
+          <span key={u.type} className="pill" title={u.note}>
+            Not supported: {u.type}
           </span>
         ))}
-        <span className="grow" />
-        <Button size="small" onClick={() => setRaw(!raw)}>
-          {raw ? "Tree" : "Source"}
-        </Button>
-        <CopyButton text={pretty} />
+        {Array.from(types.entries()).map(([t, count]) => {
+          const href = schemaDocUrl(t);
+          const text = `${t}${count > 1 ? ` ×${count}` : ""}`;
+          return href ? (
+            <a key={t} className="pill accent" href={href} target="_blank" rel="noreferrer" title={`${t} on schema.org`}>
+              {text}
+            </a>
+          ) : (
+            <span key={t} className="pill accent">
+              {text}
+            </span>
+          );
+        })}
       </div>
-      {findings.length ? (
-        <ul className="list">
-          {findings.map((f, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: findings are ordered
-            <li key={i} className="small">
-              <Dot level={f.severity === "error" ? "bad" : f.severity} /> {f.message} <span className="muted mono">{f.path}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="row">
+        {block.ok ? (
+          <Choice
+            label="View"
+            value={view}
+            options={[
+              ["code", "Code"],
+              ["tree", "Tree"],
+            ]}
+            onChange={setView}
+          />
+        ) : null}
+        <span className="grow" />
+        <CopyButton text={pretty} label="Copy JSON" />
+        <CopyButton text={scriptTag(block)} label="Copy <script>" />
+        <Button size="small" onClick={() => download(blockFileName(block), pretty, block.ok ? "application/ld+json" : "text/plain")}>
+          Download
+        </Button>
+      </div>
+      {!block.ok && block.error ? (
+        <Notice kind="bad">{block.error === "Empty script" ? "The script is empty." : `Invalid JSON, ${block.error}`}</Notice>
+      ) : null}
+      {view === "tree" && block.ok ? (
+        <div className="tree">
+          <JsonTree value={block.value} open={3} highlight={query} />
+        </div>
+      ) : (
+        <div className="code-wrap">
+          <pre className="code jl-code">
+            <Highlight text={pretty} query={query} />
+          </pre>
+        </div>
+      )}
+      {groups.length ? (
+        <details className="jl-findings">
+          <summary>
+            <Dot level={e ? "bad" : w ? "warn" : "info"} />{" "}
+            <span>
+              Findings:{" "}
+              {[e ? plural(e, "error") : "", w ? plural(w, "warning") : "", n ? plural(n, "note") : ""].filter(Boolean).join(", ")}
+            </span>
+          </summary>
+          <ul className="list">
+            {groups.map((g) => (
+              <li key={`${g.rule}|${g.severity}|${g.message}`} className="small">
+                <Dot level={g.severity === "error" ? "bad" : g.severity} /> {g.message}{" "}
+                {g.paths.length > 1 ? (
+                  <details className="jl-paths">
+                    <summary>
+                      <span className="pill">×{g.paths.length}</span>
+                    </summary>
+                    <ul className="mono muted">
+                      {g.paths.map((p, i) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: the same path can repeat
+                        <li key={i}>{p}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : (
+                  <span className="muted mono">{g.paths[0]}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : (
         <div className="small t-good">No problem found.</div>
       )}
-      {raw || !block.ok ? (
-        <Code text={pretty} />
-      ) : (
-        <div className="tree">
-          <JsonTree value={block.value} open={3} />
+      {hidden ? (
+        <div className="small muted">
+          {plural(hidden, "more finding")} in {MODE_TEXT[other]} mode.
         </div>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function VocabNote({ vocab, error }: { vocab: SchemaVocab | undefined; error: unknown }) {
+  if (error) return <Notice kind="warn">The Schema.org vocabulary did not load: the vocabulary checks are off.</Notice>;
+  if (!vocab) return null;
+  return (
+    <p className="small muted" style={{ margin: 0 }}>
+      Checked locally against the{" "}
+      <a href={vocab.source.url} target="_blank" rel="noreferrer">
+        Schema.org
+      </a>{" "}
+      {vocab.source.version} vocabulary ({vocab.source.date}) ·{" "}
+      <a href="/schema-vocab.LICENSE.txt" target="_blank" rel="noreferrer">
+        {vocab.source.license}
+      </a>
+    </p>
   );
 }
 
 export function JsonLd() {
   const page = usePage();
   const meta = useInPage(collectMeta);
+  const headers = useHeaders();
+  const vocab = useAsync(() => loadSchemaVocab(), []);
+  const [mode, setMode] = useStored<ValidateMode>("jsonldMode", "rich");
+  const [openOn, setOpenOn] = useStored<OpenOn>("jsonldOpenOn", "code");
+  const [query, setQuery] = useState("");
   const [paste, setPaste] = useState("");
-  const report = useMemo(() => (meta.data ? analyzeJsonLd(meta.data.jsonLd) : null), [meta.data]);
+  const report = useMemo(() => (meta.data ? analyzeJsonLd(meta.data.jsonLd, { vocab: vocab.data }) : null), [meta.data, vocab.data]);
   const agentMd = useMemo(() => (report ? jsonLdMarkdown(report, { url: page.url }) : ""), [report, page.url]);
   const pasted = useMemo(
-    () => (paste.trim() ? analyzeJsonLd([{ raw: paste.replace(/^\s*<script[^>]*>|<\/script>\s*$/g, ""), index: 0 }]) : null),
-    [paste],
+    () =>
+      paste.trim()
+        ? analyzeJsonLd([{ raw: paste.replace(/^\s*<script[^>]*>|<\/script>\s*$/g, ""), index: 0 }], { vocab: vocab.data })
+        : null,
+    [paste, vocab.data],
+  );
+  const signals = meta.data ? indexingSignals(meta.data, headers.data?.headers) : null;
+  const counts = report ? reportCounts(report, mode) : null;
+  const q = query.trim().toLowerCase();
+  const blocks = report ? report.blocks.filter((b) => !q || blockJson(b).toLowerCase().includes(q)) : [];
+  const none = <span className="muted">None</span>;
+  const xRobots = headers.loading ? (
+    <span className="muted">Reading…</span>
+  ) : headers.error ? (
+    <span className="muted">Not read</span>
+  ) : (
+    (signals?.xRobotsTag ?? none)
   );
   return (
     <>
       <AccessGate>
         <ErrorText error={meta.error} />
-        {report ? (
+        {report && counts && signals ? (
           <Section
             title="Structured data"
             actions={
@@ -582,10 +766,43 @@ export function JsonLd() {
               </>
             }
           >
+            <KV
+              rows={[
+                ["Page URL", page.url],
+                ["Canonical", signals.canonical ?? none],
+                ["Robots", signals.robots ?? none],
+                ["X-Robots-Tag", xRobots],
+              ]}
+            />
+            <div className="row jl-controls">
+              <Choice
+                label="Validate"
+                value={mode}
+                options={[
+                  ["rich", MODE_TEXT.rich],
+                  ["schema", MODE_TEXT.schema],
+                ]}
+                onChange={setMode}
+              />
+              <Choice
+                label="Open blocks on"
+                value={openOn}
+                options={[
+                  ["code", "Code"],
+                  ["tree", "Tree"],
+                ]}
+                onChange={setOpenOn}
+              />
+            </div>
+            <p className="small muted" style={{ margin: 0 }}>
+              {mode === "rich"
+                ? "Google's rich results rules (required and recommended properties) and value formats."
+                : "Every type, property and enumeration value against the Schema.org vocabulary, and value formats."}
+            </p>
             <div className="grid2">
               <Metric label="JSON-LD blocks" value={report.blocks.length} />
-              <Metric label="Errors" value={report.counts.error} level={report.counts.error ? "bad" : "good"} />
-              <Metric label="Warnings" value={report.counts.warn} level={report.counts.warn ? "warn" : "good"} />
+              <Metric label="Errors" value={counts.error} level={counts.error ? "bad" : "good"} />
+              <Metric label="Warnings" value={counts.warn} level={counts.warn ? "warn" : "good"} />
               <Metric label="Microdata types" value={meta.data?.microdataTypes.length ?? 0} />
             </div>
             {report.types.length ? (
@@ -604,7 +821,7 @@ export function JsonLd() {
                   <ReportRow
                     key={b.index}
                     label={`Block #${b.index + 1}${b.nodes.length ? ` · ${b.nodes[0]!.types.join(", ")}` : ""}`}
-                    verdict={blockVerdict(b)}
+                    verdict={blockVerdict(b, mode)}
                     onOpen={() => document.getElementById(`jsonld-block-${b.index}`)?.scrollIntoView({ block: "start" })}
                     openLabel={`Go to block #${b.index + 1}`}
                   />
@@ -612,10 +829,22 @@ export function JsonLd() {
               </ul>
             ) : null}
             {report.blocks.length ? (
-              report.blocks.map((b) => <BlockView key={b.index} block={b} anchor />)
-            ) : (
+              <input
+                type="search"
+                aria-label="Search the blocks"
+                placeholder="Search types, properties and values"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            ) : null}
+            {!report.blocks.length ? (
               <Empty>No JSON-LD on this page. The AI tab can write one for you (“Review structured data”).</Empty>
+            ) : blocks.length ? (
+              blocks.map((b) => <BlockView key={b.index} block={b} anchor mode={mode} openOn={openOn} query={query} />)
+            ) : (
+              <Empty>No block contains “{query.trim()}”.</Empty>
             )}
+            <VocabNote vocab={vocab.data} error={vocab.error} />
           </Section>
         ) : null}
       </AccessGate>
@@ -627,7 +856,7 @@ export function JsonLd() {
           placeholder='{"@context":"https://schema.org","@type":"Product",…}'
           onChange={(e) => setPaste(e.target.value)}
         />
-        {pasted?.blocks[0] ? <BlockView block={pasted.blocks[0]} /> : null}
+        {pasted?.blocks[0] ? <BlockView block={pasted.blocks[0]} mode={mode} openOn={openOn} /> : null}
       </Section>
     </>
   );
