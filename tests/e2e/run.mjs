@@ -1112,6 +1112,115 @@ try {
   );
   await site.goto(`${base}/`);
 
+  // Agent tools (WebMCP): a fake navigator.modelContextTesting with a read-only tool and a Critical one.
+  await site.goto(`${base}/agent`);
+  await open("Inspect", "Agent tools");
+  await panel
+    .locator(".wm-tester")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  t = await text();
+  check(
+    "agent tools: experimental notice, no document.modelContext, testing API found",
+    t.includes("WebMCP is experimental (Chrome origin trial)") &&
+      t.includes("document.modelContext is not available on this page") &&
+      /navigator\.modelContextTesting\s*available · listTools, executeTool/.test(t),
+  );
+  check("agent tools: both tools listed with their risk", /get_store_hours\s*Low\b/.test(t) && /delete_account\s*Critical\b/.test(t));
+  const toolCard = (name) =>
+    panel
+      .locator(".section", { has: panel.locator(".wm-tester") })
+      .filter({ hasText: name })
+      .first();
+  const hours = toolCard("get_store_hours");
+  await hours.locator("select").selectOption("sunday");
+  await hours.getByRole("button", { name: "Run", exact: true }).click();
+  await hours
+    .getByText('"close": "13:00"')
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  check("agent tools: a Low tool runs on one click and shows its result", (await hours.innerText()).includes('"close": "13:00"'));
+  const del = toolCard("delete_account");
+  t = await del.innerText();
+  check(
+    "agent tools: Critical tool blocked by default, with its findings",
+    t.includes("Blocked.") &&
+      (await del.getByRole("button", { name: /^Run/ }).count()) === 0 &&
+      t.includes("No annotations on a sensitive tool") &&
+      !(await site.evaluate(() => Boolean(window.__accountDeleted))),
+  );
+  await del.getByText("Allow critical tools on this site for this session").click();
+  await del
+    .locator("input[type=checkbox]")
+    .first()
+    .waitFor({ timeout: 2000 })
+    .catch(() => undefined);
+  await del.getByRole("checkbox", { name: "confirm" }).check();
+  await del.getByRole("button", { name: "Run…" }).click();
+  await del.getByRole("button", { name: "Continue" }).click();
+  const finalRun = del.getByRole("button", { name: "Run delete_account" });
+  const disabledFirst = await finalRun.isDisabled();
+  await del.getByLabel("Tool name to confirm").fill("delete_acc");
+  const disabledTypo = await finalRun.isDisabled();
+  await del.getByLabel("Tool name to confirm").fill("delete_account");
+  const enabled = !(await finalRun.isDisabled());
+  const notYet = !(await site.evaluate(() => Boolean(window.__accountDeleted)));
+  await finalRun.click();
+  await del
+    .getByText('"deleted": true')
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  check(
+    "agent tools: allowed Critical tool needs two steps, the second typing its name",
+    disabledFirst && disabledTypo && enabled && notYet && (await site.evaluate(() => window.__accountDeleted === true)),
+    JSON.stringify({ disabledFirst, disabledTypo, enabled, notYet }),
+  );
+  t = await text();
+  check("agent tools: run history kept for the site", /Run history \(2\)/.test(t));
+  await del.getByText("Allow critical tools on this site for this session").click();
+  await shot("inspect-agent-tools");
+
+  // Agent readiness on the same page: /llms.txt served, robots.txt blocks GPTBot, an Organization node.
+  await open("Inspect", "Agent readiness");
+  await panel
+    .locator(".ar-score")
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  await panel.waitForTimeout(500);
+  t = await text();
+  check(
+    "readiness: score and breakdown",
+    /84\s*\/ 100/.test(t) &&
+      /Structured data\s*22\/25/.test(t) &&
+      /Agent tool availability\s*12\/15/.test(t) &&
+      /Safety\s*5\/15/.test(t) &&
+      /Testability\s*10\/10/.test(t) &&
+      t.includes("not a guarantee of compatibility"),
+    t.match(/\d+\s*\/ 100/)?.[0],
+  );
+  check(
+    "readiness: llms.txt found, sitemap found, GPTBot blocked",
+    /llms\.txt\s*Found · \d+ bytes · “Acme”/.test(t) &&
+      t.includes("Open sitemap") &&
+      t.includes("15 allowed · 1 blocked") &&
+      /GPTBot OpenAI\s*Training\s*blocked/.test(t),
+  );
+  check(
+    "readiness: recommendations by impact",
+    t.includes("High impact") && t.includes("Mark delete_account with consequentialHint") && t.includes("1 AI crawler(s) are disallowed"),
+  );
+  await panel.locator(".ar-area", { hasText: "Safety" }).click();
+  t = await text();
+  check(
+    "readiness: tapping an area shows its rules",
+    t.includes("No Critical tool without a consequential/destructive hint") && t.includes("How to improve"),
+  );
+  const readinessMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check("readiness: Copy for agent", readinessMd.startsWith("## Agent readiness") && readinessMd.includes("84/100"));
+  await shot("inspect-agent-readiness");
+  await site.goto(`${base}/`);
+
   // Popup palette
   const popup = await context.newPage();
   popup.on("pageerror", (e) => extErrors.push(`popup pageerror: ${e.message}`));
@@ -1142,6 +1251,15 @@ try {
       .slice(0, 3)
       .map((r) => r.split("\n")[0])
       .join(" | "),
+  );
+  await popup.getByLabel("Search commands").fill("webmcp");
+  const webmcpFirst = await popup.getByRole("option").first().innerText();
+  await popup.getByLabel("Search commands").fill("llms.txt");
+  const llmsFirst = await popup.getByRole("option").first().innerText();
+  check(
+    "palette finds the agent tools and agent readiness panels",
+    /Agent tools/.test(webmcpFirst) && /Agent readiness/.test(llmsFirst),
+    `${webmcpFirst.split("\n")[0]} | ${llmsFirst.split("\n")[0]}`,
   );
 
   // Options
