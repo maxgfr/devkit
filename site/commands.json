@@ -280,6 +280,14 @@
     "keywords": "robots sitemap pwa manifest crawl"
   },
   {
+    "id": "crawl",
+    "kind": "panel",
+    "category": "inspect",
+    "title": "Site crawl",
+    "description": "SEO and JSON-LD checks over many pages from the sitemap: duplicates, missing tags, errors, noindex",
+    "keywords": "crawl sitemap bulk multiple pages seo audit jsonld audit spider site audit duplicate titles screaming frog"
+  },
+  {
     "id": "repo-deps",
     "kind": "panel",
     "category": "inspect",

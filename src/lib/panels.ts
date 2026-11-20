@@ -161,6 +161,14 @@ export const PANELS: PanelDef[] = [
     keywords: "robots sitemap pwa manifest crawl",
   },
   {
+    id: "crawl",
+    category: "inspect",
+    title: "Site crawl",
+    short: "Crawl",
+    description: "SEO and JSON-LD checks over many pages from the sitemap: duplicates, missing tags, errors, noindex",
+    keywords: "crawl sitemap bulk multiple pages seo audit jsonld audit spider site audit duplicate titles screaming frog",
+  },
+  {
     id: "repo-deps",
     category: "inspect",
     title: "Repo dependencies",
