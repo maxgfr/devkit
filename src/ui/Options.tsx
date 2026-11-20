@@ -2,7 +2,8 @@ import { lazy, Suspense } from "react";
 import { browser } from "wxt/browser";
 import { ENVS_KEY } from "../lib/envs";
 import { loadRules, RULES_KEY, saveRules } from "../lib/dnr";
-import { ALL_SITES } from "../lib/permissions";
+import { JSON_VIEWER_FILE, JSON_VIEWER_SCRIPT_ID, JSON_VIEWER_SCRIPT_IDS } from "../lib/json-viewer";
+import { ALL_SITES, ensurePermission } from "../lib/permissions";
 import { Button, download, Notice, Section, ToastProvider, useToast } from "./components";
 import { useAsync } from "./hooks";
 import { disableErrorCapture, enableErrorCapture } from "./panels/inspect";
@@ -153,6 +154,60 @@ function Capture() {
   );
 }
 
+async function enableJsonViewer(): Promise<boolean> {
+  if (!(await ensurePermission({ origins: [ALL_SITES] }))) return false;
+  const existing = await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS });
+  if (existing.length) return true;
+  await browser.scripting.registerContentScripts([
+    {
+      id: JSON_VIEWER_SCRIPT_ID,
+      js: [JSON_VIEWER_FILE],
+      matches: ["<all_urls>"],
+      runAt: "document_end",
+      allFrames: false,
+      persistAcrossSessions: true,
+    },
+  ] as never);
+  return true;
+}
+
+async function disableJsonViewer(): Promise<void> {
+  const existing = await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS });
+  if (existing.length) await browser.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
+}
+
+function JsonViewer() {
+  const toast = useToast();
+  const state = useAsync(async () => (await browser.scripting.getRegisteredContentScripts({ ids: JSON_VIEWER_SCRIPT_IDS })).length > 0, []);
+  return (
+    <Section
+      title="JSON viewer"
+      hint="Formats JSON documents opened in a tab (API responses, .json files) as a collapsible tree with a filter, copyable paths and a download. Without it, the palette's “Format this JSON page” formats the current tab on demand, with no site access."
+    >
+      <div className="row">
+        <span className="grow">Format JSON pages: {state.data ? "On" : "Off"}</span>
+        {state.data ? (
+          <Button
+            onClick={async () => {
+              await disableJsonViewer();
+              state.run();
+            }}
+          >
+            Turn off
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={async () => ((await enableJsonViewer()) ? state.run() : toast("Needs access to all sites.", true))}
+          >
+            Turn on
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 function Backup() {
   const toast = useToast();
   return (
@@ -209,6 +264,7 @@ export function OptionsApp() {
         </Suspense>
         <Permissions />
         <Capture />
+        <JsonViewer />
         <Backup />
         <Section title="Keyboard shortcuts">
           <Notice>
