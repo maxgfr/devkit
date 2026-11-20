@@ -4,6 +4,7 @@ import { ACTIONS, isNoCacheOn } from "../../lib/actions";
 import { runInTab } from "../../lib/inject";
 import { ALL_SITES, ensurePermission } from "../../lib/permissions";
 import { cookiesMarkdown } from "../../lib/agent/security";
+import { plural } from "../../lib/agent-md";
 import { readCookies } from "../../lib/cookie-jar";
 import {
   cookieKey,
@@ -210,9 +211,11 @@ export function Cookies() {
   const host = new URL(page.origin).host;
   const fmt = EXPORT_FORMATS[format];
   const exportText = formatCookies(shown, format);
-  const plural = (n: number) => `${n} cookie${n === 1 ? "" : "s"}`;
+  const cookiesText = (n: number) => (n === 1 ? "cookie" : plural(n, "cookie"));
   const exportScope =
-    shown.length === list.length ? `Exports this page's ${plural(list.length)}` : `Exports the ${plural(shown.length)} the filter shows`;
+    shown.length === list.length
+      ? `Exports this page's ${cookiesText(list.length)}`
+      : `Exports the ${cookiesText(shown.length)} the filter shows`;
   const exportAll = async () => {
     // Chrome only returns the cookies of hosts devkit can access: ask for all sites first.
     if (!(await ensurePermission({ origins: [ALL_SITES] }))) return toast("Exporting every cookie needs access to all sites.", true);
@@ -322,7 +325,7 @@ export function Cookies() {
                     extension: fmt.extension,
                     description: fmt.label,
                   });
-                  if (saved) toast(`Saved ${plural(shown.length)}.`);
+                  if (saved) toast(`Saved ${plural(shown.length, "cookie")}.`);
                 } catch (e) {
                   toast(String(e), true);
                 }
