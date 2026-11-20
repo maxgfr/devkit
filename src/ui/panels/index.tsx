@@ -15,6 +15,7 @@ import { Envs, Rules } from "./network";
 import { Emulation, Forms, PageTools, Screenshot, Viewport } from "./page-tools";
 import { RenderedSource } from "./rendered-source";
 import { RepoDeps } from "./repo-deps";
+import { Redirects } from "./redirects";
 import { Responsiveness } from "./responsiveness";
 import { BugReport } from "./report";
 import { Csp, Exposed, Secrets, ThirdParties } from "./security";
@@ -69,6 +70,7 @@ export const PANEL_COMPONENTS: Record<string, ComponentType<PanelProps>> = {
   rules: Rules,
   mocks: Mocks,
   envs: Envs,
+  redirects: Redirects,
   ask: Ask,
   report: BugReport,
   models: Models,
