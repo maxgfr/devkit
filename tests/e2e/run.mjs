@@ -983,7 +983,7 @@ try {
   // Headings: a page with every heading problem.
   await site.goto(`${base}/headings`);
   await panel.waitForTimeout(800);
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1051,7 +1051,7 @@ try {
   await panel.waitForTimeout(400);
   check("headings: leaving the panel removes the badges", !(await site.evaluate(() => Boolean(document.querySelector("devkit-headings")))));
 
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1096,7 +1096,7 @@ try {
     t.includes("Review the heading outline") && t.includes("Headings section: true") && t.includes("Section text sent: true"),
     t.match(/Headings section[^\n]*/)?.[0],
   );
-  await open("Inspect", "Headings outline");
+  await open("Inspect", "Headings & landmarks");
   await panel
     .locator(".hd-tree")
     .first()
@@ -1110,6 +1110,113 @@ try {
     "headings: per-heading Ask AI sends the heading in focus",
     t.includes("Fix this heading") && t.includes("Heading in focus: Skipped level"),
   );
+
+  // Landmarks: GitHub's structure, in the Landmarks and All views of the same panel.
+  await site.goto(`${base}/landmarks`);
+  await panel.waitForTimeout(800);
+  await open("Inspect", "Headings & landmarks");
+  await panel
+    .locator(".hd-tree")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  const viewChip = (name) => panel.locator(".hd-views button", { hasText: name });
+  await viewChip("Landmarks").click();
+  await panel
+    .locator(".hd-role")
+    .first()
+    .waitFor({ timeout: 5000 })
+    .catch(() => undefined);
+  // The tree as text: one line per row, 4 spaces per level, "name [role]" as HeadingsMap shows it.
+  const lmTree = await panel.evaluate(() => {
+    const lines = [];
+    const walk = (ul, depth) => {
+      for (const li of ul.children) {
+        const role = li.querySelector(":scope > .hd-line .hd-role")?.textContent;
+        if (role) {
+          const name = li.querySelector(":scope > .hd-line .hd-text")?.textContent;
+          lines.push(`${"    ".repeat(depth)}${name === "unnamed" ? role : name} [${role}]`);
+        }
+        const sub = li.querySelector(":scope > ul.hd-tree");
+        if (sub) walk(sub, depth + 1);
+      }
+    };
+    const root = document.querySelector("main ul.hd-tree");
+    if (root) walk(root, 0);
+    return lines.join("\n");
+  });
+  check(
+    "landmarks: the Landmarks view lists GitHub's landmarks as HeadingsMap does",
+    lmTree ===
+      [
+        "Global navigation menu [banner]",
+        "    Breadcrumbs [navigation]",
+        "    Repository [navigation]",
+        "main [main]",
+        "    Your main branch isn't protected [region]",
+        "    Repository files [navigation]",
+        "contentinfo [contentinfo]",
+        "    Footer [navigation]",
+      ].join("\n"),
+    lmTree.replace(/\n/g, " | "),
+  );
+  t = await text();
+  check(
+    "landmarks: the heading outside every landmark is noted",
+    t.includes("1 heading outside landmarks") && t.includes("8 landmarks"),
+    t.match(/\d+ landmarks?[^\n]*/)?.[0],
+  );
+  await shot("inspect-landmarks");
+  await panel.locator(".hd-main", { hasText: "Breadcrumbs" }).click();
+  await panel.waitForTimeout(400);
+  check(
+    "landmarks: clicking a landmark outlines it in the page",
+    await site.evaluate(() => Boolean(document.querySelector("devkit-headings-focus"))),
+  );
+  await site.keyboard.press("Escape");
+  await panel.getByRole("button", { name: "Badges in page" }).click();
+  await panel.waitForTimeout(500);
+  check("landmarks: badges drawn on the landmarks", await site.evaluate(() => Boolean(document.querySelector("devkit-headings"))));
+  await panel.getByRole("button", { name: "Hide badges" }).click();
+  await viewChip("All").click();
+  await panel.waitForTimeout(300);
+  // The tree alone: the table of contents and the page map below repeat heading texts.
+  const treeText = () => panel.locator("main ul.hd-tree").first().innerText();
+  t = await treeText();
+  check(
+    "landmarks: All nests the headings under their landmark, the rest outside",
+    t.includes("Folders and files") && t.includes("Outside landmarks") && t.includes("Skip to content") && t.includes("Breadcrumbs"),
+  );
+  await panel.getByRole("button", { name: "Collapse all" }).click();
+  await panel.waitForTimeout(200);
+  t = await treeText();
+  const folded = !t.includes("Breadcrumbs") && !t.includes("Folders and files") && t.includes("Global navigation menu");
+  await panel.getByRole("button", { name: "Expand all" }).click();
+  await panel.waitForTimeout(200);
+  t = await treeText();
+  await shot("inspect-landmarks-all");
+  check("landmarks: Collapse all and Expand all", folded && t.includes("Breadcrumbs") && t.includes("Folders and files"));
+  await panel.evaluate(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = async (s) => {
+      window.__copied.push(s);
+    };
+  });
+  const lmMd = await lastCopy(panel.getByRole("button", { name: "Copy for agent" }).first());
+  check(
+    "landmarks: Copy for agent has the landmarks",
+    lmMd.includes("### Landmarks") && lmMd.includes("    Breadcrumbs [navigation] (") && lmMd.includes("8 ARIA landmarks"),
+    lmMd.slice(0, 200),
+  );
+  await open("Inspect", "Overview");
+  await open("Inspect", "Headings & landmarks");
+  await panel
+    .locator(".hd-views")
+    .first()
+    .waitFor({ timeout: 8000 })
+    .catch(() => undefined);
+  check("landmarks: the chosen view is kept", (await viewChip("All").getAttribute("aria-pressed")) === "true");
+  await viewChip("Headings").click();
   await site.goto(`${base}/`);
 
   // Popup palette
@@ -1137,7 +1244,7 @@ try {
   const hnItems = await popup.getByRole("option").allInnerTexts();
   check(
     "palette finds the headings outline",
-    hnItems.some((r) => r.startsWith("Headings outline")),
+    hnItems.some((r) => r.startsWith("Headings & landmarks")),
     hnItems
       .slice(0, 3)
       .map((r) => r.split("\n")[0])
